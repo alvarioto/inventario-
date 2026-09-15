@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: firebase-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   deploy:
     runs-on: ubuntu-latest
