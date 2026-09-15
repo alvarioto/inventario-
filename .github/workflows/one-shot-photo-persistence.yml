@@ -1,0 +1,35 @@
+name: Apply photo persistence fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-photo-persistence.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply patch
+        run: python scripts/patch-photo-persistence.py
+      - name: Install
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Commit
+        shell: bash
+        run: |
+          rm .github/workflows/one-shot-photo-persistence.yml scripts/patch-photo-persistence.py
+          git config user.name 'alvarioto'
+          git config user.email 'aldipo7292@gmail.com'
+          git add src/App.tsx src/lib/inventory.ts tests/core.mjs .github/workflows/one-shot-photo-persistence.yml scripts/patch-photo-persistence.py
+          git commit -m 'Persist photos before saving item'
+          git push origin main
