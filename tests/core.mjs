@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research } from '../server/core.mjs';
+import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify } from '../server/core.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
@@ -27,6 +27,15 @@ assert.equal(webSources.length,2);
 const publicListings=parsePublicListings(webSources);
 assert.equal(publicListings[0].price,24.99);
 assert.equal(publicListings[1].price,30);
+
+let identifyBody;
+const multiImageFetch=async(_url,init)=>{
+  identifyBody=JSON.parse(init.body);
+  return new Response(JSON.stringify({choices:[{message:{content:'{"title":"Pikachu","type":"figure","confidence":0.9,"explanation":"Vistas combinadas"}'}}]}),{status:200,headers:{'content-type':'application/json'}});
+};
+await identify(['data:image/jpeg;base64,AAAA','data:image/jpeg;base64,BBBB','data:image/jpeg;base64,CCCC'],{key:'test',fetcher:multiImageFetch});
+const imageBlocks=identifyBody.messages[1].content.filter(block=>block.type==='image_url');
+assert.equal(imageBlocks.length,3);
 
 const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});
 assert.equal(noSources.sources.length,0);

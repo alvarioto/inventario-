@@ -9,5 +9,5 @@ async function post<T>(route:string,payload:unknown):Promise<T>{
  const r=await fetch(base+'/api/'+route,{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...(status.session?{'X-FrikiVault-Session':status.session}:{})},body:JSON.stringify(payload),signal:AbortSignal.timeout(120000)});
  const result=await r.json();if(!r.ok)throw new Error(result.error||`Error HTTP ${r.status}`);return result;
 }
-export async function identifyPhoto(image:string):Promise<AiIdentification>{await keyReady.catch(()=>{});return getPersonalKey()?identifyDirect(image):post<AiIdentification>('identify',{image});}
+export async function identifyPhoto(images:string[]):Promise<AiIdentification>{await keyReady.catch(()=>{});return getPersonalKey()?identifyDirect(images):post<AiIdentification>('identify',{images});}
 export async function investigate(item:Partial<InventoryDraft>):Promise<ResearchResult>{await keyReady.catch(()=>{});return getPersonalKey()?researchDirect(item):post<ResearchResult>('research',{confirmed:true,item});}

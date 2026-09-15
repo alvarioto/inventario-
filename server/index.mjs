@@ -34,8 +34,8 @@ app.use('/api',async(req,res,next)=>{
  try{const token=String(req.headers.authorization||'').replace(/^Bearer /,'');const user=await getAuth().verifyIdToken(token);if(user.uid!==env.OWNER_UID)return res.status(403).json({error:'Esta aplicación es privada.'});req.owner=user.uid;next()}catch{return res.status(401).json({error:'Inicia sesión para utilizar la IA.'})}
 });
 const calls=new Map();app.use('/api',(req,res,next)=>{const now=Date.now(),bucket=calls.get(req.owner)||{since:now,n:0};if(now-bucket.since>3600000){bucket.since=now;bucket.n=0}if(++bucket.n>30)return res.status(429).json({error:'Límite de 30 consultas por hora. Prueba más tarde.'});calls.set(req.owner,bucket);next()});
-app.use('/api',express.json({limit:'5mb'}));
-app.post('/api/identify',async(req,res,next)=>{try{const image=req.body?.image;if(typeof image!=='string'||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image))return res.status(400).json({error:'Usa una foto JPEG, PNG o WebP válida.'});res.json(await identify(image,config))}catch(e){next(e)}});
+app.use('/api',express.json({limit:'15mb'}));
+app.post('/api/identify',async(req,res,next)=>{try{const raw=Array.isArray(req.body?.images)?req.body.images:(req.body?.image?[req.body.image]:[]);const images=raw.slice(0,5);if(!images.length||images.some(image=>typeof image!=='string'||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)))return res.status(400).json({error:'Usa entre 1 y 5 fotos JPEG, PNG o WebP válidas.'});res.json(await identify(images,config))}catch(e){next(e)}});
 app.post('/api/research',async(req,res,next)=>{try{res.json(await research(req.body,config))}catch(e){next(e)}});
 app.use('/api',(req,res)=>res.status(404).json({error:'Ruta no encontrada.'}));
 app.use(express.static(resolve(root,'dist'),{setHeaders:(res,path)=>{if(path.endsWith('index.html')||path.endsWith('service-worker.js'))res.setHeader('Cache-Control','no-cache')}}));

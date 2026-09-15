@@ -70,7 +70,7 @@ function config() {
   if (!key) throw new Error('Activa tu clave de DeepSeek en Ajustes → IA directa.');
   return { key, model: 'deepseek-flash', fetcher: directFetch };
 }
-export const identifyDirect = (image: string) => identify(image, config());
+export const identifyDirect = (images: string[]) => identify(images, config());
 export const researchDirect = (item: Partial<InventoryDraft>) => research({confirmed: true, item}, config());
 export const testDirect = () => deepseek([
   {role: 'user', content: 'Responde únicamente con este JSON: {"ok":true}'}

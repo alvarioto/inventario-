@@ -15,8 +15,8 @@ import { identifyPhoto } from './api';
 import { deleteDemo, saveDemo, subscribeDemo } from './demo';
 import type { AiIdentification, InventoryDraft, InventoryItem } from '../types';
 
-const MAX_FIRESTORE_PHOTOS = 3;
-const TARGET_PHOTO_BYTES = 150 * 1024;
+const MAX_FIRESTORE_PHOTOS = 5;
+const TARGET_PHOTO_BYTES = 80 * 1024;
 
 export function subscribeItems(callback: (items: InventoryItem[]) => void, onError?: (e: Error) => void) {
   if (demoMode || !db || !auth?.currentUser) return subscribeDemo(callback);
@@ -118,7 +118,7 @@ async function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality: nu
 
 /**
  * En Spark no usamos Cloud Storage. Guardamos una copia muy comprimida de la foto
- * dentro del documento Firestore. Se limita a 3 fotos para mantenerse holgadamente
+ * dentro del documento Firestore. Se limita a 5 fotos comprimidas para mantenerse
  * por debajo del límite de 1 MiB por documento.
  */
 export async function uploadItemImage(file: File) {
@@ -164,8 +164,8 @@ async function compressPhotoToDataUrl(file: File, targetBytes: number, maxDimens
     }
 
     // Una foto en base64 crece aproximadamente un 33 %. Este margen mantiene las
-    // tres imágenes dentro del límite de Firestore junto con el resto de la ficha.
-    if (blob.size > 230 * 1024) {
+    // cinco imágenes dentro del límite de Firestore junto con el resto de la ficha.
+    if (blob.size > 120 * 1024) {
       throw new Error('La foto sigue siendo demasiado grande para guardarla. Hazla de nuevo con algo menos de detalle.');
     }
 
@@ -184,13 +184,16 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export async function identifyWithAi(file: File): Promise<AiIdentification> {
-  const prepared = await prepareImage(file, 1400);
-  const [identification, detectedCode] = await Promise.all([
-    identifyPhoto(await fileToDataUrl(prepared)),
-    tryReadBarcode(prepared)
+export async function identifyWithAi(files: File[]): Promise<AiIdentification> {
+  const selected = files.slice(0, MAX_FIRESTORE_PHOTOS);
+  if (!selected.length) throw new Error('Añade al menos una foto del artículo.');
+  const prepared = await Promise.all(selected.map((file) => prepareImage(file, 1200)));
+  const [images, codes] = await Promise.all([
+    Promise.all(prepared.map(fileToDataUrl)),
+    Promise.all(prepared.map(tryReadBarcode))
   ]);
-
+  const identification = await identifyPhoto(images);
+  const detectedCode = codes.find(Boolean) || null;
   if (detectedCode && !identification.barcode) identification.barcode = detectedCode;
   if (detectedCode && /^(978|979)\d{10}$/.test(detectedCode) && !identification.isbn) {
     identification.isbn = detectedCode;

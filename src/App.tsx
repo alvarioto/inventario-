@@ -356,27 +356,62 @@ function EmptyState({ onAdd, message = 'Tu vitrina digital está vacía.' }: { o
 }
 
 function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryDraft>, photos?: File[]) => void; showToast: (m: string) => void }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AiIdentification | null>(null);
   const [barcode, setBarcode] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const photoLimit = maxCloudPhotos();
 
-  async function setPicked(next: File | null) {
-    setResult(null); setBarcode('');
-    if (!next) { setFile(null); setPreview(''); return; }
+  async function addPicked(next: File | null) {
+    if (!next) return;
+    if (files.length >= photoLimit) {
+      showToast(`Puedes usar hasta ${photoLimit} fotos por artículo.`);
+      return;
+    }
+    setResult(null);
     const prepared = await prepareImage(next);
-    setFile(prepared);
-    setPreview(await fileToDataUrl(prepared));
+    const preview = await fileToDataUrl(prepared);
+    setFiles((current) => [...current, prepared]);
+    setPreviews((current) => [...current, preview]);
     const code = await tryReadBarcode(prepared);
-    if (code) setBarcode(code);
+    if (code) setBarcode((current) => current || code);
+    if (inputRef.current) inputRef.current.value = '';
+  }
+
+  async function removePhoto(index: number) {
+    const remaining = files.filter((_, i) => i !== index);
+    setFiles(remaining);
+    setPreviews((current) => current.filter((_, i) => i !== index));
+    setResult(null);
+    setBarcode('');
+    for (const photo of remaining) {
+      const code = await tryReadBarcode(photo);
+      if (code) { setBarcode(code); break; }
+    }
+  }
+
+  function movePhoto(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= files.length) return;
+    setFiles((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setPreviews((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setResult(null);
   }
 
   async function identify() {
-    if (!file) return;
+    if (!files.length) return;
     setBusy(true);
-    try { setResult(await identifyWithAi(file)); }
+    try { setResult(await identifyWithAi(files)); }
     catch (e) { showToast(e instanceof Error ? e.message : 'No se pudo identificar'); }
     finally { setBusy(false); }
   }
@@ -386,8 +421,8 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
     setBusy(true);
     try {
       const book = await lookupIsbn(barcode.trim());
-      if (book) onCreate({ title: book.title, year: book.year, isbn: book.isbn, barcode: book.isbn, manufacturer: book.manufacturer, type: 'comic' }, file ? [file] : []);
-      else onCreate({ barcode: barcode.trim() }, file ? [file] : []);
+      if (book) onCreate({ title: book.title, year: book.year, isbn: book.isbn, barcode: book.isbn, manufacturer: book.manufacturer, type: 'comic' }, files);
+      else onCreate({ barcode: barcode.trim() }, files);
     } finally { setBusy(false); }
   }
 
@@ -409,30 +444,45 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
     rarity: result.rarity,
     platform: result.platform,
     year: result.year,
-    barcode: result.barcode,
+    barcode: result.barcode || barcode,
     isbn: result.isbn,
     sku: result.sku,
     tags: result.tags,
     aiConfidence: result.confidence,
     aiExplanation: result.explanation,
     identificationConfirmed: true
-  }, file ? [file] : []);
+  }, files);
 
   return (
     <section className="scan-page">
-      <div className="page-heading"><div><span className="eyebrow">CAPTURA INTELIGENTE</span><h1>Escanear objeto</h1><p>Haz una foto. FrikiVault intenta rellenar la ficha por ti.</p></div></div>
+      <div className="page-heading"><div><span className="eyebrow">CAPTURA INTELIGENTE</span><h1>Escanear objeto</h1><p>Haz varias fotos del mismo artículo. La IA analizará todas juntas para identificarlo con más precisión.</p></div></div>
       <div className="scan-layout">
         <div className="camera-card">
-          <input ref={inputRef} hidden type="file" accept="image/*" capture="environment" onChange={(e) => setPicked(e.target.files?.[0] || null)} />
-          {preview ? <img className="scan-preview" src={preview} alt="Objeto a identificar"/> : <div className="camera-placeholder"><div className="scan-frame"><ScanLine/></div><h2>Enfoca el objeto</h2><p>Intenta que se vea también la caja, logo o texto si lo tiene.</p></div>}
-          <div className="camera-actions"><button className="secondary" onClick={() => inputRef.current?.click()}><Camera size={19}/>{file ? 'Repetir foto' : 'Abrir cámara'}</button><button className="ai-button" onClick={identify} disabled={!file || busy}><WandSparkles size={19}/>{busy ? 'Analizando…' : 'Identificar con IA'}</button></div>
+          <input ref={inputRef} hidden type="file" accept="image/*" capture="environment" onChange={(e) => addPicked(e.target.files?.[0] || null)} />
+          {previews.length ? <>
+            <img className="scan-preview" src={previews[0]} alt="Vista principal del objeto"/>
+            <div className="scan-photo-strip">
+              {previews.map((preview, index) => <div className={`scan-photo-thumb ${index === 0 ? 'primary-photo' : ''}`} key={`${preview.slice(0, 30)}-${index}`}>
+                <img src={preview} alt={`Foto ${index + 1}`}/>
+                <span>{index === 0 ? 'Principal' : `Foto ${index + 1}`}</span>
+                <div className="scan-photo-controls">
+                  <button type="button" title="Mover a la izquierda" disabled={index === 0} onClick={() => movePhoto(index, -1)}>←</button>
+                  <button type="button" title="Mover a la derecha" disabled={index === previews.length - 1} onClick={() => movePhoto(index, 1)}>→</button>
+                  <button type="button" title="Eliminar foto" onClick={() => removePhoto(index)}><X size={14}/></button>
+                </div>
+              </div>)}
+              {files.length < photoLimit && <button type="button" className="scan-add-photo" onClick={() => inputRef.current?.click()}><ImagePlus/><span>Otra foto</span></button>}
+            </div>
+            <p className="scan-photo-help"><b>{files.length}/{photoLimit} fotos.</b> Haz frontal, trasera, caja, etiqueta o código de barras. Todas se envían juntas a la IA.</p>
+          </> : <div className="camera-placeholder"><div className="scan-frame"><ScanLine/></div><h2>Fotografía el artículo desde varios ángulos</h2><p>Empieza por el frontal y añade después caja, parte trasera, etiquetas, texto o código de barras.</p></div>}
+          <div className="camera-actions"><button className="secondary" onClick={() => inputRef.current?.click()} disabled={files.length >= photoLimit}><Camera size={19}/>{files.length ? 'Hacer otra foto' : 'Abrir cámara'}</button><button className="ai-button" onClick={identify} disabled={!files.length || busy}><WandSparkles size={19}/>{busy ? 'Analizando…' : `Identificar con IA${files.length > 1 ? ` · ${files.length} fotos` : ''}`}</button></div>
         </div>
         <div className="scan-side">
           <div className="panel scan-result">
             <div className="panel-head"><h2><Sparkles size={19}/> Resultado IA</h2></div>
-            {result ? <div className="ai-result"><span className="confidence">{Math.round(result.confidence * 100)}% confianza</span><h3>{result.title}</h3><dl><div><dt>Tipo</dt><dd>{ITEM_TYPE_LABELS[result.type]}</dd></div><div><dt>Franquicia</dt><dd>{result.franchise || '—'}</dd></div><div><dt>Personaje</dt><dd>{result.character || '—'}</dd></div><div><dt>Fabricante</dt><dd>{result.manufacturer || '—'}</dd></div><div><dt>Línea / edición</dt><dd>{result.line || result.edition || '—'}</dd></div></dl><p>{result.explanation}</p><button className="primary wide" onClick={useResult}><Check size={18}/> Sí, es este artículo</button><small className="muted">Al confirmar podrás investigar sus datos y precios.</small></div> : <div className="placeholder-copy"><Sparkles/><p>Cuando analices una foto, aquí aparecerán los datos que la IA cree reconocer.</p></div>}
+            {result ? <div className="ai-result"><span className="confidence">{Math.round(result.confidence * 100)}% confianza · {files.length} {files.length === 1 ? 'foto analizada' : 'fotos analizadas'}</span><h3>{result.title}</h3><dl><div><dt>Tipo</dt><dd>{ITEM_TYPE_LABELS[result.type]}</dd></div><div><dt>Franquicia</dt><dd>{result.franchise || '—'}</dd></div><div><dt>Personaje</dt><dd>{result.character || '—'}</dd></div><div><dt>Fabricante</dt><dd>{result.manufacturer || '—'}</dd></div><div><dt>Línea / edición</dt><dd>{result.line || result.edition || '—'}</dd></div></dl><p>{result.explanation}</p><button className="primary wide" onClick={useResult}><Check size={18}/> Sí, es este artículo</button><small className="muted">Las fotos se conservarán juntas en la ficha.</small></div> : <div className="placeholder-copy"><Sparkles/><p>Añade varias vistas y pulsa Identificar. DeepSeek recibirá todas las fotos del mismo artículo en una única consulta.</p></div>}
           </div>
-          <div className="panel barcode-box"><div className="panel-head"><h2><QrCode size={19}/> Código / ISBN</h2></div><p>Si ves un código de barras, la cámara intentará leerlo. También puedes escribirlo.</p><div className="inline-field"><input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="EAN / UPC / ISBN"/><button onClick={useBarcode} disabled={busy || !barcode}>Buscar</button></div></div>
+          <div className="panel barcode-box"><div className="panel-head"><h2><QrCode size={19}/> Código / ISBN</h2></div><p>FrikiVault intenta leer el código de cualquiera de las fotos. También puedes escribirlo.</p><div className="inline-field"><input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="EAN / UPC / ISBN"/><button onClick={useBarcode} disabled={busy || !barcode}>Buscar</button></div></div>
         </div>
       </div>
     </section>
