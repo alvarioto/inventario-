@@ -21,6 +21,8 @@ app.use('/api',(req,res,next)=>{
  res.setHeader('Cache-Control','no-store');
  const allowed=local?[`http://127.0.0.1:${port}`,`http://localhost:${port}`,'http://localhost:5173','http://127.0.0.1:5173']:[env.APP_ORIGIN];
  if(req.headers.origin&&!allowed.includes(req.headers.origin))return res.status(403).json({error:'Origen no autorizado.'});
+ if(req.headers.origin){res.setHeader('Access-Control-Allow-Origin',req.headers.origin);res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, X-FrikiVault-Session');res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');res.setHeader('Vary','Origin');}
+ if(req.method==='OPTIONS')return res.status(204).end();
  if(local&&!['127.0.0.1','localhost','[::1]'].some(h=>req.headers.host===h+':'+port||req.headers.host===h+':5173'))return res.status(403).json({error:'Host no autorizado.'});
  if(req.method==='GET'&&req.path==='/status')return res.json({deepseek:Boolean(config.key),model:config.model,webSearch:Boolean(config.braveKey),ebay:Boolean(config.ebayId&&config.ebaySecret),mode:local?'local':'firebase',session:local?session:undefined});
  if(req.method!=='POST')return res.status(405).json({error:'Método no permitido.'});

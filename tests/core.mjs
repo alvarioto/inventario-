@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
-import { identificationSchema, summarizeListings, safeUrl } from '../server/core.mjs';
+import { identificationSchema, summarizeListings, safeUrl, deepseek, research } from '../server/core.mjs';
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
 assert.equal(safeUrl('javascript:alert(1)'),null);
-assert.deepEqual(summarizeListings([{price:10,currency:'EUR',shipping:2},{price:20,currency:'EUR',shipping:0}]),{kind:'asking',currency:'EUR',count:2,min:12,max:20,median:16,label:'Precios solicitados con envío conocido; no son ventas cerradas.'});
+assert.deepEqual(summarizeListings([{price:10,currency:'EUR',shipping:2},{price:20,currency:'EUR',shipping:0}]),{kind:'asking',currency:'EUR',count:2,min:12,max:20,median:16,label:'Precios solicitados; suma el envío cuando eBay lo muestra. No son ventas cerradas.'});
+const fakeFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"summary":"Ficha contrastada","facts":[],"comparableIds":[]}'}}]}),{status:200,headers:{'content-type':'application/json'}});
+assert.equal((await deepseek([{role:'user',content:'test'}],{key:'test',fetcher:fakeFetch})).summary,'Ficha contrastada');
+const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});
+assert.equal(noSources.sources.length,0);assert.equal(noSources.warnings.length,2);assert.equal(noSources.sold.available,false);
 console.log('core tests ok');

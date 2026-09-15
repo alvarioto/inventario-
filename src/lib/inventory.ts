@@ -10,6 +10,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { app, auth, db, demoMode } from './firebase';
+import { identifyPhoto } from './api';
 import { deleteDemo, saveDemo, subscribeDemo } from './demo';
 import type { AiIdentification, InventoryDraft, InventoryItem, ItemType } from '../types';
 
@@ -135,7 +136,6 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 export async function identifyWithAi(file: File): Promise<AiIdentification> {
-  const { identifyPhoto } = await import('./api');
   return identifyPhoto(await fileToDataUrl(await prepareImage(file, 1400)));
 }
 
@@ -175,4 +175,3 @@ export function fileToDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
-
