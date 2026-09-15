@@ -18,6 +18,11 @@ assert.match(market.label,/no ventas cerradas/i);
 const fakeFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"summary":"Ficha contrastada","facts":[],"comparableIds":[]}'}}]}),{status:200,headers:{'content-type':'application/json'}});
 assert.equal((await deepseek([{role:'user',content:'test'}],{key:'test',fetcher:fakeFetch})).summary,'Ficha contrastada');
 
+const fencedFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'```json\n{"ok":true,"value":"recuperado"}\n```'}}]}),{status:200,headers:{'content-type':'application/json'}});
+const fencedResult=await deepseek([{role:'user',content:'test fenced'}],{key:'test',fetcher:fencedFetch});
+assert.equal(fencedResult.ok,true);
+assert.equal(fencedResult.value,'recuperado');
+
 const webFetch=async()=>new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
   {type:'web_search_result',title:'Figura Batman 24,99 €',url:'https://www.ebay.es/itm/123',cited_text:'Figura Batman 24,99 €'},
   {type:'web_search_result',title:'Figura Batman 30 €',url:'https://es.wallapop.com/item/batman-123',cited_text:'Figura Batman 30 €'}
@@ -42,5 +47,26 @@ const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'c
 assert.equal(noSources.sources.length,0);
 assert.equal(noSources.warnings.length,1);
 assert.equal(noSources.sold.available,false);
+
+
+let fallbackChatCalls=0;
+const fallbackFetch=async(url,init)=>{
+  if(String(url).includes('/anthropic/v1/messages')){
+    return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
+      {type:'web_search_result',title:'Batman #125 comic 12,00 €',url:'https://www.ebay.es/itm/999',cited_text:'Batman #125 comic 12,00 €'}
+    ]}]}),{status:200,headers:{'content-type':'application/json'}});
+  }
+  if(String(url).includes('/chat/completions')){
+    fallbackChatCalls++;
+    return new Response(JSON.stringify({choices:[{message:{content:'esto no es json'}}]}),{status:200,headers:{'content-type':'application/json'}});
+  }
+  return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
+};
+const fallbackResearch=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fallbackFetch});
+assert.equal(fallbackChatCalls,1);
+assert.equal(fallbackResearch.listings.length,1);
+assert.equal(fallbackResearch.asking.count,1);
+assert.match(fallbackResearch.summary,/conserva los datos verificables/i);
+assert.ok(fallbackResearch.warnings.some(x=>/Resumen IA/i.test(x)));
 
 console.log('core tests ok');
