@@ -15,8 +15,8 @@ ESTADO DE ESTA ENTREGA
 
 CONECTAR Y PUBLICAR
 1. Abre CONFIGURAR-FIREBASE.cmd e inicia sesion en tu cuenta de Google.
-2. Sigue los pasos que muestra para Firestore, Google Authentication, AI Logic y App Check.
-3. Completa VITE_RECAPTCHA_ENTERPRISE_SITE_KEY en .env.local.
+2. Sigue los pasos que muestra para Firestore y Google Authentication.
+3. Configura `VITE_API_BASE_URL` solo si el backend de DeepSeek está en otro dominio.
 4. Abre PUBLICAR-FRIKIVAULT.cmd. Muestra la URL al terminar.
    La publicacion se detiene si faltan datos: no publica una demo por accidente.
 

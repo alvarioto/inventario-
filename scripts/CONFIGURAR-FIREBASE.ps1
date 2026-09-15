@@ -55,11 +55,11 @@ try {
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path $configFile)) { throw "Could not download Firebase Web configuration." }
   $config = Get-Content $configFile -Raw | ConvertFrom-Json
 
-  $existingRecaptcha = ""
+  $existingApiBase = ""
   $envPath = Join-Path $Root ".env.local"
   if (Test-Path $envPath) {
-    $m = [regex]::Match((Get-Content $envPath -Raw), '(?m)^VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=(.*)$')
-    if ($m.Success) { $existingRecaptcha = $m.Groups[1].Value.Trim() }
+    $m = [regex]::Match((Get-Content $envPath -Raw), '(?m)^VITE_API_BASE_URL=(.*)$')
+    if ($m.Success) { $existingApiBase = $m.Groups[1].Value.Trim() }
   }
 
   @"
@@ -68,9 +68,7 @@ VITE_FIREBASE_AUTH_DOMAIN=$($config.authDomain)
 VITE_FIREBASE_PROJECT_ID=$($config.projectId)
 VITE_FIREBASE_MESSAGING_SENDER_ID=$($config.messagingSenderId)
 VITE_FIREBASE_APP_ID=$($config.appId)
-VITE_AI_MODEL=gemini-3.5-flash-lite
-VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=$existingRecaptcha
-VITE_APPCHECK_DEBUG=false
+VITE_API_BASE_URL=$existingApiBase
 VITE_DEMO_MODE=false
 "@ | Set-Content -Encoding UTF8 $envPath
   Remove-Item $configFile -Force -ErrorAction SilentlyContinue
@@ -93,10 +91,7 @@ VITE_DEMO_MODE=false
   Write-Host "" 
   Write-Host "PASOS MANUALES RESTANTES - TODOS COMPATIBLES CON SPARK" -ForegroundColor Yellow
   Write-Host "1) Authentication > Comenzar > Google > Activar." -ForegroundColor White
-  Write-Host "2) Servicios de IA > Logica de IA > Comenzar > Gemini Developer API > NIVEL GRATUITO." -ForegroundColor White
-  Write-Host "3) En el asistente de AI Logic configura App Check/reCAPTCHA Enterprise para la app web." -ForegroundColor White
-  Write-Host "4) Copia el Key ID publico de reCAPTCHA Enterprise a VITE_RECAPTCHA_ENTERPRISE_SITE_KEY en .env.local." -ForegroundColor White
-  Write-Host "5) NO actives Cloud Storage, Functions, Secret Manager ni Blaze." -ForegroundColor Green
+  Write-Host "2) NO actives Cloud Storage, Functions, Secret Manager ni Blaze para el frontend." -ForegroundColor Green
   Write-Host "" 
   Write-Host "Cuando termines: .\scripts\DESPLEGAR.ps1" -ForegroundColor Cyan
   Start-Process "https://console.firebase.google.com/project/$ProjectId/overview"
