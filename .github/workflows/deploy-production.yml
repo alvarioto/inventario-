@@ -5,49 +5,57 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: firebase-production
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
     env:
       FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      FIREBASE_PROJECT_ID: frikivault-alvarioto-2026
     steps:
       - name: Comprobar acceso de despliegue
         shell: bash
         run: |
           if [ -z "$FIREBASE_TOKEN" ]; then
-            echo '::error::Falta FIREBASE_TOKEN en este entorno de GitHub. La sesion de PowerShell no se transfiere a GitHub Actions.'
-            exit 1
-          fi
-          if [ -z "$FIREBASE_PROJECT_ID" ]; then
-            echo '::error::Falta FIREBASE_PROJECT_ID en este entorno de GitHub.'
+            echo '::error::Añade FIREBASE_TOKEN en Settings > Secrets and variables > Actions del repositorio.'
             exit 1
           fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - name: Preparar configuración web
-        env:
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+      - name: Obtener la configuración web desde Firebase
+        shell: bash
         run: |
-          cat > .env.local <<EOF
-          VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
-          VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
-          VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
-          VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
-          VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
-          VITE_API_BASE_URL=$VITE_API_BASE_URL
-          VITE_DEMO_MODE=false
-          EOF
+          set -euo pipefail
+          npx --yes firebase-tools apps:list WEB --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/firebase-apps.json"
+          APP_ID=$(node -e 'const fs=require("fs");const data=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/firebase-apps.json","utf8"));const app=data.result?.[0];if(!app?.appId)throw Error("No hay una app web en el proyecto");process.stdout.write(app.appId)')
+          npx --yes firebase-tools apps:sdkconfig WEB "$APP_ID" --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/firebase-web.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const result = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/firebase-web.json', 'utf8')).result;
+          const config = result.sdkConfig || result;
+          if (!config.apiKey || !config.appId || !config.authDomain || config.projectId !== process.env.FIREBASE_PROJECT_ID) {
+            throw new Error('Configuración de Firebase incompleta o de otro proyecto.');
+          }
+          const entries = {
+            VITE_FIREBASE_API_KEY: config.apiKey,
+            VITE_FIREBASE_AUTH_DOMAIN: config.authDomain,
+            VITE_FIREBASE_PROJECT_ID: config.projectId,
+            VITE_FIREBASE_MESSAGING_SENDER_ID: config.messagingSenderId || '',
+            VITE_FIREBASE_APP_ID: config.appId,
+            VITE_DEMO_MODE: 'false'
+          };
+          for (const value of Object.values(entries)) {
+            if (typeof value !== 'string' || /[\r\n]/.test(value)) throw new Error('Valor de configuración inválido.');
+          }
+          fs.writeFileSync('.env.local', Object.entries(entries).map(([key,value]) => key + '=' + value).join('\n') + '\n');
+          NODE
       - run: npm run check:config
+      - run: npm test
       - run: npm run build
-      - name: Firebase Hosting producción
+      - name: Publicar Firebase Hosting y reglas privadas
         run: npx --yes firebase-tools deploy --non-interactive --only hosting,firestore:rules --project "$FIREBASE_PROJECT_ID"
-
