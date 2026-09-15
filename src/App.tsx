@@ -597,16 +597,16 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         title: draft.title.trim(),
         tags: (draft.tags || []).map((x) => x.trim()).filter(Boolean)
       };
-      const itemId = item?.id || await saveItem(baseDraft);
-      const uploaded = [] as Array<{path:string;url:string}>;
-      for (const file of photos) uploaded.push(await uploadItemImage(file));
+      // Primero procesamos TODAS las fotos y solo después escribimos la ficha.
+      // Así nunca queda creado un artículo a medias sin sus imágenes si una compresión falla.
+      const uploaded = await Promise.all(photos.map((file) => uploadItemImage(file)));
       const finalDraft: InventoryDraft = {
         ...baseDraft,
         research,
         imageUrls: [...(baseDraft.imageUrls || []), ...uploaded.map((x) => x.url)],
         imagePaths: [...(baseDraft.imagePaths || []), ...uploaded.map((x) => x.path).filter(Boolean)]
       };
-      await saveItem(finalDraft, itemId);
+      await saveItem(finalDraft, item?.id);
       onSaved();
     } finally { setBusy(false); }
   }

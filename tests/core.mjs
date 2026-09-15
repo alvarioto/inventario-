@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify } from '../server/core.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
@@ -33,15 +34,26 @@ const publicListings=parsePublicListings(webSources);
 assert.equal(publicListings[0].price,24.99);
 assert.equal(publicListings[1].price,30);
 
-// El escáner debe enviar todas las vistas del mismo artículo en una sola consulta multimodal.
-let identifyBody;
+// Con varias fotos: una consulta visual por foto + una fusión textual final.
+const identifyBodies=[];
+const partials=[
+  {title:'Funko Pop! Éomer #1982',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'1982',confidence:0.96,explanation:'Frontal y número visibles'},
+  {title:'Éomer',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'1982',confidence:0.90,explanation:'Trasera y colección visibles'},
+  {title:'Funko Pop! Éomer #1982',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'1982',confidence:0.98,explanation:'Etiqueta inferior y código visibles'}
+];
+let visualCall=0;
 const multiImageFetch=async(_url,init)=>{
-  identifyBody=JSON.parse(init.body);
-  return new Response(JSON.stringify({choices:[{message:{content:'{"title":"Pikachu","type":"figure","confidence":0.9,"explanation":"Vistas combinadas"}'}}]}),{status:200,headers:{'content-type':'application/json'}});
+  const body=JSON.parse(init.body); identifyBodies.push(body);
+  const hasImage=body.messages?.some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image_url'));
+  const result=hasImage ? partials[visualCall++] : {...partials[0],confidence:0.99,explanation:'Las tres vistas coinciden en personaje, línea y número 1982'};
+  return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
 };
-await identify(['data:image/jpeg;base64,AAAA','data:image/jpeg;base64,BBBB','data:image/jpeg;base64,CCCC'],{key:'test',fetcher:multiImageFetch});
-const imageBlocks=identifyBody.messages[1].content.filter(block=>block.type==='image_url');
-assert.equal(imageBlocks.length,3);
+const mergedIdentification=await identify(['data:image/jpeg;base64,AAAA','data:image/jpeg;base64,BBBB','data:image/jpeg;base64,CCCC'],{key:'test',fetcher:multiImageFetch});
+assert.equal(identifyBodies.length,4);
+assert.equal(identifyBodies.slice(0,3).every(body=>body.messages[1].content.filter(block=>block.type==='image_url').length===1),true);
+assert.equal(Array.isArray(identifyBodies[3].messages[1].content),false);
+assert.equal(mergedIdentification.title,'Funko Pop! Éomer #1982');
+assert.equal(mergedIdentification.sku,'1982');
 
 const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});
 assert.equal(noSources.sources.length,0);
@@ -69,4 +81,11 @@ assert.match(fallbackResearch.summary,/conserva los datos verificables/i);
 assert.ok(fallbackResearch.warnings.some(x=>/Resumen IA/i.test(x)));
 
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
+
+// Regresión: las fotos nuevas se procesan antes de guardar y se anexan todas a imageUrls.
+const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
+assert.match(appSource,/Promise\.all\(photos\.map\(\(file\) => uploadItemImage\(file\)\)\)/);
+assert.match(appSource,/imageUrls: \[\.\.\.\(baseDraft\.imageUrls \|\| \[\]\), \.\.\.uploaded\.map\(\(x\) => x\.url\)\]/);
+assert.match(appSource,/await saveItem\(finalDraft, item\?\.id\)/);
+
 console.log('core tests ok');
