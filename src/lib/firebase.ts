@@ -31,10 +31,11 @@ if (isFirebaseConfigured) {
   auth = getAuth(app);
   try {
     db = initializeFirestore(app, {
+      ignoreUndefinedProperties: true,
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
     });
   } catch {
-    db = initializeFirestore(app, {});
+    db = initializeFirestore(app, { ignoreUndefinedProperties: true });
   }
 }
 
