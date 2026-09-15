@@ -34,6 +34,12 @@ const publicListings=parsePublicListings(webSources);
 assert.equal(publicListings[0].price,24.99);
 assert.equal(publicListings[1].price,30);
 
+// También aprovechamos precios públicos de tiendas que no son marketplaces conocidos.
+const shopListings=parsePublicListings([{id:'shop-1',kind:'web',title:'Funko Pop Éomer #1982 - 29,95 €',url:'https://tienda-ejemplo.es/product/eomer-1982',snippet:'En stock · precio 29,95 €'}]);
+assert.equal(shopListings.length,1);
+assert.equal(shopListings[0].price,29.95);
+assert.match(shopListings[0].condition,/Precio público detectado/i);
+
 // Con varias fotos: una consulta visual por foto + una fusión textual final.
 const identifyBodies=[];
 const partials=[

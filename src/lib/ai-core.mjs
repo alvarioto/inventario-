@@ -137,22 +137,43 @@ function marketplaceName(url){
 
 export function parsePublicListings(sources){
  const listings=[];
+ const seen=new Set();
  for(const source of sources){
-  const marketplace=marketplaceName(source.url);
-  if(!marketplace)continue;
   const prices=extractEuroPrices(`${source.title} ${source.snippet}`);
   if(!prices.length)continue;
-  listings.push({
-   id:`market-${listings.length}`,
-   title:source.title,
-   url:source.url,
-   price:prices[0],
-   currency:'EUR',
-   shipping:null,
-   condition:`Precio anunciado · ${marketplace}`
-  });
+  const marketplace=marketplaceName(source.url);
+  const host=hostOf(source.url);
+  for(const price of prices.slice(0,2)){
+   const key=`${source.url}|${price}`;
+   if(seen.has(key))continue;
+   seen.add(key);
+   listings.push({
+    id:`market-${listings.length}`,
+    title:source.title,
+    url:source.url,
+    price,
+    currency:'EUR',
+    shipping:null,
+    condition:marketplace?`Precio anunciado · ${marketplace}`:`Precio público detectado · ${host||'web'}`
+   });
+  }
  }
  return listings;
+}
+
+function uniqueSources(rows){
+ const byUrl=new Map();
+ for(const row of rows){
+  if(!row?.url)continue;
+  const current=byUrl.get(row.url);
+  if(!current){byUrl.set(row.url,row);continue;}
+  byUrl.set(row.url,{
+   ...current,
+   title:(current.title&&current.title!=='Fuente web')?current.title:row.title,
+   snippet:[current.snippet,row.snippet].filter(Boolean).join(' ').replace(/\s+/g,' ').trim().slice(0,2200)
+  });
+ }
+ return [...byUrl.values()];
 }
 
 function webSearchSources(response){
@@ -194,7 +215,7 @@ export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetche
    max_tokens:2600,
    messages:[{
     role:'user',
-    content:`Investiga precios REALES y actuales en Internet público para este artículo de colección: ${query}.\n\nBusca el producto exacto, no solo la franquicia. Prioriza España y la UE. Necesito: (1) anuncios actuales comparables en eBay España, Wallapop, TodoColeccion, Catawiki, Vinted o Cardmarket cuando aplique; (2) precios actuales de tiendas si aún está a la venta; (3) PVP oficial o precio de lanzamiento únicamente cuando exista una fuente que lo respalde.\n\nPara cada precio útil escribe explícitamente el importe en EUR junto al nombre de la tienda o marketplace y cita esa fuente. Descarta lotes, accesorios, cajas vacías, reproducciones y variantes distintas. No inventes precios, no conviertas un precio sin fuente y no llames "vendido" a un anuncio activo.`
+    content:`Investiga precios REALES y actuales en Internet público para este artículo de colección: ${query}.\n\nBusca el producto exacto, no solo la franquicia. Prioriza España y la UE. Necesito: (1) anuncios actuales comparables en eBay España, Wallapop, TodoColeccion, Catawiki, Vinted o Cardmarket cuando aplique; (2) precios actuales de CUALQUIER tienda pública si aún está a la venta; (3) PVP oficial o precio de lanzamiento únicamente cuando exista una fuente que lo respalde.\n\nMUY IMPORTANTE: para cada precio útil escribe el importe explícitamente en EUR en una frase separada y cita en ESA MISMA frase una sola fuente. No agrupes varios precios con varias citas en una misma frase. Si una página coincide con el producto pero no muestra precio, sigue buscando otra que sí lo muestre. Descarta lotes, accesorios, cajas vacías, reproducciones y variantes distintas. No inventes precios, no conviertas un precio sin fuente y no llames "vendido" a un anuncio activo.`
    }],
    tools:[{
     type:'web_search_20250305',
@@ -358,8 +379,22 @@ export async function research(input,config){
   warnings.push('Búsqueda pública pendiente: falta DEEPSEEK_API_KEY en el servidor.');
  }
 
+ // Si encontramos el artículo pero los resultados no exponen precios, hacemos una
+ // segunda pasada mucho más específica antes de concluir que no hay precios útiles.
+ let initialListings=parsePublicListings(webSources);
+ if(!initialListings.length&&webSources.length&&config.key){
+  try{
+   const priceQuery=`${identity} comprar precio EUR € tienda stock eBay Wallapop España`.trim();
+   const extra=normalizeSources(await deepseekWebSearch(priceQuery,config),'web-price');
+   webSources=uniqueSources([...webSources,...extra]);
+   initialListings=parsePublicListings(webSources);
+  }catch(error){
+   warnings.push(error instanceof Error?`Búsqueda adicional de precios: ${error.message}`:'No se pudo completar la búsqueda adicional de precios.');
+  }
+ }
+
  sources.push(...webSources);
- listings.push(...parsePublicListings(webSources));
+ listings.push(...initialListings);
  for(const listing of listings){
   const source=webSources.find(x=>x.url===listing.url);
   if(source)sources.push({...source,id:listing.id,kind:'market-public'});
@@ -382,7 +417,7 @@ export async function research(input,config){
  }
 
  if(!listings.length){
-  warnings.push('No se han podido extraer precios comparables verificables de marketplaces públicos; se mantienen las fuentes y enlaces encontrados para revisión.');
+  warnings.push(`Se localizaron ${webSources.length} páginas coincidentes, pero ninguna expuso un precio en EUR legible en el resultado público. Se mantienen las páginas encontradas para revisión manual.`);
  }
 
  let summary='No hay fuentes consultadas para investigar este artículo.';
@@ -405,9 +440,10 @@ export async function research(input,config){
    comparables=listings.filter(x=>validated.comparableIds.includes(x.id));
   }catch(error){
    comparables=conservativeFallbackComparables(item,listings,sources);
-   summary='Se han encontrado '+sources.length+' fuente'+(sources.length===1?'':'s')+' pública'+(sources.length===1?'':'s')+' y '+listings.length+' anuncio'+(listings.length===1?'':'s')+' con precio. El resumen automático de DeepSeek no llegó en un JSON válido, así que FrikiVault conserva los datos verificables encontrados en vez de cancelar la investigación.';
-   facts=comparables.slice(0,8).map(listing=>({label:'Precio anunciado',value:euro(listing.price)+' · '+listing.condition,sourceId:listing.id}));
-   warnings.push('Resumen IA: '+(error instanceof Error?error.message:'respuesta no estructurada')+'. Se ha aplicado un filtro local conservador y se mantienen las fuentes para revisión.');
+   const uniquePageCount=new Set(sources.map(source=>source.url)).size;
+   summary=`Se localizaron ${uniquePageCount} páginas coincidentes. ${listings.length} precio${listings.length===1?'':'s'} pudieron extraerse automáticamente y ${comparables.length} pasaron el filtro local de coincidencia exacta. FrikiVault conserva los datos verificables aunque el resumen automático no pudiera estructurarse.`;
+   facts=comparables.slice(0,8).map(listing=>({label:'Precio público',value:euro(listing.price)+' · '+listing.condition,sourceId:listing.id}));
+   warnings.push('Resumen IA: el resumen automático no pudo estructurarse; se ha aplicado el filtro local de coincidencia y se mantienen las fuentes para revisión.');
   }
  }
 
