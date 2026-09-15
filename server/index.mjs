@@ -13,7 +13,7 @@ const local=host==='127.0.0.1'||host==='localhost'||host==='::1';
 if(!local&&(!env.FIREBASE_PROJECT_ID||!env.OWNER_UID||!env.APP_ORIGIN)){console.error('Para exponer el servidor configura FIREBASE_PROJECT_ID, OWNER_UID y APP_ORIGIN (HTTPS).');process.exit(1)}
 if(!local&&!env.APP_ORIGIN?.startsWith('https://')){console.error('APP_ORIGIN debe usar HTTPS en producción.');process.exit(1)}
 if(!local)initializeApp({projectId:env.FIREBASE_PROJECT_ID});
-const config={key:env.DEEPSEEK_API_KEY,model:env.DEEPSEEK_MODEL||'deepseek-flash',braveKey:env.BRAVE_SEARCH_API_KEY,ebayId:env.EBAY_CLIENT_ID,ebaySecret:env.EBAY_CLIENT_SECRET};
+const config={key:env.DEEPSEEK_API_KEY,model:env.DEEPSEEK_MODEL||'deepseek-flash',braveKey:env.BRAVE_SEARCH_API_KEY};
 const app=express();app.disable('x-powered-by');
 app.use((req,res,next)=>{res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');next()});
 const session=randomBytes(32).toString('hex');
@@ -24,7 +24,7 @@ app.use('/api',(req,res,next)=>{
  if(req.headers.origin){res.setHeader('Access-Control-Allow-Origin',req.headers.origin);res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, X-FrikiVault-Session');res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');res.setHeader('Vary','Origin');}
  if(req.method==='OPTIONS')return res.status(204).end();
  if(local&&!['127.0.0.1','localhost','[::1]'].some(h=>req.headers.host===h+':'+port||req.headers.host===h+':5173'))return res.status(403).json({error:'Host no autorizado.'});
- if(req.method==='GET'&&req.path==='/status')return res.json({deepseek:Boolean(config.key),model:config.model,webSearch:Boolean(config.braveKey),ebay:Boolean(config.ebayId&&config.ebaySecret),mode:local?'local':'firebase',session:local?session:undefined});
+ if(req.method==='GET'&&req.path==='/status')return res.json({deepseek:Boolean(config.key),model:config.model,webSearch:Boolean(config.key||config.braveKey),publicSearch:Boolean(config.key||config.braveKey),mode:local?'local':'firebase',session:local?session:undefined});
  if(req.method!=='POST')return res.status(405).json({error:'Método no permitido.'});
  if(!req.is('application/json'))return res.status(415).json({error:'Se requiere JSON.'});
  next();

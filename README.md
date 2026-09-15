@@ -6,7 +6,7 @@ FrikiVault es un inventario personal para figuras, cómics, manga, cartas, video
 
 - **Frontend:** React + Vite + Firebase Authentication + Cloud Firestore.
 - **IA privada:** servidor Express separado. La clave de DeepSeek nunca entra en el bundle del navegador.
-- **Investigación:** DeepSeek resume solo las fuentes recibidas; eBay se muestra separado entre anuncios y ventas cerradas.
+- **Investigación:** DeepSeek busca en Internet público y resume solo las fuentes encontradas; eBay se muestra separado entre anuncios y ventas cerradas.
 - **QR:** cada objeto guardado tiene un identificador estable y una etiqueta QR que abre su ficha autenticada.
 - **Spark:** las fotografías se comprimen y se guardan en Firestore; no se usan Cloud Functions ni Cloud Storage.
 
@@ -30,7 +30,7 @@ npm start
 
 Abre `http://127.0.0.1:4173`. Para usar DeepSeek, copia `.env.server.example` como `.env.server` y añade `DEEPSEEK_API_KEY`. En Windows puedes ejecutar `scripts/CONFIGURAR-SERVIDOR.ps1`.
 
-El buscador web y eBay son integraciones opcionales. Para que la investigación tenga fuentes automáticas configura `BRAVE_SEARCH_API_KEY`; para anuncios actuales de eBay configura `EBAY_CLIENT_ID` y `EBAY_CLIENT_SECRET`. Las ventas cerradas requieren el acceso correspondiente de eBay Marketplace Insights; la app no presenta anuncios como ventas.
+La investigación usa la búsqueda web pública de DeepSeek para consultar eBay España, catálogos y páginas de producto. No inicia sesión en eBay ni necesita `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` o una cuenta de eBay. `BRAVE_SEARCH_API_KEY` es opcional y solo sirve como buscador auxiliar. Los anuncios se muestran como precios solicitados, nunca como ventas cerradas; la ficha conserva los enlaces para abrirlos y comprobarlos.
 
 ## Firebase
 
@@ -42,7 +42,7 @@ npm run dev
 
 ## Publicación
 
-Firebase Hosting puede publicar el frontend. El servidor Express se publica en un VPS con HTTPS y se configura en `VITE_API_BASE_URL`. No subas `.env.server`, `.env.local`, claves, tokens ni credenciales al repositorio.
+Firebase Hosting es la dirección web que abrirás desde el móvil y permite instalar la PWA en la pantalla de inicio. Authentication identifica tu usuario y Firestore sincroniza la colección; el modo local sigue funcionando sin conexión. El servidor Express se publica en un VPS con HTTPS y se configura en `VITE_API_BASE_URL` porque la clave de DeepSeek no puede ir dentro del navegador. No subas `.env.server`, `.env.local`, claves, tokens ni credenciales al repositorio.
 
 - `scripts/DESPLEGAR.ps1`: build y despliegue de frontend/reglas Firebase.
 - `scripts/CREAR-REPO-GITHUB.ps1`: inicializa y sube el repositorio privado si se ejecuta desde un PC con GitHub CLI.

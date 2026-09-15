@@ -27,4 +27,4 @@ IA Y PRECIOS
 - Ejecuta CONFIGURAR-SERVIDOR.cmd para guardar la clave de DeepSeek de forma privada.
 - DeepSeek identifica la foto y redacta el informe una vez que confirmes el artículo.
 - El precio original, los anuncios actuales y las ventas cerradas se muestran en bloques distintos.
-- eBay exige credenciales de desarrollador para consultar anuncios automáticamente; sin ellas se muestran enlaces directos y se avisa.
+- eBay se consulta desde páginas públicas de Internet; no se inicia sesión ni se necesitan credenciales de eBay. Los anuncios se etiquetan como precios solicitados y se deja el enlace para comprobarlo.
