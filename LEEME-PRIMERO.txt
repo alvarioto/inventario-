@@ -1,0 +1,24 @@
+FRIKIVAULT - ARRANQUE PREPARADO
+
+1. Extrae TODO el ZIP en una carpeta de tu PC Windows.
+2. Abre ABRIR-FRIKIVAULT.cmd (necesita Node.js instalado).
+   Incluye la aplicacion compilada. No necesitas instalar dependencias para abrirla.
+   Se abrira http://127.0.0.1:4173 en el navegador. Deja la ventana abierta.
+
+ESTADO DE ESTA ENTREGA
+- Corregido el error TypeScript que impedia compilar Firestore.
+- Sin configuracion de tu cuenta: funciona en modo DEMO local.
+- Los objetos de ejemplo NO son tu inventario. Los cambios locales quedan en este navegador.
+- La identificacion de fotos en demo es simulada. No esta activada la IA real.
+- Exporta JSON desde Ajustes antes de cambiar de navegador o conectar Firebase.
+  Para pasar esos objetos a la nube, importa el JSON despues de iniciar sesion.
+
+CONECTAR Y PUBLICAR
+1. Abre CONFIGURAR-FIREBASE.cmd e inicia sesion en tu cuenta de Google.
+2. Sigue los pasos que muestra para Firestore, Google Authentication, AI Logic y App Check.
+3. Completa VITE_RECAPTCHA_ENTERPRISE_SITE_KEY en .env.local.
+4. Abre PUBLICAR-FRIKIVAULT.cmd. Muestra la URL al terminar.
+   La publicacion se detiene si faltan datos: no publica una demo por accidente.
+
+La cuenta Firebase y sus servicios no se han activado ni verificado desde esta entrega.
+No se ha cambiado el plan de facturacion ni publicado una web.

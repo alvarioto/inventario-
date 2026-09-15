@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.firebase/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+Thumbs.db
+.env.server
+.env.*
+!.env.example
+!.env.server.example
+private/
+*.tsbuildinfo
+firebase-web-config.json

@@ -1,0 +1,23 @@
+name: FrikiVault preproducción
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - name: Firebase Hosting preproducción
+        if: ${{ secrets.FIREBASE_TOKEN != '' }}
+        run: npx firebase-tools deploy --only hosting --project "${{ secrets.FIREBASE_PROJECT_ID }}" --token "${{ secrets.FIREBASE_TOKEN }}"
+      - name: Aviso de configuración pendiente
+        if: ${{ secrets.FIREBASE_TOKEN == '' }}
+        run: echo 'Añade FIREBASE_TOKEN y FIREBASE_PROJECT_ID al entorno staging para publicar.'
