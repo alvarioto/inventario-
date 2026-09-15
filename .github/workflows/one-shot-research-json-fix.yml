@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - scripts/patch-research-json.cjs
+      - scripts/patch-research-json.py
       - .github/workflows/one-shot-research-json-fix.yml
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 22
       - name: Apply patch
-        run: node scripts/patch-research-json.cjs
+        run: python scripts/patch-research-json.py
       - name: Install
         run: npm ci
       - name: Test
