@@ -82,10 +82,16 @@ assert.ok(fallbackResearch.warnings.some(x=>/Resumen IA/i.test(x)));
 
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
 
-// Regresión: las fotos nuevas se procesan antes de guardar y se anexan todas a imageUrls.
+// Regresión: las fotos se convierten a datos persistentes antes de pulsar Guardar.
 const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
-assert.match(appSource,/Promise\.all\(photos\.map\(\(file\) => uploadItemImage\(file\)\)\)/);
-assert.match(appSource,/imageUrls: \[\.\.\.\(baseDraft\.imageUrls \|\| \[\]\), \.\.\.uploaded\.map\(\(x\) => x\.url\)\]/);
-assert.match(appSource,/await saveItem\(finalDraft, item\?\.id\)/);
+const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta.url),'utf8');
+assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
+assert.match(appSource,/prepared\.map\(\(file\) => uploadItemImage\(file\)\)/);
+assert.match(appSource,/imageUrls: \[\.\.\.\(current\.imageUrls \|\| \[\]\), \.\.\.urls\]\.slice\(0, limit\)/);
+assert.doesNotMatch(appSource,/const \[photos, setPhotos\]/);
+assert.match(appSource,/disabled=\{busy \|\| photoPreparing \|\| !!photoError/);
+assert.match(inventorySource,/getDocFromServer/);
+assert.match(inventorySource,/Firebase guardó \$\{storedPhotos\} de \$\{expectedPhotos\} fotos/);
+
 
 console.log('core tests ok');

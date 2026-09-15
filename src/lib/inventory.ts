@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocFromServer,
   onSnapshot,
   orderBy,
   query,
@@ -33,15 +34,28 @@ export async function saveItem(draft: InventoryDraft, id?: string) {
   if (demoMode || !db || !auth?.currentUser) return saveDemo(draft, id).id;
   const uid = auth.currentUser.uid;
   const payload = { ...draft, updatedAt: serverTimestamp() };
-  if (id) {
-    await setDoc(doc(db, 'users', uid, 'items', id), payload, { merge: true });
-    return id;
+  let savedId = id;
+  if (savedId) {
+    await setDoc(doc(db, 'users', uid, 'items', savedId), payload, { merge: true });
+  } else {
+    const created = await addDoc(collection(db, 'users', uid, 'items'), {
+      ...payload,
+      createdAt: serverTimestamp()
+    });
+    savedId = created.id;
   }
-  const created = await addDoc(collection(db, 'users', uid, 'items'), {
-    ...payload,
-    createdAt: serverTimestamp()
-  });
-  return created.id;
+
+  // No damos el guardado por bueno hasta comprobar desde el servidor que las fotos
+  // realmente quedaron dentro del documento. Evita falsos "Guardado" en iOS/Safari.
+  const expectedPhotos = (draft.imageUrls || []).filter(Boolean).length;
+  if (expectedPhotos) {
+    const stored = await getDocFromServer(doc(db, 'users', uid, 'items', savedId));
+    const storedPhotos = Array.isArray(stored.data()?.imageUrls) ? stored.data()!.imageUrls.filter(Boolean).length : 0;
+    if (storedPhotos != expectedPhotos) {
+      throw new Error(`Firebase guardó ${storedPhotos} de ${expectedPhotos} fotos. No cierres la ficha y vuelve a intentarlo.`);
+    }
+  }
+  return savedId;
 }
 
 export async function removeItem(id: string) {
