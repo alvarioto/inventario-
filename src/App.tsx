@@ -59,6 +59,7 @@ import {
   maxCloudPhotos
 } from './lib/inventory';
 import { investigate } from './lib/api';
+import { DirectAiSettings } from './components/DirectAiSettings';
 import { importDemo } from './lib/demo';
 import QRCode from 'qrcode';
 import type { AiIdentification, InventoryDraft, InventoryItem, ItemStatus, ItemType, ResearchResult } from './types';
@@ -486,8 +487,9 @@ function SettingsPage({ items, user, showToast }: { items: InventoryItem[]; user
       <div className="settings-grid">
         <div className="panel account-panel"><div className="user-block">{user?.photoURL ? <img src={user.photoURL}/> : <div className="user-fallback"><UserRound/></div>}<div><b>{user?.displayName || (demoMode ? 'Modo local' : 'Usuario')}</b><small>{user?.email || (demoMode ? 'Sin cuenta Firebase todavía' : '')}</small></div></div>{!demoMode && auth && <button className="danger-link" onClick={() => signOut(auth!)}><LogOut size={17}/> Cerrar sesión</button>}</div>
         <div className="panel"><PanelHeader title="Copia de seguridad"/><p className="muted">JSON conserva todos los campos. CSV abre bien en Excel.</p><div className="button-stack"><button className="secondary wide" onClick={exportJson}><FileJson size={18}/> Exportar JSON</button><button className="secondary wide" onClick={exportCsv}><Download size={18}/> Exportar CSV</button><button className="secondary wide" onClick={() => importRef.current?.click()}><Upload size={18}/> Importar JSON</button><input ref={importRef} hidden type="file" accept="application/json" onChange={(e)=>importJson(e.target.files?.[0])}/></div></div>
-        <div className="panel"><PanelHeader title="Estado Firebase"/><div className="status-list"><div><span className={isFirebaseConfigured ? 'dot ok':'dot warn'}/><b>Configuración web</b><em>{isFirebaseConfigured ? 'Conectada' : 'Pendiente'}</em></div><div><span className={demoMode ? 'dot warn':'dot ok'}/><b>Base de datos</b><em>{demoMode ? 'Local demo' : 'Cloud Firestore'}</em></div><div><span className="dot ok"/><b>IA de identificación</b><em>DeepSeek · servidor</em></div></div></div>
-        <div className="panel"><PanelHeader title="Privacidad"/><p className="muted">Authentication y Firestore limitan la colección a tu usuario. Las fotos se comprimen y se guardan dentro de Firestore; el navegador nunca recibe la clave de DeepSeek. eBay se consulta por páginas públicas, sin iniciar sesión.</p><div className="secure-note"><ShieldCheck size={17}/> La identificación y la investigación se ejecutan en el backend Express con DeepSeek. Firebase sirve la web, autentica tu cuenta y sincroniza tus objetos.</div></div>
+        <DirectAiSettings/>
+        <div className="panel"><PanelHeader title="Estado Firebase"/><div className="status-list"><div><span className={isFirebaseConfigured ? 'dot ok':'dot warn'}/><b>Configuración web</b><em>{isFirebaseConfigured ? 'Conectada' : 'Pendiente'}</em></div><div><span className={demoMode ? 'dot warn':'dot ok'}/><b>Base de datos</b><em>{demoMode ? 'Local demo' : 'Cloud Firestore'}</em></div></div></div>
+        <div className="panel"><PanelHeader title="Privacidad"/><p className="muted">Authentication y Firestore limitan la colección a tu usuario. Las fotos se comprimen y se guardan dentro de Firestore; en modo directo, tu clave se guarda en este navegador y se envía únicamente a DeepSeek. eBay se consulta mediante fuentes públicas, sin iniciar sesión.</p><div className="secure-note"><ShieldCheck size={17}/> IA directa funciona desde este dispositivo sin un servidor propio. Firebase sirve la web, autentica tu cuenta y sincroniza tus objetos.</div></div>
       </div>
     </section>
   );
