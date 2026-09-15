@@ -9,7 +9,21 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    env:
+      FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
     steps:
+      - name: Comprobar acceso de despliegue
+        shell: bash
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo '::error::Falta FIREBASE_TOKEN en este entorno de GitHub. La sesion de PowerShell no se transfiere a GitHub Actions.'
+            exit 1
+          fi
+          if [ -z "$FIREBASE_PROJECT_ID" ]; then
+            echo '::error::Falta FIREBASE_PROJECT_ID en este entorno de GitHub.'
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -32,10 +46,8 @@ jobs:
           VITE_API_BASE_URL=$VITE_API_BASE_URL
           VITE_DEMO_MODE=false
           EOF
+      - run: npm run check:config
       - run: npm run build
       - name: Firebase Hosting producción
-        if: ${{ secrets.FIREBASE_TOKEN != '' }}
-        run: npx firebase-tools deploy --only hosting --project "${{ secrets.FIREBASE_PROJECT_ID }}" --token "${{ secrets.FIREBASE_TOKEN }}"
-      - name: Aviso de configuración pendiente
-        if: ${{ secrets.FIREBASE_TOKEN == '' }}
-        run: echo 'Añade FIREBASE_TOKEN y FIREBASE_PROJECT_ID al entorno production para publicar.'
+        run: npx --yes firebase-tools deploy --non-interactive --only hosting,firestore:rules --project "$FIREBASE_PROJECT_ID"
+
