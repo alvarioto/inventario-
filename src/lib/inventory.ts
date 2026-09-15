@@ -1,3 +1,4 @@
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import {
   addDoc,
   collection,
@@ -9,14 +10,13 @@ import {
   serverTimestamp,
   setDoc
 } from 'firebase/firestore';
-import { app, auth, db, demoMode } from './firebase';
+import { auth, db, demoMode } from './firebase';
 import { identifyPhoto } from './api';
 import { deleteDemo, saveDemo, subscribeDemo } from './demo';
-import type { AiIdentification, InventoryDraft, InventoryItem, ItemType } from '../types';
+import type { AiIdentification, InventoryDraft, InventoryItem } from '../types';
 
 const MAX_FIRESTORE_PHOTOS = 3;
 const TARGET_PHOTO_BYTES = 150 * 1024;
-const TYPE_VALUES: ItemType[] = ['figure','comic','manga','card','game','funko','lego','plush','replica','movie','merch','other'];
 
 export function subscribeItems(callback: (items: InventoryItem[]) => void, onError?: (e: Error) => void) {
   if (demoMode || !db || !auth?.currentUser) return subscribeDemo(callback);
@@ -49,26 +49,66 @@ export async function removeItem(id: string) {
   await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'items', id));
 }
 
+type LoadedImage = {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  close: () => void;
+};
+
+async function loadImage(file: File): Promise<LoadedImage> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file);
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        close: () => bitmap.close?.()
+      };
+    } catch {
+      // Safari/iOS puede fallar con algunas fotos de la fototeca. Probamos con <img>.
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  const image = new Image();
+  image.decoding = 'async';
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error('El navegador no pudo abrir la foto. Prueba a hacerla de nuevo.'));
+    image.src = objectUrl;
+  });
+  return {
+    source: image,
+    width: image.naturalWidth || image.width,
+    height: image.naturalHeight || image.height,
+    close: () => URL.revokeObjectURL(objectUrl)
+  };
+}
+
 export async function prepareImage(file: File, maxDimension = 1700): Promise<File> {
-  if (!file.type.startsWith('image/')) return file;
+  if (file.type && !file.type.startsWith('image/')) return file;
+  let loaded: LoadedImage | null = null;
   try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
+    loaded = await loadImage(file);
+    const scale = Math.min(1, maxDimension / Math.max(loaded.width, loaded.height));
+    const width = Math.max(1, Math.round(loaded.width * scale));
+    const height = Math.max(1, Math.round(loaded.height * scale));
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    bitmap.close?.();
+    ctx.drawImage(loaded.source, 0, 0, width, height);
     const blob = await canvasToBlob(canvas, 'image/jpeg', 0.86);
     if (!blob) return file;
     const baseName = file.name.replace(/\.[^.]+$/, '') || 'foto';
     return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
   } catch {
     return file;
+  } finally {
+    loaded?.close();
   }
 }
 
@@ -82,7 +122,6 @@ async function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality: nu
  * por debajo del límite de 1 MiB por documento.
  */
 export async function uploadItemImage(file: File) {
-  
   const url = await compressPhotoToDataUrl(file, TARGET_PHOTO_BYTES, 1280);
   return { path: '', url };
 }
@@ -90,40 +129,50 @@ export async function uploadItemImage(file: File) {
 export function maxCloudPhotos() { return MAX_FIRESTORE_PHOTOS; }
 
 async function compressPhotoToDataUrl(file: File, targetBytes: number, maxDimension: number) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('No se pudo procesar la foto');
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close?.();
+  let loaded: LoadedImage | null = null;
+  try {
+    loaded = await loadImage(file);
+    const scale = Math.min(1, maxDimension / Math.max(loaded.width, loaded.height));
+    const width = Math.max(1, Math.round(loaded.width * scale));
+    const height = Math.max(1, Math.round(loaded.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('No se pudo procesar la foto');
+    ctx.drawImage(loaded.source, 0, 0, width, height);
 
-  let quality = 0.82;
-  let blob = await canvasToBlob(canvas, 'image/jpeg', quality);
-  while (blob && blob.size > targetBytes && quality > 0.36) {
-    quality -= 0.08;
-    blob = await canvasToBlob(canvas, 'image/jpeg', quality);
-  }
-  if (!blob) throw new Error('No se pudo comprimir la foto');
-
-  // Segundo escalado si la escena es especialmente compleja.
-  if (blob.size > targetBytes * 1.35) {
-    const shrink = Math.sqrt(targetBytes / blob.size);
-    const smaller = document.createElement('canvas');
-    smaller.width = Math.max(480, Math.round(width * shrink));
-    smaller.height = Math.max(480, Math.round(height * shrink));
-    const sctx = smaller.getContext('2d');
-    if (sctx) {
-      sctx.drawImage(canvas, 0, 0, smaller.width, smaller.height);
-      blob = await canvasToBlob(smaller, 'image/jpeg', 0.64) || blob;
+    let quality = 0.82;
+    let blob = await canvasToBlob(canvas, 'image/jpeg', quality);
+    while (blob && blob.size > targetBytes && quality > 0.34) {
+      quality -= 0.08;
+      blob = await canvasToBlob(canvas, 'image/jpeg', quality);
     }
-  }
+    if (!blob) throw new Error('No se pudo comprimir la foto');
 
-  return blobToDataUrl(blob);
+    // Segundo escalado si la escena es especialmente compleja.
+    if (blob.size > targetBytes * 1.25) {
+      const shrink = Math.max(0.45, Math.sqrt(targetBytes / blob.size));
+      const smaller = document.createElement('canvas');
+      smaller.width = Math.max(420, Math.round(width * shrink));
+      smaller.height = Math.max(420, Math.round(height * shrink));
+      const sctx = smaller.getContext('2d');
+      if (sctx) {
+        sctx.drawImage(canvas, 0, 0, smaller.width, smaller.height);
+        blob = await canvasToBlob(smaller, 'image/jpeg', 0.62) || blob;
+      }
+    }
+
+    // Una foto en base64 crece aproximadamente un 33 %. Este margen mantiene las
+    // tres imágenes dentro del límite de Firestore junto con el resto de la ficha.
+    if (blob.size > 230 * 1024) {
+      throw new Error('La foto sigue siendo demasiado grande para guardarla. Hazla de nuevo con algo menos de detalle.');
+    }
+
+    return blobToDataUrl(blob);
+  } finally {
+    loaded?.close();
+  }
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -136,21 +185,54 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 export async function identifyWithAi(file: File): Promise<AiIdentification> {
-  return identifyPhoto(await fileToDataUrl(await prepareImage(file, 1400)));
+  const prepared = await prepareImage(file, 1400);
+  const [identification, detectedCode] = await Promise.all([
+    identifyPhoto(await fileToDataUrl(prepared)),
+    tryReadBarcode(prepared)
+  ]);
+
+  if (detectedCode && !identification.barcode) identification.barcode = detectedCode;
+  if (detectedCode && /^(978|979)\d{10}$/.test(detectedCode) && !identification.isbn) {
+    identification.isbn = detectedCode;
+  }
+  return identification;
+}
+
+async function readBarcodeNative(file: File): Promise<string | null> {
+  type DetectorCtor = new (options?: { formats?: string[] }) => {
+    detect(source: ImageBitmapSource): Promise<Array<{ rawValue: string }>>;
+  };
+  const Detector = (window as typeof window & { BarcodeDetector?: DetectorCtor }).BarcodeDetector;
+  if (!Detector || typeof createImageBitmap !== 'function') return null;
+
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    const detector = new Detector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'] });
+    const results = await detector.detect(bitmap);
+    return results[0]?.rawValue?.trim() || null;
+  } catch {
+    return null;
+  } finally {
+    bitmap?.close?.();
+  }
+}
+
+async function readBarcodeZxing(file: File): Promise<string | null> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const reader = new BrowserMultiFormatReader();
+    const result = await reader.decodeFromImageUrl(objectUrl);
+    return result?.getText()?.trim() || null;
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 export async function tryReadBarcode(file: File): Promise<string | null> {
-  type DetectorCtor = new (options?: { formats?: string[] }) => { detect(source: ImageBitmapSource): Promise<Array<{ rawValue: string }>> };
-  const Detector = (window as typeof window & { BarcodeDetector?: DetectorCtor }).BarcodeDetector;
-  if (!Detector) return null;
-  try {
-    const bitmap = await createImageBitmap(file);
-    const detector = new Detector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'] });
-    const results = await detector.detect(bitmap);
-    return results[0]?.rawValue || null;
-  } catch {
-    return null;
-  }
+  return (await readBarcodeNative(file)) || (await readBarcodeZxing(file));
 }
 
 export async function lookupIsbn(isbn: string) {
