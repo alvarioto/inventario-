@@ -89,9 +89,10 @@ assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(fi
 assert.match(appSource,/prepared\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/imageUrls: \[\.\.\.\(current\.imageUrls \|\| \[\]\), \.\.\.urls\]\.slice\(0, limit\)/);
 assert.doesNotMatch(appSource,/const \[photos, setPhotos\]/);
-assert.match(appSource,/disabled=\{busy \|\| photoPreparing \|\| !!photoError/);
-assert.match(inventorySource,/getDocFromServer/);
-assert.match(inventorySource,/Firebase guardó \$\{storedPhotos\} de \$\{expectedPhotos\} fotos/);
+assert.match(appSource,/const \[pendingPhotos, setPendingPhotos\] = useState<File\[]>\(initialPhotos\)/);
+assert.match(appSource,/pendingPhotos\.slice\(0, room\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
+assert.match(appSource,/disabled=\{busy \|\| photoPreparing \|\| !draft\.title\.trim\(\)\}/);
+assert.doesNotMatch(inventorySource,/getDocFromServer/);
 
 
 console.log('core tests ok');

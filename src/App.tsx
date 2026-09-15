@@ -552,6 +552,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   })() : {};
   const initial: InventoryDraft = { ...EMPTY_DRAFT, ...itemDraft, ...(seed || {}), tags: item?.tags || seed?.tags || [], imageUrls: item?.imageUrls || seed?.imageUrls || [], imagePaths: item?.imagePaths || seed?.imagePaths || [] };
   const [draft, setDraft] = useState<InventoryDraft>(initial);
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>(initialPhotos);
   const [previews, setPreviews] = useState<string[]>(initial.imageUrls || []);
   const [photoPreparing, setPhotoPreparing] = useState(false);
   const [photoError, setPhotoError] = useState('');
@@ -577,6 +578,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
           imagePaths: [...(current.imagePaths || []), ...paths]
         }));
         setPreviews((current) => [...current, ...urls].slice(0, maxCloudPhotos()));
+        setPendingPhotos([]);
       })
       .catch((error) => { if (active) setPhotoError(error instanceof Error ? error.message : 'No se pudieron preparar las fotos para guardar.'); })
       .finally(() => { if (active) setPhotoPreparing(false); });
@@ -596,7 +598,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
 
   async function addPhotos(files: FileList | null) {
     if (!files || photoPreparing) return;
-    const existing = (draft.imageUrls || []).length;
+    const existing = (draft.imageUrls || []).length + pendingPhotos.length;
     const limit = maxCloudPhotos();
     const raw = [...files].slice(0, Math.max(0, limit - existing));
     if (!raw.length) return;
@@ -604,6 +606,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
     setPhotoError('');
     try {
       const prepared = await Promise.all(raw.map((file) => prepareImage(file)));
+      setPendingPhotos((current) => [...current, ...prepared].slice(0, limit));
       const uploaded = await Promise.all(prepared.map((file) => uploadItemImage(file)));
       const urls = uploaded.map((x) => x.url).filter(Boolean);
       const paths = uploaded.map((x) => x.path).filter(Boolean);
@@ -613,6 +616,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         imagePaths: [...(current.imagePaths || []), ...paths]
       }));
       setPreviews((current) => [...current, ...urls].slice(0, limit));
+      setPendingPhotos([]);
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : 'No se pudieron preparar las fotos para guardar.');
     } finally {
@@ -632,10 +636,22 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         tags: (draft.tags || []).map((x) => x.trim()).filter(Boolean)
       };
       if (photoPreparing) throw new Error('Espera a que terminen de prepararse las fotos.');
-      if (photoError) throw new Error(photoError);
-      const finalDraft: InventoryDraft = { ...baseDraft, research };
+      let finalDraft: InventoryDraft = { ...baseDraft, research };
+      if (pendingPhotos.length) {
+        setPhotoError('');
+        const room = Math.max(0, maxCloudPhotos() - (baseDraft.imageUrls || []).length);
+        const uploaded = await Promise.all(pendingPhotos.slice(0, room).map((file) => uploadItemImage(file)));
+        finalDraft = {
+          ...finalDraft,
+          imageUrls: [...(baseDraft.imageUrls || []), ...uploaded.map((x) => x.url).filter(Boolean)].slice(0, maxCloudPhotos()),
+          imagePaths: [...(baseDraft.imagePaths || []), ...uploaded.map((x) => x.path).filter(Boolean)]
+        };
+      }
       await saveItem(finalDraft, item?.id);
+      setPendingPhotos([]);
       onSaved();
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : 'No se pudo guardar el artículo.');
     } finally { setBusy(false); }
   }
 
@@ -716,7 +732,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
 
           {item && <section className="qr-panel"><div><h3 className="form-section-title"><QrCode/> Etiqueta de la pieza</h3><p className="muted">Escanéala para abrir directamente esta ficha. La ubicación puede cambiar sin cambiar el código.</p><div className="qr-actions"><button type="button" className="secondary" onClick={downloadQr} disabled={!qrDataUrl}><Download size={17}/> Descargar QR</button><button type="button" className="secondary" onClick={printQr} disabled={!qrDataUrl}><Eye size={17}/> Imprimir etiqueta</button></div></div>{qrDataUrl ? <img className="qr-image" src={qrDataUrl} alt={`Código QR de ${item.title}`}/> : <div className="qr-placeholder"><QrCode/></div>}</section>}
         </div>
-        <div className="sheet-foot">{item ? <button type="button" className="danger" onClick={destroy} disabled={busy}><Trash2 size={18}/> Eliminar</button> : <span/>}<div><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button className="primary" disabled={busy || photoPreparing || !!photoError || !draft.title.trim()}><Check size={18}/>{busy ? 'Guardando…' : photoPreparing ? 'Preparando fotos…' : 'Guardar'}</button></div></div>
+        <div className="sheet-foot">{item ? <button type="button" className="danger" onClick={destroy} disabled={busy}><Trash2 size={18}/> Eliminar</button> : <span/>}<div><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button className="primary" disabled={busy || photoPreparing || !draft.title.trim()}><Check size={18}/>{busy ? 'Guardando…' : photoPreparing ? 'Preparando fotos…' : 'Guardar'}</button></div></div>
       </form>
     </div>
   );
