@@ -28,6 +28,7 @@ const publicListings=parsePublicListings(webSources);
 assert.equal(publicListings[0].price,24.99);
 assert.equal(publicListings[1].price,30);
 
+// El escáner debe enviar todas las vistas del mismo artículo en una sola consulta multimodal.
 let identifyBody;
 const multiImageFetch=async(_url,init)=>{
   identifyBody=JSON.parse(init.body);
