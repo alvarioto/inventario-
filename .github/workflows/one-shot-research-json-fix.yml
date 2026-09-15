@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - scripts/patch-research-json.cjs
+      - .github/workflows/one-shot-research-json-fix.yml
 
 permissions:
   contents: write
