@@ -20,6 +20,7 @@ jobs:
         shell: bash
         run: |
           sed -i 's/conserva estos datos verificables/conserva los datos verificables/' scripts/patch-research-prices.py
+          sed -i "s/warnings.push('El resumen automático no pudo estructurarse;/warnings.push('Resumen IA: el resumen automático no pudo estructurarse;/" scripts/patch-research-prices.py
           python scripts/patch-research-prices.py
       - run: npm ci
       - run: npm test
