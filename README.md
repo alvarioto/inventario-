@@ -50,6 +50,8 @@ Firebase Hosting es la dirección web que abrirás desde el móvil y permite ins
 
 Para verlo desde el móvil, ejecuta `CONFIGURAR-FIREBASE.cmd`, activa Google Authentication y Firestore, y publica con `PUBLICAR-FRIKIVAULT.cmd`. Firebase Hosting te dará la URL web. Para que funcionen la identificación y la investigación con DeepSeek, publica también `server/` en un VPS con HTTPS y escribe su URL en `VITE_API_BASE_URL` antes de volver a publicar el frontend.
 
+Las acciones de GitHub para `staging` y `main` necesitan, en cada entorno, `FIREBASE_TOKEN`, `FIREBASE_PROJECT_ID`, `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` y `VITE_API_BASE_URL`. La clave de DeepSeek se queda únicamente en `.env.server` del backend.
+
 ## Límites y criterio de precios
 
 La aplicación guarda la fecha de cada consulta y las URLs de las fuentes. Distingue precio original, anuncios disponibles y ventas cerradas. Si no hay datos verificables, lo indica y ofrece enlaces para revisar eBay manualmente. El valor de tu unidad depende de edición, estado, caja, idioma y gastos de envío.
