@@ -13,7 +13,7 @@ assert.deepEqual(
   {kind:market.kind,currency:market.currency,count:market.count,min:market.min,max:market.max,median:market.median},
   {kind:'asking',currency:'EUR',count:2,min:12,max:20,median:16}
 );
-assert.match(market.label,/no son ventas cerradas/i);
+assert.match(market.label,/no ventas cerradas/i);
 
 const fakeFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"summary":"Ficha contrastada","facts":[],"comparableIds":[]}'}}]}),{status:200,headers:{'content-type':'application/json'}});
 assert.equal((await deepseek([{role:'user',content:'test'}],{key:'test',fetcher:fakeFetch})).summary,'Ficha contrastada');
