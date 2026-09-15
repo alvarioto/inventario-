@@ -48,7 +48,6 @@ assert.equal(noSources.sources.length,0);
 assert.equal(noSources.warnings.length,1);
 assert.equal(noSources.sold.available,false);
 
-
 let fallbackChatCalls=0;
 const fallbackFetch=async(url,init)=>{
   if(String(url).includes('/anthropic/v1/messages')){
@@ -69,4 +68,5 @@ assert.equal(fallbackResearch.asking.count,1);
 assert.match(fallbackResearch.summary,/conserva los datos verificables/i);
 assert.ok(fallbackResearch.warnings.some(x=>/Resumen IA/i.test(x)));
 
+// Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
 console.log('core tests ok');
