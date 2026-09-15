@@ -17,7 +17,10 @@ jobs:
         with:
           node-version: 22
       - name: Apply patch
-        run: python scripts/patch-research-prices.py
+        shell: bash
+        run: |
+          sed -i 's/conserva estos datos verificables/conserva los datos verificables/' scripts/patch-research-prices.py
+          python scripts/patch-research-prices.py
       - run: npm ci
       - run: npm test
       - run: npm run build
