@@ -1,0 +1,41 @@
+name: Apply multi-photo consensus fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/patch-multiphoto-consensus.py'
+      - '.github/workflows/one-shot-multiphoto-consensus.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply patch
+        run: python scripts/patch-multiphoto-consensus.py
+      - name: Install
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Commit
+        shell: bash
+        run: |
+          rm .github/workflows/one-shot-multiphoto-consensus.yml
+          rm scripts/patch-multiphoto-consensus.py
+          git config user.name 'alvarioto'
+          git config user.email 'aldipo7292@gmail.com'
+          git add src/lib/ai-core.mjs src/App.tsx tests/core.mjs .github/workflows/one-shot-multiphoto-consensus.yml scripts/patch-multiphoto-consensus.py
+          git commit -m 'Improve multi-photo identification and photo persistence'
+          git push origin main
