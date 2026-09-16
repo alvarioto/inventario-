@@ -408,7 +408,6 @@ export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetche
   body:JSON.stringify({
    model,
    max_tokens:1400,
-   reasoning:{effort:'none'},
    messages:[{
     role:'user',
     content:requestText

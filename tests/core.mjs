@@ -192,6 +192,7 @@ const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.met
 const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
 assert.match(currentCoreSource,/UNA sola búsqueda web de precios/);
 assert.match(currentCoreSource,/max_uses:3/);
+assert.doesNotMatch(currentCoreSource,/reasoning:\{effort:'none'\}/);
 assert.match(currentCoreSource,/limitPricingSources/);
 assert.match(currentCoreSource,/thinking:\{type:'disabled'\}/);
 assert.match(currentCoreSource,/sourceLooksBroken/);
