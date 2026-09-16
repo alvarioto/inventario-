@@ -1,0 +1,29 @@
+name: Apply unified fast AI flow
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Run unified fast AI patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - name: Apply patch
+        run: python scripts/patch-unified-fast-ai.py
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit changes
+        shell: bash
+        run: |
+          set -e
+          rm scripts/patch-unified-fast-ai.py .github/workflows/one-shot-unified-fast-ai.yml
+          git config user.name alvarioto
+          git config user.email aldipo7292@gmail.com
+          git add -A
+          git commit -m "Unify identification and pricing into one fast AI flow"
+          git push
