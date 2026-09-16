@@ -18,6 +18,15 @@ jobs:
         run: sed -i "/unified identify fixture/d" scripts/fix-funko-pricing-logic.mjs
       - name: Apply patch
         run: node scripts/fix-funko-pricing-logic.mjs
+      - name: Fix generated UI assertion
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/core.mjs')
+          s=p.read_text()
+          s=s.replace("assert.match(appSource,/Variante / especial/);", "assert.ok(appSource.includes('Variante / especial'));")
+          p.write_text(s)
+          PY
       - run: npm ci
       - run: npm test
       - run: npm run build
@@ -30,4 +39,4 @@ jobs:
           git add -A
           git commit -m "Fix Funko identity and pricing logic"
           git push
-# run v2
+# run v3
