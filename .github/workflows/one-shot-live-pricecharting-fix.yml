@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - scripts/fix-live-pricecharting-search.mjs
+      - scripts/fix-live-pricecharting-test.mjs
       - .github/workflows/one-shot-live-pricecharting-fix.yml
 permissions:
   contents: write
@@ -20,12 +21,14 @@ jobs:
         run: |
           sed -i "s/const files=\['src\/lib\/ai-core.mjs','server\/core.mjs'\]/const files=['src\/lib\/ai-core.mjs']/" scripts/fix-live-pricecharting-search.mjs
           node scripts/fix-live-pricecharting-search.mjs
+          node scripts/fix-live-pricecharting-test.mjs
       - run: npm ci
       - run: npm test
       - run: npm run build
       - name: Commit validated fix
         run: |
           rm scripts/fix-live-pricecharting-search.mjs
+          rm scripts/fix-live-pricecharting-test.mjs
           rm .github/workflows/one-shot-live-pricecharting-fix.yml
           git config user.name alvarioto
           git config user.email aldipo7292@gmail.com
