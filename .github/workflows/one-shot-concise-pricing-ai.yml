@@ -15,17 +15,17 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply patch
-        run: node scripts/patch-concise-pricing-ai.mjs
+        run: node scripts/patch-concise-pricing-ai-v2.mjs
       - run: npm ci
       - run: npm test
       - run: npm run build
       - name: Commit validated patch
         run: |
-          rm scripts/patch-concise-pricing-ai.mjs
+          rm -f scripts/patch-concise-pricing-ai.mjs scripts/patch-concise-pricing-ai-v2.mjs
           rm .github/workflows/one-shot-concise-pricing-ai.yml
           git config user.name alvarioto
           git config user.email aldipo7292@gmail.com
           git add -A
           git commit -m "Use concise pricing searches and restore item AI"
           git push
-# run
+# run v2
