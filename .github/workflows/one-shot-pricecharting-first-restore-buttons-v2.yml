@@ -1,0 +1,42 @@
+name: Apply PriceCharting first and restore buttons v2
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-pricecharting-first-restore-buttons-v2.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply functional patch
+        run: python scripts/patch-pricecharting-first-and-restore-buttons.py
+      - name: Update obsolete hobbyDB regression
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('tests/core.mjs')
+          s=p.read_text()
+          old="assert.match(appSource,/PPG \\/ hobbyDB/);"
+          new="assert.doesNotMatch(appSource,/PPG \\/ hobbyDB/);"
+          if old not in s:
+              raise SystemExit('Old hobbyDB assertion not found')
+          p.write_text(s.replace(old,new,1))
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit changes
+        run: |
+          rm .github/workflows/one-shot-pricecharting-first-restore-buttons.yml .github/workflows/one-shot-pricecharting-first-restore-buttons-v2.yml scripts/patch-pricecharting-first-and-restore-buttons.py
+          git config user.name 'alvarioto'
+          git config user.email 'aldipo7292@gmail.com'
+          git add src/lib/ai-core.mjs src/components/DirectAiSettings.tsx src/App.tsx src/styles.css tests/core.mjs .github/workflows/one-shot-pricecharting-first-restore-buttons.yml .github/workflows/one-shot-pricecharting-first-restore-buttons-v2.yml scripts/patch-pricecharting-first-and-restore-buttons.py
+          git commit -m 'Use PriceCharting first and restore original form buttons'
+          git push origin main
