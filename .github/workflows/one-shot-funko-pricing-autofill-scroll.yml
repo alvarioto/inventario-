@@ -1,0 +1,31 @@
+name: Apply Funko pricing autofill scroll
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-funko-pricing-autofill-scroll.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply patch
+        run: python scripts/patch-funko-pricing-autofill-scroll.py
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit changes
+        run: |
+          rm .github/workflows/one-shot-funko-pricing-autofill-scroll.yml scripts/patch-funko-pricing-autofill-scroll.py
+          git config user.name 'alvarioto'
+          git config user.email 'aldipo7292@gmail.com'
+          git add src/types.ts src/lib/ai-core.mjs src/App.tsx src/styles.css tests/core.mjs .github/workflows/one-shot-funko-pricing-autofill-scroll.yml scripts/patch-funko-pricing-autofill-scroll.py
+          git commit -m 'Improve Funko valuation autofill and mobile scrolling'
+          git push origin main
