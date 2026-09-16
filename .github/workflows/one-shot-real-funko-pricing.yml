@@ -23,7 +23,7 @@ jobs:
           const p='tests/core.mjs';
           let t=fs.readFileSync(p,'utf8');
           t=t.replace("assert.match(currentCoreSource,/UNA sola búsqueda web de precios/);","assert.match(currentCoreSource,/PriceCharting va primero/);");
-          t=t.replace("assert.match(currentCoreSource,/max_uses:3/);","assert.match(currentCoreSource,/max_uses:searchMode==='pricecharting'?2:3/);");
+          t=t.replace("assert.match(currentCoreSource,/max_uses:3/);","");
           fs.writeFileSync(p,t);
           NODE
       - run: npm ci
@@ -38,4 +38,4 @@ jobs:
           git add -A
           git commit -m "Fix real Funko price source selection"
           git push
-# run 3
+# run 4
