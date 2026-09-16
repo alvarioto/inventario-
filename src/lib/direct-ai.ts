@@ -95,7 +95,10 @@ const directFetch: typeof fetch = async (input, init) => {
 function config() {
   const key = getPersonalKey();
   if (!key) throw new Error('Activa tu clave de DeepSeek en Ajustes → IA directa.');
-  return { key, model: 'deepseek-flash', fetcher: directFetch, priceChartingToken: getPriceChartingToken() };
+  // En modo navegador no llamamos a la API privada de PriceCharting directamente.
+  // Safari/iOS puede bloquear esa petición cross-origin (CORS) y antes el fallo quedaba
+  // oculto. La tasación usa la búsqueda web de DeepSeek sobre la ficha pública exacta.
+  return { key, model: 'deepseek-flash', fetcher: directFetch, priceChartingToken: '' };
 }
 export const identifyDirect = (images: string[]) => identify(images, config());
 export const researchDirect = (item: Partial<InventoryDraft>) => research({confirmed: true, item}, config());
