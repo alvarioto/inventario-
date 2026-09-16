@@ -163,7 +163,7 @@ assert.match(appSource,/pendingPhotos\.slice\(0, room\)\.map\(\(file\) => upload
 assert.match(appSource,/disabled=\{busy \|\| photoPreparing \|\| !draft\.title\.trim\(\)\}/);
 assert.doesNotMatch(inventorySource,/getDocFromServer/);
 
-assert.match(appSource,/PPG \/ hobbyDB/);
+assert.doesNotMatch(appSource,/PPG \/ hobbyDB/);
 assert.match(appSource,/País \/ mercado de la edición/);
 assert.match(appSource,/Idioma de la edición/);
 assert.match(appSource,/setTab\('home'\)/);
@@ -176,5 +176,14 @@ assert.match(coreSource,/PriceCharting/);
 assert.match(coreSource,/funko-specialist/);
 assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 
+
+
+// Regresión: PriceCharting es prioritario y los botones del formulario conservan su estilo original.
+const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
+const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
+assert.match(currentCoreSource,/PRIMERA FUENTE: API oficial de PriceCharting/);
+assert.match(currentCoreSource,/sourceLooksBroken/);
+assert.doesNotMatch(currentCoreSource,/ppg:'https:\/\/www\.hobbydb\.com/);
+assert.doesNotMatch(currentStylesSource,/\.sheet-foot \.primary,.sheet-foot \.secondary,.sheet-foot \.danger\{min-height:54px/);
 
 console.log('core tests ok');

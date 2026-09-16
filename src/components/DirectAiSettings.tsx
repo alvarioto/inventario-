@@ -42,7 +42,7 @@ export function DirectAiSettings() {
       await syncPriceChartingToken();
       setPriceToken('');
       setPriceConfigured(true);
-      setPriceMessage('PriceCharting API configurada. La investigación de Funko usará su guía oficial cuando encuentre el producto exacto.');
+      setPriceMessage('PriceCharting API configurada. La investigación usará PriceCharting como primera guía cuando encuentre el producto exacto.');
     } catch (e) { setPriceMessage(e instanceof Error ? e.message : 'No se pudo guardar el token.'); }
     finally { setPriceBusy(false); }
   }
@@ -62,7 +62,7 @@ export function DirectAiSettings() {
 
     <section className="settings-integration pricecharting-settings">
       <h3>Guía de precios · PriceCharting <span className="provider-badge">Opcional</span></h3>
-      <p className="muted">Añade el token oficial de 40 caracteres de una suscripción PriceCharting con acceso API. Para Funko, FrikiVault consultará un solo producto por investigación y usará el valor correspondiente a su estado (con caja, sin caja o nuevo) como referencia especializada.</p>
+      <p className="muted">Añade el token oficial de 40 caracteres de una suscripción PriceCharting con acceso API. FrikiVault consulta PriceCharting antes que la búsqueda web en categorías compatibles (Funko, videojuegos, cartas, cómics y LEGO) y usa el valor correspondiente a su estado como referencia principal.</p>
       <label className="field"><span>Token PriceCharting</span><input type="password" autoComplete="off" spellCheck={false} value={priceToken} onChange={e => setPriceToken(e.target.value)} placeholder={priceConfigured ? 'Token guardado; escribe aquí para cambiarlo' : '40 caracteres'}/></label>
       <p className="muted">Se guarda en los ajustes privados de tu cuenta, igual que la clave de IA; no se incluye en GitHub ni en las exportaciones. No intenta saltarse CAPTCHA de hobbyDB.</p>
       <div className="button-stack">

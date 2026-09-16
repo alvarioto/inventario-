@@ -38,12 +38,6 @@ body{overscroll-behavior-x:none}
 
 
 /* valuation-pricecharting-save-ui-2026 */
-.sheet-foot .primary,.sheet-foot .secondary,.sheet-foot .danger{min-height:54px;padding:0 22px;border-radius:14px;font-size:15px;font-weight:800;letter-spacing:.01em}
-.sheet-foot .primary{min-width:164px;background:linear-gradient(135deg,#8978ff,#714ff0);box-shadow:0 12px 30px rgba(124,108,242,.34),inset 0 1px 0 rgba(255,255,255,.14)}
-.sheet-foot .primary:hover{transform:translateY(-1px);box-shadow:0 15px 34px rgba(124,108,242,.4)}
-.sheet-foot .secondary{background:#172238;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
-.sheet-foot .danger{padding-inline:20px}
-.result-modal .primary{min-height:52px;border-radius:14px;font-size:15px;font-weight:800}
 .valuation-highlight{margin:14px 0 18px;padding:20px;border-radius:17px;border:1px solid rgba(80,215,242,.25);background:linear-gradient(135deg,rgba(80,215,242,.10),rgba(124,108,242,.12));box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .valuation-highlight.empty{border-color:rgba(255,191,105,.22);background:rgba(255,191,105,.06)}
 .valuation-kicker{display:block;font-size:10px;font-weight:800;letter-spacing:.14em;color:var(--cyan);margin-bottom:7px}
@@ -63,4 +57,4 @@ body{overscroll-behavior-x:none}
 .settings-integration+.settings-integration{border-top:1px solid var(--border);padding-top:20px}
 .provider-badge{font-size:9px;text-transform:uppercase;letter-spacing:.08em;padding:4px 7px;border-radius:999px;background:rgba(80,215,242,.10);color:var(--cyan);vertical-align:middle;margin-left:6px}
 .provider-doc-link{display:inline-block;margin-top:12px;color:var(--cyan);font-size:12px;text-decoration:none}
-@media(max-width:680px){.sheet-foot{gap:10px}.sheet-foot>div{display:flex;gap:9px}.sheet-foot .primary{min-width:146px;min-height:56px;font-size:16px}.sheet-foot .secondary,.sheet-foot .danger{min-height:52px}.valuation-highlight>strong{font-size:29px}.comparable-price{align-items:flex-start}.comparable-price>strong{font-size:13px}}
+@media(max-width:680px){.valuation-highlight>strong{font-size:29px}.comparable-price{align-items:flex-start}.comparable-price>strong{font-size:13px}}

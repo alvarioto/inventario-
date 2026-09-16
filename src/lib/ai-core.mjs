@@ -320,6 +320,15 @@ function uniqueSources(rows){
  return [...byUrl.values()];
 }
 
+function sourceLooksBroken(source){
+ const text=`${source?.title||''} ${source?.snippet||''}`.toLowerCase();
+ return /captcha|verify you are human|verification required|access denied|forbidden|error\s*(?:403|404|500|502|503)|\b403\b|\b404\b|page not found|not found|site can.t be reached|server error|temporarily unavailable/.test(text);
+}
+
+function keepUsableSources(rows){
+ return rows.filter(source=>source?.url&&!sourceLooksBroken(source));
+}
+
 function webSearchSources(response){
  const byUrl=new Map();
  const add=(entry={},context='')=>{
@@ -346,12 +355,12 @@ function webSearchSources(response){
    for(const citation of citations)add(citation,context);
   }
  }
- return [...byUrl.values()];
+ return keepUsableSources([...byUrl.values()]);
 }
 
 export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetcher=fetch,searchMode='general'}){
  if(!key)throw new Error('Falta configurar DEEPSEEK_API_KEY en el servidor.');
- const specialistInstruction=searchMode==='funko'?'\n\nMODO FUNKO: busca primero el producto EXACTO (personaje + número/ref + variante) en PriceCharting, StockX y, solo si está públicamente accesible sin verificación, hobbyDB/Pop Price Guide. Si hobbyDB muestra CAPTCHA o verificación humana, NO intentes resolverla ni automatizarla: abandona esa fuente y continúa con PriceCharting, StockX, eBay y otras fuentes públicas. En las guías identifica el valor y, si aparecen varias condiciones, distingue OOB/loose, con caja/CIB y nuevo. En StockX distingue Lowest Ask de cualquier venta histórica explícita. Después busca eBay vendidos/completados; solo llames venta cerrada a una página que indique de forma explícita que se vendió/completó. Evita páginas genéricas si existe una ficha individual. Si el precio está en USD, conserva USD; la aplicación lo convertirá a EUR con referencia ECB.': '';
+ const specialistInstruction=searchMode==='pricecharting'?'\n\nMODO PRICECHARTING: busca primero y de forma prioritaria una ficha INDIVIDUAL del producto exacto en pricecharting.com. Devuelve cualquier precio público visible (Loose/OOB, CIB/In Box, New) con su importe explícito y cita esa ficha. No uses hobbyDB ni páginas con CAPTCHA, acceso denegado o error. Si no hay una coincidencia exacta en PriceCharting, indícalo buscando otra ficha del mismo sitio antes de abandonar.':searchMode==='funko'?'\n\nMODO FUNKO: PriceCharting es la primera fuente especializada. Después contrasta con StockX, eBay vendidos/completados y tiendas públicas. No uses hobbyDB si requiere CAPTCHA o verificación humana. Distingue OOB/loose, con caja/CIB y nuevo. Solo llames venta cerrada a una página que lo indique explícitamente. Evita lotes, accesorios y variantes distintas. Si el precio está en USD, conserva USD; la aplicación lo convertirá a EUR con referencia ECB.': '';
  const response=await fetcher('https://api.deepseek.com/anthropic/v1/messages',{
   method:'POST',
   headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json'},
@@ -423,6 +432,7 @@ function conservativeFallbackComparables(item,listings,sources){
   const idHits=identifiers.filter(id=>hay.includes(id)).length;
   const tokenHits=tokens.filter(token=>hay.includes(token)).length;
   const ratio=tokens.length?tokenHits/tokens.length:0;
+  if(hostOf(listing.url).includes('pricecharting.com')&&(idHits>0||(tokenHits>=2&&ratio>=.34)))return true;
   // Un número/SKU exacto es una señal muy fuerte. Solo exigimos además una señal
   // nominal si existe, no que TODOS los identificadores aparezcan en el anuncio.
   if(idHits>0)return !tokens.length||tokenHits>=1||String(listing.sourceType)==='guide';
@@ -538,7 +548,33 @@ export async function research(input,config){
  const webQuery=`${identity} precio mercado PVP lanzamiento eBay Wallapop España`.trim();
  const sources=[],warnings=[],listings=[];
  const fetcher=config.fetcher||fetch;
+ const priceChartingSupported=isFunko||['game','card','comic','lego'].includes(item.type);
  let webSources=[];
+ let usdEurRate=null;
+ let priceChartingListings=[];
+
+ // PRIMERA FUENTE: API oficial de PriceCharting cuando hay token. Se consulta antes
+ // que cualquier búsqueda web y su coincidencia exacta siempre entra en el baremo.
+ if(config.priceChartingToken&&priceChartingSupported){
+  usdEurRate=await fetchUsdEurRate(fetcher);
+  try{
+   const pc=await fetchPriceChartingGuide(item,config.priceChartingToken,fetcher,usdEurRate);
+   webSources=keepUsableSources(uniqueSources([...webSources,...pc.sources]));
+   priceChartingListings=pc.listings;
+  }catch{
+   // Una API sin coincidencia o temporalmente no disponible no debe ensuciar la ficha:
+   // seguimos con la búsqueda pública y omitimos el error técnico como pidió el usuario.
+  }
+ }
+
+ // Sin token, intentamos primero localizar la ficha pública de PriceCharting mediante
+ // la búsqueda web. No sustituye a la API, pero mantiene PriceCharting como prioridad.
+ if(!config.priceChartingToken&&priceChartingSupported&&config.key){
+  try{
+   const pcPublic=normalizeSources(await deepseekWebSearch(`${identity} site:pricecharting.com price value loose cib new`,{...config,searchMode:'pricecharting'}),'pricecharting-public');
+   webSources=keepUsableSources(uniqueSources([...webSources,...pcPublic]));
+  }catch{}
+ }
 
  if(config.braveKey){
   try{
@@ -549,62 +585,46 @@ export async function research(input,config){
    url.searchParams.set('search_lang','es');
    const response=await fetcher(url,{headers:{'X-Subscription-Token':config.braveKey},signal:AbortSignal.timeout(20000)});
    if(!response.ok)throw new Error(`HTTP ${response.status}`);
-   webSources=normalizeSources((await response.json()).web?.results||[]);
+   webSources=keepUsableSources(uniqueSources([...webSources,...normalizeSources((await response.json()).web?.results||[])]));
   }catch{
    warnings.push('La búsqueda web auxiliar no está disponible; se intenta la búsqueda pública de DeepSeek.');
   }
  }
 
- if(!webSources.length&&config.key){
+ if(config.key){
   try{
-   webSources=normalizeSources(await deepseekWebSearch(webQuery,config),'web');
-  }catch(error){
-   warnings.push(error instanceof Error?`Búsqueda pública: ${error.message}`:'La búsqueda pública de Internet no está disponible en este momento.');
-  }
+   const general=normalizeSources(await deepseekWebSearch(webQuery,config),'web');
+   webSources=keepUsableSources(uniqueSources([...webSources,...general]));
+  }catch{}
  }
- if(!webSources.length&&!config.key&&!config.braveKey){
-  warnings.push('Búsqueda pública pendiente: falta DEEPSEEK_API_KEY en el servidor.');
+ if(!webSources.length&&!priceChartingListings.length&&!config.key&&!config.braveKey){
+  warnings.push('No hay ningún proveedor de investigación configurado.');
  }
 
- // Para Funko añadimos una pasada especializada. No sustituye a eBay/tiendas: aporta
- // referencias de PPG/hobbyDB, PriceCharting y StockX cuando exista una ficha exacta.
+ // Después de PriceCharting, para Funko contrastamos con otras fuentes. hobbyDB
+ // queda fuera del flujo automático si necesita CAPTCHA/verificación.
  if(isFunko&&config.key){
   try{
-   const specialistQuery=`${identity} Funko hobbyDB Pop Price Guide PPG PriceCharting StockX value price sold`.trim();
+   const specialistQuery=`${identity} Funko PriceCharting StockX eBay sold completed value price`.trim();
    const specialist=normalizeSources(await deepseekWebSearch(specialistQuery,{...config,searchMode:'funko'}),'funko-specialist');
-   webSources=uniqueSources([...webSources,...specialist]);
-  }catch(error){
-   warnings.push(error instanceof Error?`Fuentes Funko especializadas: ${error.message}`:'No se pudieron consultar las fuentes Funko especializadas.');
-  }
+   webSources=keepUsableSources(uniqueSources([...webSources,...specialist]));
+  }catch{}
  }
 
- let usdEurRate=null;
- if(config.priceChartingToken||webSources.some(source=>/\$|\bUSD\b/i.test(`${source.title} ${source.snippet}`))){
+ if(usdEurRate==null&&(config.priceChartingToken||webSources.some(source=>/\$|\bUSD\b/i.test(`${source.title} ${source.snippet}`)))){
   usdEurRate=await fetchUsdEurRate(fetcher);
-  if(!usdEurRate)warnings.push('Hay referencias en USD pero no se pudo obtener la referencia USD/EUR del ECB; esos importes se conservan, pero no entran en el baremo EUR.');
  }
  const exchangeRates={USD_EUR:usdEurRate};
 
- let priceChartingListings=[];
- if(config.priceChartingToken&&isFunko){
-  try{
-   const pc=await fetchPriceChartingGuide(item,config.priceChartingToken,fetcher,usdEurRate);
-   webSources=uniqueSources([...webSources,...pc.sources]);
-   priceChartingListings=pc.listings;
-  }catch(error){
-   warnings.push(error instanceof Error?`PriceCharting API: ${error.message}`:'No se pudo consultar PriceCharting API.');
-  }
- }
-
  // Si encontramos el artículo pero los resultados no exponen precios, hacemos una
  // segunda pasada mucho más específica antes de concluir que no hay precios útiles.
- let initialListings=[...parsePublicListings(webSources,exchangeRates),...priceChartingListings];
+ let initialListings=[...parsePublicListings(webSources.filter(source=>source.kind!=='pricecharting-api'),exchangeRates),...priceChartingListings];
  if(!initialListings.length&&webSources.length&&config.key){
   try{
    const priceQuery=`${identity} comprar precio EUR € tienda stock eBay Wallapop España`.trim();
    const extra=normalizeSources(await deepseekWebSearch(priceQuery,config),'web-price');
-   webSources=uniqueSources([...webSources,...extra]);
-   initialListings=[...parsePublicListings(webSources,exchangeRates),...priceChartingListings];
+   webSources=keepUsableSources(uniqueSources([...webSources,...extra]));
+   initialListings=[...parsePublicListings(webSources.filter(source=>source.kind!=='pricecharting-api'),exchangeRates),...priceChartingListings];
   }catch(error){
    warnings.push(error instanceof Error?`Búsqueda adicional de precios: ${error.message}`:'No se pudo completar la búsqueda adicional de precios.');
   }
@@ -634,7 +654,7 @@ export async function research(input,config){
  }
 
  if(!listings.length){
-  warnings.push(`Se localizaron ${webSources.length} páginas coincidentes, pero ninguna expuso un precio en EUR legible en el resultado público. Se mantienen las páginas encontradas para revisión manual.`);
+  warnings.push('No se encontró todavía un precio utilizable para el artículo exacto; las páginas bloqueadas, con CAPTCHA o error se han omitido.');
  }
 
  let summary='No hay fuentes consultadas para investigar este artículo.';
@@ -695,9 +715,10 @@ export async function research(input,config){
    ebay:'https://www.ebay.es/sch/i.html?_nkw='+encodeURIComponent(identity),
    sold:'https://www.ebay.es/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw='+encodeURIComponent(identity),
    web:'https://www.google.com/search?q='+encodeURIComponent(identity+' precio'),
+   ...(priceChartingSupported?{
+    priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity)
+   }:{}),
    ...(isFunko?{
-    ppg:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items?filters%5Bq%5D%5B0%5D='+encodeURIComponent(identity)+'&subvariants=true',
-    priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity),
     stockx:'https://stockx.com/search?s='+encodeURIComponent(identity)
    }:{})
   }
