@@ -1,0 +1,29 @@
+name: Clean pricing source prompt
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Run pricing source prompt cleanup'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: node scripts/fix-pricing-source-prompt.mjs
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit validated cleanup
+        run: |
+          rm scripts/fix-pricing-source-prompt.mjs
+          rm .github/workflows/one-shot-pricing-source-prompt.yml
+          git config user.name alvarioto
+          git config user.email aldipo7292@gmail.com
+          git add -A
+          git commit -m "Restrict Funko pricing sources"
+          git push
