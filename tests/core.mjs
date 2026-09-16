@@ -138,6 +138,9 @@ assert.match(fallbackResearch.summary,/Valoración calculada localmente|única i
 // Regresión: las fotos se convierten a datos persistentes antes de pulsar Guardar.
 const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta.url),'utf8');
+const aiCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
+assert.doesNotMatch(aiCoreSource,/eBay vendidos\/completados y tiendas públicas/);
+assert.match(aiCoreSource,/contrasta únicamente con StockX y eBay vendidos\/completados/);
 assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/Escanear código/);
 assert.match(appSource,/Mejorar con IA/);
