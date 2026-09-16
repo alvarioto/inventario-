@@ -378,13 +378,13 @@ export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetche
    tools:[{
     type:'web_search_20250305',
     name:'web_search',
-    max_uses:5,
+    max_uses:3,
     user_location:{type:'approximate',country:'ES',timezone:'Europe/Madrid'}
    }],
    tool_choice:{type:'auto'},
    stream:false
   }),
-  signal:AbortSignal.timeout(50000)
+  signal:AbortSignal.timeout(28000)
  });
  if(!response.ok){
   const body=await response.text().catch(()=> '');
@@ -550,20 +550,24 @@ function conservativeFallbackComparables(item,listings,sources){
  });
 }
 
-export async function deepseek(messages,{key,model='deepseek-flash',fetcher=fetch,maxTokens=1800,timeoutMs=55000,retries=0}){
+export async function deepseek(messages,{key,model='deepseek-flash',fetcher=fetch,maxTokens=1800,timeoutMs=55000,retries=0,jsonMode=true}){
  if(!key)throw new Error('Falta configurar DEEPSEEK_API_KEY en el servidor.');
  let lastError=null;
  for(let attempt=0;attempt<=retries;attempt++){
   try{
+   const body={model,messages,max_tokens:maxTokens,stream:false,thinking:{type:'disabled'},reasoning_effort:'none'};
+   if(jsonMode)body.response_format={type:'json_object'};
    const response=await fetcher('https://api.deepseek.com/chat/completions',{
     method:'POST',
     headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
-    body:JSON.stringify({model,messages,response_format:{type:'json_object'},max_tokens:maxTokens,stream:false,thinking:{type:'disabled'},reasoning_effort:'none'}),
+    body:JSON.stringify(body),
     signal:AbortSignal.timeout(timeoutMs)
    });
    if(!response.ok){
     const providerMessages={401:'DeepSeek ha rechazado la clave API.',402:'DeepSeek no tiene saldo disponible.',429:'DeepSeek ha limitado las peticiones. Prueba más tarde.'};
-    const error=new Error(providerMessages[response.status]||`DeepSeek devolvió HTTP ${response.status}.`);
+    const detail=await response.text().catch(()=> '');
+    const base=providerMessages[response.status]||`DeepSeek devolvió HTTP ${response.status}.`;
+    const error=new Error(detail?`${base} ${detail.slice(0,220)}`:base);
     if(response.status<500&&response.status!==429)throw error;
     lastError=error;
    }else{
@@ -611,14 +615,30 @@ function bestIdentification(analyses,reason=''){
 export async function identify(input,config){
  const images=(Array.isArray(input)?input:[input]).filter(x=>typeof x==='string'&&x.startsWith('data:image/')).slice(0,5);
  if(!images.length)throw new Error('Añade al menos una foto válida del artículo.');
- const content=[
-  {type:'text',text:`Identifica UN único artículo de colección usando ${images.length} foto(s). La FOTO 1 es la vista PRINCIPAL y manda para el nombre comercial. Las fotos 2-${images.length} son solo evidencia complementaria para trasera, códigos, caja, edición y detalles. Nunca sustituyas un nombre comercial visible/identificable en la foto principal por una descripción de una foto trasera como “caja”, “dorso”, “barcode”, “código de barras” o “Item No.”. En Funko, Item No./Item Number pertenece a sku; el número Pop # solo se usa si está respaldado. Devuelve la ficha exacta y no inventes datos.`},
-  ...images.map((url,index)=>({type:'image_url',image_url:{url},detail:index===0?'high':'auto'}))
+ const system=`Devuelve SOLO un objeto JSON con title,type,franchise,character,manufacturer,line,edition,issueNumber,volume,setName,cardNumber,rarity,platform,year,barcode,isbn,sku,country,language,condition,hasBox,sealed,signed,graded,gradingCompany,grade,confidence,explanation,tags. type: ${itemTypes.join(',')}. title debe ser el nombre comercial/canónico real, jamás una descripción de la fotografía. Datos desconocidos: cadena vacía; booleanos desconocidos: null; year null. confidence 0..1. No inventes precios ni datos personales.`;
+ const makeContent=(rows)=>[
+  {type:'text',text:`Identifica UN único artículo de colección usando ${rows.length} foto(s). La FOTO 1 es la vista PRINCIPAL y manda para el nombre comercial. Las demás son evidencia complementaria para trasera, códigos, caja, edición y detalles. Nunca sustituyas un nombre comercial por “caja”, “dorso”, “barcode”, “código de barras” o “Item No.”. En Funko, Item No./Item Number pertenece a sku. Devuelve únicamente JSON.`},
+  ...rows.map((url,index)=>({type:'image_url',image_url:{url},detail:index===0?'high':'low'}))
  ];
- const result=await deepseek([
-  {role:'system',content:`Devuelve SOLO JSON con title,type,franchise,character,manufacturer,line,edition,issueNumber,volume,setName,cardNumber,rarity,platform,year,barcode,isbn,sku,country,language,condition,hasBox,sealed,signed,graded,gradingCompany,grade,confidence,explanation,tags. type: ${itemTypes.join(',')}. title debe ser el nombre comercial/canónico real, jamás una descripción de la fotografía. Datos desconocidos: cadena vacía; booleanos desconocidos: null; year null. confidence 0..1. No inventes precios ni datos personales.`},
-  {role:'user',content}
- ],{...config,maxTokens:1200,timeoutMs:35000,retries:1});
+ const call=rows=>deepseek([
+  {role:'system',content:system},
+  {role:'user',content:makeContent(rows)}
+ ],{...config,maxTokens:1200,timeoutMs:30000,retries:1,jsonMode:false});
+ let result;
+ try{
+  result=await call(images);
+ }catch(primaryError){
+  if(images.length===1)throw primaryError;
+  try{
+   result=await deepseek([
+    {role:'system',content:system},
+    {role:'user',content:makeContent([images[0]])}
+   ],{...config,maxTokens:1200,timeoutMs:25000,retries:0,jsonMode:false});
+   if(result&&typeof result==='object')result.explanation=`${result.explanation||''} Identificación recuperada usando la foto principal porque el análisis conjunto falló.`.trim();
+  }catch{
+   throw primaryError;
+  }
+ }
  return finalizeIdentification(result,[result]);
 }
 
