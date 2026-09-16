@@ -62,8 +62,6 @@ new_identify = r'''export async function identify(input,config){
   result=await call(images);
  }catch(primaryError){
   if(images.length===1)throw primaryError;
-  // Si la petición conjunta falla, no tumbamos el botón: una única recuperación
-  // con la foto principal permite abrir la ficha y continuar trabajando.
   try{
    result=await deepseek([
     {role:'system',content:system},
@@ -82,9 +80,9 @@ s, n = re.subn(r"export async function identify\(input,config\)\{[\s\S]*?\n}\n\n
 if n != 1:
     raise SystemExit('identify function not found')
 
-# La búsqueda de precio es secundaria: si falla o tarda, el artículo debe abrirse igual.
 s = s.replace("max_uses:5,", "max_uses:3,")
 s = s.replace("signal:AbortSignal.timeout(50000)", "signal:AbortSignal.timeout(28000)")
 
 core.write_text(s)
 print('AI button hotfix applied')
+# trigger
