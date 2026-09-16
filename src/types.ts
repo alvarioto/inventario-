@@ -137,7 +137,7 @@ export const CONDITION_LABELS: Record<ItemCondition, string> = {
 export interface ResearchSource {id:string;kind:string;title:string;url:string;snippet:string}
 export interface MarketListing {id:string;title:string;url:string;price:number;currency:string;shipping:number|null;condition:string;sourceType?:'sold'|'guide'|'market'|'shop';originalPrice?:number;originalCurrency?:string}
 export interface ResearchResult {
- checkedAt:string;summary:string;facts:Array<{label:string;value:string;sourceId:string}>;
+ checkedAt:string;searchIdentity?:string;resolvedIdentity?:{title:string;manufacturer?:string;line?:string;character?:string;franchise?:string;sku?:string;barcode?:string};summary:string;facts:Array<{label:string;value:string;sourceId:string}>;
  sources:ResearchSource[];listings:MarketListing[];comparables:MarketListing[];
  asking:{kind:string;currency:string;count:number;min:number|null;max:number|null;median:number|null;label:string};
  sold:{available:boolean;reason:string;count?:number;median?:number|null};warnings:string[];links:{ebay:string;sold:string;web:string;ppg?:string;priceCharting?:string;stockx?:string};

@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, fetchPriceChartingGuide, research, identify } from '../server/core.mjs';
+import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, fetchPriceChartingGuide, research, identify, isGenericProductTitle, buildResearchIdentity } from '../server/core.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
 assert.equal(identification.condition,null);
 assert.equal(identification.hasBox,null);
 assert.equal(safeUrl('javascript:alert(1)'),null);
+
+
+assert.equal(isGenericProductTitle('Funko caja – dorso con código de barras e Item No. 90310 Funko'),true);
+const cleanIdentity=buildResearchIdentity({title:'Funko caja – dorso con código de barras e Item No. 90310 Funko',type:'funko',manufacturer:'Funko',sku:'90310',barcode:'889698903105'});
+assert.doesNotMatch(cleanIdentity,/dorso|codigo de barras/i);
+assert.match(cleanIdentity,/90310/);
+assert.match(cleanIdentity,/889698903105/);
 
 const market = summarizeListings([
   {price:10,currency:'EUR',shipping:2},
@@ -98,7 +105,7 @@ const multiImageFetch=async(_url,init)=>{
     activeVisual--;
     return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
   }
-  const result={...partials[0],confidence:0.99,explanation:'Las tres vistas coinciden en personaje, línea y número 1982'};
+  const result={...partials[0],title:'Funko caja – dorso con código de barras e Item No. 1982 Funko',confidence:0.99,explanation:'Las tres vistas coinciden en personaje, línea y número 1982'};
   return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
 };
 const mergedIdentification=await identify(['data:image/jpeg;base64,AAAA','data:image/jpeg;base64,BBBB','data:image/jpeg;base64,CCCC'],{key:'test',fetcher:multiImageFetch});
@@ -187,3 +194,4 @@ assert.doesNotMatch(currentCoreSource,/ppg:'https:\/\/www\.hobbydb\.com/);
 assert.doesNotMatch(currentStylesSource,/\.sheet-foot \.primary,.sheet-foot \.secondary,.sheet-foot \.danger\{min-height:54px/);
 
 console.log('core tests ok');
+assert.match(readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8'),/Buscando precios para:/);

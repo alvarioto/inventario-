@@ -690,6 +690,18 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
     try {
       const result = await investigate({ ...draft, identificationConfirmed: true });
       setResearch(result);
+      if (result.resolvedIdentity?.title) {
+        setDraft((current) => ({
+          ...current,
+          title: result.resolvedIdentity?.title || current.title,
+          manufacturer: current.manufacturer || result.resolvedIdentity?.manufacturer || '',
+          line: current.line || result.resolvedIdentity?.line || '',
+          character: current.character || result.resolvedIdentity?.character || '',
+          franchise: current.franchise || result.resolvedIdentity?.franchise || '',
+          sku: current.sku || result.resolvedIdentity?.sku || '',
+          barcode: current.barcode || result.resolvedIdentity?.barcode || ''
+        }));
+      }
       if (result.asking.median != null && draft.currentValue == null) {
         set('currentValue', Number(result.asking.median.toFixed(2)));
       }
@@ -762,6 +774,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
             {!draft.identificationConfirmed && <p className="hint">Confirma los datos del escáner o marca la identificación como correcta para activar la consulta.</p>}
             {researchError && <div className="error-box">{researchError}</div>}
             {research && <div className="research-result">
+              {research.searchIdentity && <p className="muted"><b>Buscando precios para:</b> {research.searchIdentity}</p>}
+              {research.resolvedIdentity?.title && <p className="muted"><b>Producto resuelto:</b> {research.resolvedIdentity.title}</p>}
               {research.asking.median != null ? <div className="valuation-highlight">
                 <span className="valuation-kicker">VALOR ESTIMADO ACTUAL</span>
                 <strong>{money(research.asking.median, research.asking.currency || 'EUR')}</strong>
