@@ -1,0 +1,76 @@
+name: Normalize AI condition
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: github.event.head_commit.message == 'Apply AI condition normalization hotfix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Normalize AI condition before validation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/lib/ai-core.mjs')
+          s=p.read_text()
+          anchor="const text=z.string().max(500).default('');\n"
+          helper="""const text=z.string().max(500).default('');
+const conditionValues=['new','like-new','very-good','good','fair','poor'];
+function normalizeCondition(value){
+ if(value==null)return null;
+ const raw=String(value).trim().toLowerCase().replace(/[_\\s]+/g,'-');
+ if(!raw||['unknown','n-a','na','null','none','unspecified','desconocido'].includes(raw))return null;
+ const aliases={
+  'brand-new':'new','mint':'new','sealed':'new','nuevo':'new',
+  'like-new':'like-new','near-mint':'like-new','como-nuevo':'like-new',
+  'very-good':'very-good','verygood':'very-good','excellent':'very-good','muy-bueno':'very-good',
+  'good':'good','used':'good','pre-owned':'good','bueno':'good',
+  'fair':'fair','acceptable':'fair','regular':'fair',
+  'poor':'poor','damaged':'poor','malo':'poor'
+ };
+ return aliases[raw]||conditionValues.includes(raw)&&raw||null;
+}
+"""
+          if anchor not in s:
+              raise SystemExit('text anchor not found')
+          s=s.replace(anchor,helper,1)
+          old="condition:z.enum(['new','like-new','very-good','good','fair','poor']).nullable().default(null),"
+          new="condition:z.preprocess(normalizeCondition,z.enum(conditionValues).nullable()).default(null),"
+          if old not in s:
+              raise SystemExit('condition schema not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          t=Path('tests/core.mjs')
+          ts=t.read_text()
+          marker="assert.equal(identification.hasBox,null);\n"
+          addition="""assert.equal(identification.hasBox,null);
+assert.equal(identificationSchema.parse({title:'Test mint',type:'funko',condition:'mint',confidence:.9,explanation:'x'}).condition,'new');
+assert.equal(identificationSchema.parse({title:'Test used',type:'funko',condition:'used',confidence:.9,explanation:'x'}).condition,'good');
+assert.equal(identificationSchema.parse({title:'Test unknown',type:'funko',condition:'unknown',confidence:.9,explanation:'x'}).condition,null);
+"""
+          if marker not in ts:
+              raise SystemExit('test marker not found')
+          ts=ts.replace(marker,addition,1)
+          t.write_text(ts)
+          PY
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit validated fix
+        shell: bash
+        run: |
+          rm .github/workflows/one-shot-normalize-ai-condition.yml
+          git config user.name alvarioto
+          git config user.email aldipo7292@gmail.com
+          git add -A
+          git commit -m "Normalize AI condition values"
+          git push
