@@ -86,19 +86,20 @@ if (auth && db) {
 const directFetch: typeof fetch = async (input, init) => {
   try { return await fetch(input, init); }
   catch (error) {
+    const target = String(input);
+    const isPriceCharting = target.includes('pricecharting.com');
     if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
-      throw new Error('DeepSeek ha tardado demasiado. Vuelve a intentarlo.');
+      throw new Error(isPriceCharting ? 'PriceCharting ha tardado demasiado. Vuelve a intentarlo.' : 'DeepSeek ha tardado demasiado. Vuelve a intentarlo.');
     }
-    throw new Error('No se pudo conectar directamente con DeepSeek. Comprueba la conexión; si persiste, el proveedor puede estar bloqueando las peticiones del navegador.');
+    throw new Error(isPriceCharting ? 'No se pudo conectar con PriceCharting.' : 'No se pudo conectar directamente con DeepSeek. Comprueba la conexión; si persiste, el proveedor puede estar bloqueando las peticiones del navegador.');
   }
 };
 function config() {
   const key = getPersonalKey();
   if (!key) throw new Error('Activa tu clave de DeepSeek en Ajustes → IA directa.');
-  // En modo navegador no llamamos a la API privada de PriceCharting directamente.
-  // Safari/iOS puede bloquear esa petición cross-origin (CORS) y antes el fallo quedaba
-  // oculto. La tasación usa la búsqueda web de DeepSeek sobre la ficha pública exacta.
-  return { key, model: 'deepseek-flash', fetcher: directFetch, priceChartingToken: '' };
+  // PriceCharting documenta CORS para peticiones desde navegador, así que usamos
+  // el token privado que ya guarda FrikiVault en este dispositivo/cuenta.
+  return { key, model: 'deepseek-flash', fetcher: directFetch, priceChartingToken: getPriceChartingToken() };
 }
 export const identifyDirect = (images: string[]) => identify(images, config());
 export const researchDirect = (item: Partial<InventoryDraft>) => research({confirmed: true, item}, config());
