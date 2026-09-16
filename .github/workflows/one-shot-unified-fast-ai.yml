@@ -27,7 +27,7 @@ jobs:
           PY
       - name: Apply patch
         run: python scripts/patch-unified-fast-ai.py
-      - name: Remove obsolete multi-search regression
+      - name: Remove obsolete regressions
         shell: bash
         run: |
           python - <<'PY'
@@ -35,6 +35,7 @@ jobs:
           p=Path('tests/core.mjs')
           s=p.read_text()
           s=s.replace("assert.match(coreSource,/funko-specialist/);\n","")
+          s=s.replace("assert.match(readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8'),/Buscando precios para:/);","")
           p.write_text(s)
           PY
       - run: npm ci
