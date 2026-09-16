@@ -1,0 +1,30 @@
+name: Apply real Funko pricing fix
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Run real Funko pricing fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply patch
+        run: node scripts/fix-real-funko-pricing.mjs
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit validated patch
+        run: |
+          rm scripts/fix-real-funko-pricing.mjs
+          rm .github/workflows/one-shot-real-funko-pricing.yml
+          git config user.name alvarioto
+          git config user.email aldipo7292@gmail.com
+          git add -A
+          git commit -m "Fix real Funko price source selection"
+          git push
