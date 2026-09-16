@@ -1,0 +1,32 @@
+name: Apply exact Funko name number fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/force-funko-number-search.mjs
+      - .github/workflows/one-shot-force-funko-number.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply exact search patch
+        run: node scripts/force-funko-number-search.mjs
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit validated patch
+        run: |
+          rm scripts/force-funko-number-search.mjs
+          rm .github/workflows/one-shot-force-funko-number.yml
+          git config user.name alvarioto
+          git config user.email aldipo7292@gmail.com
+          git add -A
+          git commit -m "Force Funko name and number pricing search"
+          git push
