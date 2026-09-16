@@ -17,7 +17,9 @@ jobs:
         with:
           node-version: 22
       - name: Apply patch
-        run: python scripts/patch-funko-pricing-autofill-scroll.py
+        run: |
+          sed -i 's/"  sold:{available/" sold:{available/' scripts/patch-funko-pricing-autofill-scroll.py
+          python scripts/patch-funko-pricing-autofill-scroll.py
       - run: npm ci
       - run: npm test
       - run: npm run build
