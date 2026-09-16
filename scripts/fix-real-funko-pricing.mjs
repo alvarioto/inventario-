@@ -17,7 +17,7 @@ const oldLimit=`function limitPricingSources(rows){
   if(counts[group]>=max)return false;
   counts[group]++;
   return true;
- });
+ }).slice(0,4);
 }`;
 
 const newLimit=`function pricingSourceScore(item,source){
@@ -57,7 +57,7 @@ function limitPricingSources(rows,item=null){
   if(counts[group]>=max)return false;
   counts[group]++;
   return true;
- });
+ }).slice(0,4);
 }`;
 core=once(core,oldLimit,newLimit,'prioridad de fuentes');
 
@@ -105,8 +105,6 @@ core=once(core,oldSearch,newSearch,'flujo PriceCharting primero');
 
 core=once(core," const sources=limitPricingSources(uniqueSources(webSources));"," const sources=limitPricingSources(uniqueSources(webSources),item);",'prioridad final de fuentes');
 
-// Menos búsquedas internas cuando ya estamos en modo PriceCharting: una búsqueda exacta y,
-// como máximo, una segunda comprobación dentro del mismo dominio.
 core=once(core,"    max_uses:3,","    max_uses:searchMode==='pricecharting'?2:3,",'max uses por modo');
 
 writeFileSync(corePath,core);
