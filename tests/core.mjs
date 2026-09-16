@@ -60,6 +60,25 @@ const publicListings=parsePublicListings(webSources);
 assert.equal(publicListings[0].price,24.99);
 assert.equal(publicListings[1].price,30);
 
+// PriceCharting realista: el resultado web puede traer URL/título sin precio y dejar
+// el importe únicamente en el texto final del modelo. Ese precio no puede perderse.
+let pcPrompt='';
+const pcTextOnlyFetch=async(_url,init)=>{
+ pcPrompt=String(JSON.parse(init.body).messages?.[0]?.content||'');
+ return new Response(JSON.stringify({content:[
+  {type:'web_search_tool_result',content:[{type:'web_search_result',title:'Eomer #1982 Prices | Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982'}]},
+  {type:'text',text:'PriceCharting · Eomer #1982 · Out of Box $11.05 · In Box $16.00 · New $18.75',citations:[]}
+ ]}),{status:200,headers:{'content-type':'application/json'}});
+};
+const pcTextOnlySources=await deepseekWebSearch('Eomer 1982',{key:'test',fetcher:pcTextOnlyFetch,searchMode:'pricecharting'});
+assert.equal(pcTextOnlySources.length,1);
+assert.match(pcTextOnlySources[0].description,/\$16\.00/);
+assert.match(pcPrompt,/Busca EXCLUSIVAMENTE en PriceCharting/);
+assert.match(pcPrompt,/Eomer 1982/);
+const pcTextOnlyListings=parsePublicListings(pcTextOnlySources.map(source=>({...source,snippet:source.description||''})),{USD_EUR:.9});
+assert.equal(pcTextOnlyListings.length,3);
+assert.equal(pcTextOnlyListings[1].price,14.4);
+
 // También aprovechamos precios públicos de tiendas que no son marketplaces conocidos.
 const shopListings=parsePublicListings([{id:'shop-1',kind:'web',title:'Funko Pop Éomer #1982 - 29,95 €',url:'https://tienda-ejemplo.es/product/eomer-1982',snippet:'En stock · precio 29,95 €'}]);
 assert.equal(shopListings.length,1);
@@ -154,7 +173,7 @@ const exactPcQueryResearch=await research({confirmed:true,item:{title:'Funko Pop
 assert.equal(exactPcQueryResearch.searchIdentity,'Éomer 1982');
 const exactPcPrompt=exactPcPrompts.find(x=>x.includes('MODO PRICECHARTING'))||'';
 assert.ok(exactPcPrompt,'No se ejecutó la llamada específica de PriceCharting');
-assert.match(exactPcPrompt,/^Busca precios actuales para: Eomer 1982\./);
+assert.match(exactPcPrompt,/^Busca EXCLUSIVAMENTE en PriceCharting el producto \"Eomer 1982\"\./);
 assert.match(exactPcPrompt,/NO puedes quitarlo ni buscar solo el nombre/);
 assert.match(exactPcPrompt,/q=Eomer%201982/);
 assert.equal(exactPcQueryResearch.asking.count,1);
