@@ -17,7 +17,8 @@ const cleanIdentity=buildResearchIdentity({title:'Funko caja – dorso con códi
 assert.doesNotMatch(cleanIdentity,/dorso|codigo de barras/i);
 assert.equal(cleanIdentity,'Funko 90310');
 assert.doesNotMatch(cleanIdentity,/889698903105/);
-assert.equal(buildResearchIdentity({title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',sku:'90310',barcode:'889698903105'}),'Éomer Funko Pop');
+assert.equal(buildResearchIdentity({title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',sku:'90310',barcode:'889698903105'}),'Éomer 1982');
+assert.equal(buildResearchIdentity({title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982 Chase',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',funkoVariant:'Chase'}),'Éomer 1982 Chase');
 
 const market = summarizeListings([
   {price:10,currency:'EUR',shipping:2},
@@ -108,6 +109,8 @@ assert.equal(unifiedIdentifyCalls,1);
 assert.equal(unifiedImages,3);
 assert.equal(mergedIdentification.title,'Funko Pop! Éomer #1982');
 assert.equal(mergedIdentification.sku,'90310');
+assert.equal(mergedIdentification.popNumber,'1982');
+assert.equal(mergedIdentification.funkoCategory,'Movies');
 
 const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});
 assert.equal(noSources.sources.length,0);
@@ -135,6 +138,19 @@ assert.match(fallbackResearch.summary,/Valoración calculada localmente|única i
 
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
 
+// Funko: la misma identidad corta debe mandar también en los filtros posteriores.
+const funkoPriceFetch=async(url)=>{
+  if(String(url).includes('/anthropic/v1/messages'))return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
+    {type:'web_search_result',title:'Éomer Funko Pop #1982 - 29,95 €',url:'https://www.ebay.es/itm/eomer1982',cited_text:'Éomer Funko Pop #1982 29,95 €'}
+  ]}]}),{status:200,headers:{'content-type':'application/json'}});
+  return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
+};
+const funkoResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',sku:'90310'}},{key:'test',fetcher:funkoPriceFetch});
+assert.equal(funkoResearch.searchIdentity,'Éomer 1982');
+assert.equal(funkoResearch.asking.count,1);
+assert.equal(funkoResearch.asking.median,29.95);
+
+
 // Regresión: las fotos se convierten a datos persistentes antes de pulsar Guardar.
 const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta.url),'utf8');
@@ -144,6 +160,9 @@ assert.match(aiCoreSource,/contrasta únicamente con StockX y eBay vendidos\/com
 assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/Escanear código/);
 assert.match(appSource,/Mejorar con IA/);
+assert.match(appSource,/Número Pop/);
+assert.match(appSource,/Categoría Funko/);
+assert.ok(appSource.includes('Variante / especial'));
 assert.match(appSource,/prepared\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/imageUrls: \[\.\.\.\(current\.imageUrls \|\| \[\]\), \.\.\.urls\]\.slice\(0, limit\)/);
 assert.doesNotMatch(appSource,/const \[photos, setPhotos\]/);
@@ -172,6 +191,8 @@ assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
 assert.match(currentCoreSource,/UNA sola búsqueda web de precios/);
+assert.match(currentCoreSource,/max_uses:3/);
+assert.match(currentCoreSource,/limitPricingSources/);
 assert.match(currentCoreSource,/thinking:\{type:'disabled'\}/);
 assert.match(currentCoreSource,/sourceLooksBroken/);
 assert.doesNotMatch(currentCoreSource,/ppg:'https:\/\/www\.hobbydb\.com/);

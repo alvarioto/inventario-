@@ -35,6 +35,9 @@ export interface InventoryItem {
   barcode?: string;
   isbn?: string;
   sku?: string;
+  popNumber?: string;
+  funkoCategory?: string;
+  funkoVariant?: string;
   condition?: ItemCondition;
   sealed?: boolean;
   hasBox?: boolean;
@@ -90,6 +93,9 @@ export interface AiIdentification {
   barcode: string;
   isbn: string;
   sku: string;
+  popNumber: string;
+  funkoCategory: string;
+  funkoVariant: string;
   country: string;
   language: string;
   condition: ItemCondition | null;
