@@ -1,0 +1,31 @@
+name: Apply valuation PriceCharting home UI
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-valuation-pricecharting-home-ui.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply patch
+        run: python scripts/patch-valuation-pricecharting-home-ui.py
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit changes
+        run: |
+          rm .github/workflows/one-shot-valuation-pricecharting-home-ui.yml scripts/patch-valuation-pricecharting-home-ui.py
+          git config user.name 'alvarioto'
+          git config user.email 'aldipo7292@gmail.com'
+          git add src/lib/ai-core.mjs src/lib/direct-ai.ts src/components/DirectAiSettings.tsx src/App.tsx src/styles.css server/index.mjs .env.server.example tests/core.mjs .github/workflows/one-shot-valuation-pricecharting-home-ui.yml scripts/patch-valuation-pricecharting-home-ui.py
+          git commit -m 'Improve valuation with PriceCharting and return home after save'
+          git push origin main
