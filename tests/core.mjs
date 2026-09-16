@@ -26,6 +26,18 @@ const fencedResult=await deepseek([{role:'user',content:'test fenced'}],{key:'te
 assert.equal(fencedResult.ok,true);
 assert.equal(fencedResult.value,'recuperado');
 
+
+// Una respuesta vacía de DeepSeek se reintenta una vez sin obligar al usuario a empezar de nuevo.
+let emptyRetryCalls=0;
+const emptyThenOkFetch=async()=>{
+ emptyRetryCalls++;
+ const content=emptyRetryCalls===1?'':JSON.stringify({ok:true,recovered:true});
+ return new Response(JSON.stringify({choices:[{message:{content}}]}),{status:200,headers:{'content-type':'application/json'}});
+};
+const recovered=await deepseek([{role:'user',content:'retry empty'}],{key:'test',fetcher:emptyThenOkFetch,retries:1,timeoutMs:1000});
+assert.equal(recovered.recovered,true);
+assert.equal(emptyRetryCalls,2);
+
 const webFetch=async()=>new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
   {type:'web_search_result',title:'Figura Batman 24,99 €',url:'https://www.ebay.es/itm/123',cited_text:'Figura Batman 24,99 €'},
   {type:'web_search_result',title:'Figura Batman 30 €',url:'https://es.wallapop.com/item/batman-123',cited_text:'Figura Batman 30 €'}
@@ -57,11 +69,18 @@ const partials=[
   {title:'Éomer',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'1982',confidence:0.90,explanation:'Trasera y colección visibles'},
   {title:'Funko Pop! Éomer #1982',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'1982',confidence:0.98,explanation:'Etiqueta inferior y código visibles'}
 ];
-let visualCall=0;
+let visualCall=0,activeVisual=0,maxConcurrentVisual=0;
 const multiImageFetch=async(_url,init)=>{
   const body=JSON.parse(init.body); identifyBodies.push(body);
   const hasImage=body.messages?.some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image_url'));
-  const result=hasImage ? partials[visualCall++] : {...partials[0],confidence:0.99,explanation:'Las tres vistas coinciden en personaje, línea y número 1982'};
+  if(hasImage){
+    const result=partials[visualCall++];
+    activeVisual++; maxConcurrentVisual=Math.max(maxConcurrentVisual,activeVisual);
+    await new Promise(resolve=>setTimeout(resolve,20));
+    activeVisual--;
+    return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
+  }
+  const result={...partials[0],confidence:0.99,explanation:'Las tres vistas coinciden en personaje, línea y número 1982'};
   return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
 };
 const mergedIdentification=await identify(['data:image/jpeg;base64,AAAA','data:image/jpeg;base64,BBBB','data:image/jpeg;base64,CCCC'],{key:'test',fetcher:multiImageFetch});
@@ -70,6 +89,22 @@ assert.equal(identifyBodies.slice(0,3).every(body=>body.messages[1].content.filt
 assert.equal(Array.isArray(identifyBodies[3].messages[1].content),false);
 assert.equal(mergedIdentification.title,'Funko Pop! Éomer #1982');
 assert.equal(mergedIdentification.sku,'1982');
+assert.ok(maxConcurrentVisual>1,'Las vistas deben analizarse en paralelo');
+
+
+let fallbackMergeVisual=0;
+const emptyMergeFetch=async(_url,init)=>{
+ const body=JSON.parse(init.body);
+ const hasImage=body.messages?.some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image_url'));
+ if(hasImage){
+  const result=partials[Math.min(fallbackMergeVisual++,partials.length-1)];
+  return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
+ }
+ return new Response(JSON.stringify({choices:[{message:{content:''}}]}),{status:200,headers:{'content-type':'application/json'}});
+};
+const mergeFallback=await identify(['data:image/jpeg;base64,AAAA','data:image/jpeg;base64,BBBB'],{key:'test',fetcher:emptyMergeFetch});
+assert.equal(mergeFallback.sku,'1982');
+assert.match(mergeFallback.explanation,/fusión automática/i);
 
 const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});
 assert.equal(noSources.sources.length,0);
