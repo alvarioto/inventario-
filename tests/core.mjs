@@ -266,5 +266,28 @@ assert.match(currentCoreSource,/sourceLooksBroken/);
 assert.doesNotMatch(currentCoreSource,/ppg:'https:\/\/www\.hobbydb\.com/);
 assert.doesNotMatch(currentStylesSource,/\.sheet-foot \.primary,.sheet-foot \.secondary,.sheet-foot \.danger\{min-height:54px/);
 
+// Un Funko debe terminar SIEMPRE con un valor visible aunque las fuentes públicas no devuelvan importe legible.
+let orientativeAiCalls=0;
+const noPriceFunkoFetch=async(url,init)=>{
+ if(String(url).includes('/anthropic/v1/messages'))return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[]}]}),{status:200,headers:{'content-type':'application/json'}});
+ if(String(url).includes('/chat/completions')){orientativeAiCalls++;return new Response(JSON.stringify({choices:[{message:{content:'{"median":17.5,"min":14,"max":21,"reason":"estimación conservadora"}'}}]}),{status:200,headers:{'content-type':'application/json'}});}
+ return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
+};
+const orientativeFunko=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',hasBox:true}},{key:'test',fetcher:noPriceFunkoFetch});
+assert.equal(orientativeAiCalls,1);
+assert.equal(orientativeFunko.asking.median,17.5);
+assert.match(orientativeFunko.summary,/Estimación orientativa/i);
+
+// Incluso si también falla la estimación IA, la ficha conserva un valor base orientativo.
+const totalFailureFetch=async(url)=>{
+ if(String(url).includes('/anthropic/v1/messages'))return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[]}]}),{status:200,headers:{'content-type':'application/json'}});
+ if(String(url).includes('/chat/completions'))return new Response('error',{status:500});
+ return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
+};
+const guaranteedFunko=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',hasBox:true}},{key:'test',fetcher:totalFailureFetch});
+assert.equal(guaranteedFunko.asking.median,15);
+assert.ok(guaranteedFunko.asking.median>0);
+assert.match(guaranteedFunko.summary,/Estimación orientativa/i);
+
 console.log('core tests ok');
 
