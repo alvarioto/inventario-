@@ -28,3 +28,4 @@ jobs:
           git add -A
           git commit -m "Fix Funko identity and pricing logic"
           git push
+# run
