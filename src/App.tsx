@@ -361,7 +361,7 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<AiIdentification | null>(null);
+  const [stage, setStage] = useState('');
   const [barcode, setBarcode] = useState('');
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -377,7 +377,6 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
       return;
     }
     setPhotoBusy(true);
-    setResult(null);
     try {
       const prepared = await Promise.all(selected.map((file) => prepareImage(file)));
       const previewRows = await Promise.all(prepared.map(fileToDataUrl));
@@ -399,7 +398,6 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
     const remaining = files.filter((_, i) => i !== index);
     setFiles(remaining);
     setPreviews((current) => current.filter((_, i) => i !== index));
-    setResult(null);
     setBarcode('');
     for (const photo of remaining) {
       const code = await tryReadBarcode(photo);
@@ -420,15 +418,80 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
-    setResult(null);
   }
 
-  async function identify() {
-    if (!files.length) return;
+  function identificationSeed(result: AiIdentification): InventoryDraft {
+    return {
+      ...EMPTY_DRAFT,
+      title: result.title,
+      type: result.type,
+      status: 'collection',
+      currency: 'EUR',
+      condition: result.condition || 'like-new',
+      franchise: result.franchise,
+      character: result.character,
+      manufacturer: result.manufacturer,
+      line: result.line,
+      edition: result.edition,
+      issueNumber: result.issueNumber,
+      volume: result.volume,
+      setName: result.setName,
+      cardNumber: result.cardNumber,
+      rarity: result.rarity,
+      platform: result.platform,
+      year: result.year,
+      barcode: result.barcode || barcode,
+      isbn: result.isbn,
+      sku: result.sku,
+      country: result.country,
+      language: result.language,
+      hasBox: result.hasBox ?? false,
+      sealed: result.sealed ?? false,
+      signed: result.signed ?? false,
+      graded: result.graded ?? false,
+      gradingCompany: result.gradingCompany,
+      grade: result.grade,
+      tags: result.tags,
+      aiConfidence: result.confidence,
+      aiExplanation: result.explanation,
+      identificationConfirmed: true
+    };
+  }
+
+  async function analyzeAll() {
+    if (!files.length || busy) return;
     setBusy(true);
-    try { setResult(await identifyWithAi(files)); }
-    catch (e) { showToast(e instanceof Error ? e.message : 'No se pudo identificar'); }
-    finally { setBusy(false); }
+    setStage('Identificando el artículo…');
+    try {
+      const identified = await identifyWithAi(files);
+      let seed = identificationSeed(identified);
+      setStage('Buscando precio y referencias…');
+      try {
+        const research = await investigate(seed);
+        seed = {
+          ...seed,
+          ...(research.resolvedIdentity?.title ? {
+            title: research.resolvedIdentity.title,
+            manufacturer: seed.manufacturer || research.resolvedIdentity.manufacturer || '',
+            line: seed.line || research.resolvedIdentity.line || '',
+            character: seed.character || research.resolvedIdentity.character || '',
+            franchise: seed.franchise || research.resolvedIdentity.franchise || '',
+            sku: seed.sku || research.resolvedIdentity.sku || '',
+            barcode: seed.barcode || research.resolvedIdentity.barcode || ''
+          } : {}),
+          research,
+          currentValue: research.asking.median != null ? Number(research.asking.median.toFixed(2)) : null
+        };
+      } catch (error) {
+        showToast(error instanceof Error ? `Identificado, pero sin tasación: ${error.message}` : 'Identificado, pero no se pudo obtener la tasación.');
+      }
+      onCreate(seed, files);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se pudo analizar el artículo.');
+    } finally {
+      setStage('');
+      setBusy(false);
+    }
   }
 
   async function useBarcode() {
@@ -441,44 +504,9 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
     } finally { setBusy(false); }
   }
 
-  const useResult = () => result && onCreate({
-    title: result.title,
-    type: result.type,
-    status: 'collection',
-    currency: 'EUR',
-    condition: result.condition || 'like-new',
-    franchise: result.franchise,
-    character: result.character,
-    manufacturer: result.manufacturer,
-    line: result.line,
-    edition: result.edition,
-    issueNumber: result.issueNumber,
-    volume: result.volume,
-    setName: result.setName,
-    cardNumber: result.cardNumber,
-    rarity: result.rarity,
-    platform: result.platform,
-    year: result.year,
-    barcode: result.barcode || barcode,
-    isbn: result.isbn,
-    sku: result.sku,
-    country: result.country,
-    language: result.language,
-    hasBox: result.hasBox ?? false,
-    sealed: result.sealed ?? false,
-    signed: result.signed ?? false,
-    graded: result.graded ?? false,
-    gradingCompany: result.gradingCompany,
-    grade: result.grade,
-    tags: result.tags,
-    aiConfidence: result.confidence,
-    aiExplanation: result.explanation,
-    identificationConfirmed: true
-  }, files);
-
   return (
     <section className="scan-page">
-      <div className="page-heading"><div><span className="eyebrow">CAPTURA INTELIGENTE</span><h1>Escanear objeto</h1><p>Haz varias fotos del mismo artículo. La IA analizará todas juntas para identificarlo con más precisión.</p></div></div>
+      <div className="page-heading"><div><span className="eyebrow">CAPTURA INTELIGENTE</span><h1>Escanear objeto</h1><p>Una sola acción identifica la pieza, busca referencias y calcula su valor estimado antes de abrir la ficha.</p></div></div>
       <div className="scan-layout">
         <div className="camera-card">
           <input ref={cameraInputRef} hidden type="file" accept="image/*" capture="environment" onChange={(e) => addPicked(e.target.files ? [...e.target.files] : [])} />
@@ -487,25 +515,17 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
             <img className="scan-preview" src={previews[0]} alt="Vista principal del objeto"/>
             <div className="scan-photo-strip">
               {previews.map((preview, index) => <div className={`scan-photo-thumb ${index === 0 ? 'primary-photo' : ''}`} key={`${preview.slice(0, 30)}-${index}`}>
-                <img src={preview} alt={`Foto ${index + 1}`}/>
-                <span>{index === 0 ? 'Principal' : `Foto ${index + 1}`}</span>
-                <div className="scan-photo-controls">
-                  <button type="button" title="Mover a la izquierda" disabled={index === 0} onClick={() => movePhoto(index, -1)}>←</button>
-                  <button type="button" title="Mover a la derecha" disabled={index === previews.length - 1} onClick={() => movePhoto(index, 1)}>→</button>
-                  <button type="button" title="Eliminar foto" onClick={() => removePhoto(index)}><X size={14}/></button>
-                </div>
+                <img src={preview} alt={`Foto ${index + 1}`}/><span>{index === 0 ? 'Principal' : `Foto ${index + 1}`}</span>
+                <div className="scan-photo-controls"><button type="button" title="Mover a la izquierda" disabled={index === 0 || busy} onClick={() => movePhoto(index, -1)}>←</button><button type="button" title="Mover a la derecha" disabled={index === previews.length - 1 || busy} onClick={() => movePhoto(index, 1)}>→</button><button type="button" title="Eliminar foto" disabled={busy} onClick={() => removePhoto(index)}><X size={14}/></button></div>
               </div>)}
-              {files.length < photoLimit && <button type="button" className="scan-add-photo" onClick={() => cameraInputRef.current?.click()}><Camera/><span>Otra foto</span></button>}
+              {files.length < photoLimit && <button type="button" className="scan-add-photo" disabled={busy} onClick={() => cameraInputRef.current?.click()}><Camera/><span>Otra foto</span></button>}
             </div>
-            <p className="scan-photo-help"><b>{files.length}/{photoLimit} fotos.</b> Haz frontal, trasera, caja, etiqueta o código de barras. Todas se envían juntas a la IA.</p>
-          </> : <div className="camera-placeholder"><div className="scan-frame"><ScanLine/></div><h2>Fotografía el artículo desde varios ángulos</h2><p>Empieza por el frontal y añade después caja, parte trasera, etiquetas, texto o código de barras.</p></div>}
-          <div className="camera-actions"><button className="secondary" onClick={() => cameraInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy}><Camera size={19}/>{files.length ? 'Hacer otra foto' : 'Abrir cámara'}</button><button className="secondary" onClick={() => uploadInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy}><Upload size={19}/>{photoBusy ? 'Preparando…' : 'Subir fotos'}</button><button className="ai-button" onClick={identify} disabled={!files.length || busy || photoBusy}><WandSparkles size={19}/>{busy ? 'Analizando…' : `Identificar con IA${files.length > 1 ? ` · ${files.length} fotos` : ''}`}</button></div>
+            <p className="scan-photo-help"><b>{files.length}/{photoLimit} fotos.</b> La primera es la referencia principal; las demás solo aportan códigos, trasera, caja y detalles.</p>
+          </> : <div className="camera-placeholder"><div className="scan-frame"><ScanLine/></div><h2>Fotografía el artículo</h2><p>Empieza por el frontal. Si añades más fotos, úsalas para la trasera, etiquetas o código de barras.</p></div>}
+          <div className="camera-actions"><button className="secondary" onClick={() => cameraInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy || busy}><Camera size={19}/>{files.length ? 'Hacer otra foto' : 'Abrir cámara'}</button><button className="secondary" onClick={() => uploadInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy || busy}><Upload size={19}/>{photoBusy ? 'Preparando…' : 'Subir fotos'}</button><button className="ai-button" onClick={analyzeAll} disabled={!files.length || busy || photoBusy}><WandSparkles size={19}/>{busy ? (stage || 'Analizando…') : `Analizar artículo${files.length > 1 ? ` · ${files.length} fotos` : ''}`}</button></div>
         </div>
         <div className="scan-side">
-          <div className="panel scan-result">
-            <div className="panel-head"><h2><Sparkles size={19}/> Resultado IA</h2></div>
-            {result ? <div className="ai-result"><span className="confidence">{Math.round(result.confidence * 100)}% confianza · {files.length} {files.length === 1 ? 'foto analizada' : 'fotos analizadas'}</span><h3>{result.title}</h3><dl><div><dt>Tipo</dt><dd>{ITEM_TYPE_LABELS[result.type]}</dd></div><div><dt>Franquicia</dt><dd>{result.franchise || '—'}</dd></div><div><dt>Personaje</dt><dd>{result.character || '—'}</dd></div><div><dt>Fabricante</dt><dd>{result.manufacturer || '—'}</dd></div><div><dt>Línea / edición</dt><dd>{result.line || result.edition || '—'}</dd></div></dl><p>{result.explanation}</p><button className="primary wide" onClick={useResult}><Check size={18}/> Sí, es este artículo</button><small className="muted">Las fotos se conservarán juntas en la ficha.</small></div> : <div className="placeholder-copy"><Sparkles/><p>Añade varias vistas y pulsa Identificar. DeepSeek recibirá todas las fotos del mismo artículo en una única consulta.</p></div>}
-          </div>
+          <div className="panel scan-result"><div className="panel-head"><h2><Sparkles size={19}/> Análisis unificado</h2></div><div className="placeholder-copy"><Sparkles/><p>Al pulsar <b>Analizar artículo</b>, FrikiVault identifica el producto exacto, busca precios públicos comparables y abre directamente la ficha ya rellenada.</p>{busy && <p className="hint"><b>{stage}</b></p>}</div></div>
           <div className="panel barcode-box"><div className="panel-head"><h2><QrCode size={19}/> Código / ISBN</h2></div><p>FrikiVault intenta leer el código de cualquiera de las fotos. También puedes escribirlo.</p><div className="inline-field"><input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="EAN / UPC / ISBN"/><button onClick={useBarcode} disabled={busy || !barcode}>Buscar</button></div></div>
         </div>
       </div>
@@ -582,9 +602,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [photoError, setPhotoError] = useState('');
   const [saveErrorModal, setSaveErrorModal] = useState('');
   const initialPhotosHandled = useRef(false);
-  const [research, setResearch] = useState<ResearchResult | undefined>(item?.research);
-  const [researchBusy, setResearchBusy] = useState(false);
-  const [researchError, setResearchError] = useState('');
+  const [research] = useState<ResearchResult | undefined>(item?.research || seed?.research);
   const [qrDataUrl, setQrDataUrl] = useState('');
   useEffect(() => {
     if (!initialPhotos.length || initialPhotosHandled.current) return;
@@ -684,31 +702,6 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
     } finally { setBusy(false); }
   }
 
-  async function researchItem() {
-    if (!item?.id || !draft.title.trim()) return;
-    setResearchBusy(true); setResearchError('');
-    try {
-      const result = await investigate({ ...draft, identificationConfirmed: true });
-      setResearch(result);
-      if (result.resolvedIdentity?.title) {
-        setDraft((current) => ({
-          ...current,
-          title: result.resolvedIdentity?.title || current.title,
-          manufacturer: current.manufacturer || result.resolvedIdentity?.manufacturer || '',
-          line: current.line || result.resolvedIdentity?.line || '',
-          character: current.character || result.resolvedIdentity?.character || '',
-          franchise: current.franchise || result.resolvedIdentity?.franchise || '',
-          sku: current.sku || result.resolvedIdentity?.sku || '',
-          barcode: current.barcode || result.resolvedIdentity?.barcode || ''
-        }));
-      }
-      if (result.asking.median != null && draft.currentValue == null) {
-        set('currentValue', Number(result.asking.median.toFixed(2)));
-      }
-    } catch (error) {
-      setResearchError(error instanceof Error ? error.message : 'No se pudo investigar el artículo.');
-    } finally { setResearchBusy(false); }
-  }
 
   function downloadQr() {
     if (!qrDataUrl || !item?.id) return;
@@ -770,25 +763,18 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
           <Field label="Notas" wide><textarea rows={4} value={draft.notes || ''} onChange={(e)=>set('notes',e.target.value)} placeholder="Detalles, defectos, procedencia, firma…"/></Field>
 
           {item && <section className="research-panel">
-            <div className="research-head"><div><h3 className="form-section-title"><Sparkles/> Investigación inteligente</h3><p className="muted">Solo se consulta después de confirmar que esta es la pieza correcta.</p></div><button type="button" className="ai-button" onClick={researchItem} disabled={researchBusy || !draft.identificationConfirmed}>{researchBusy ? 'Investigando…' : research ? 'Actualizar investigación' : 'Confirmar e investigar'}</button></div>
-            {!draft.identificationConfirmed && <p className="hint">Confirma los datos del escáner o marca la identificación como correcta para activar la consulta.</p>}
-            {researchError && <div className="error-box">{researchError}</div>}
-            {research && <div className="research-result">
-              {research.searchIdentity && <p className="muted"><b>Buscando precios para:</b> {research.searchIdentity}</p>}
+            <div className="research-head"><div><h3 className="form-section-title"><Sparkles/> Análisis del artículo</h3><p className="muted">Identificación, referencias y valoración obtenidas en la misma captura inteligente.</p></div></div>
+            {research ? <div className="research-result">
+              {research.searchIdentity && <p className="muted"><b>Producto buscado:</b> {research.searchIdentity}</p>}
               {research.resolvedIdentity?.title && <p className="muted"><b>Producto resuelto:</b> {research.resolvedIdentity.title}</p>}
-              {research.asking.median != null ? <div className="valuation-highlight">
-                <span className="valuation-kicker">VALOR ESTIMADO ACTUAL</span>
-                <strong>{money(research.asking.median, research.asking.currency || 'EUR')}</strong>
-                <div className="valuation-range">Rango observado: {money(research.asking.min, research.asking.currency || 'EUR')} – {money(research.asking.max, research.asking.currency || 'EUR')}</div>
-                <small>{research.asking.label}</small>
-              </div> : <div className="valuation-highlight empty"><span className="valuation-kicker">VALOR ESTIMADO</span><strong>Sin precio automático todavía</strong><small>PriceCharting y las fuentes públicas no han devuelto aún una coincidencia valorable; las páginas rotas o ambiguas se omiten.</small></div>}
+              {research.asking.median != null ? <div className="valuation-highlight"><span className="valuation-kicker">VALOR ESTIMADO ACTUAL</span><strong>{money(research.asking.median, research.asking.currency || 'EUR')}</strong><div className="valuation-range">Rango observado: {money(research.asking.min, research.asking.currency || 'EUR')} – {money(research.asking.max, research.asking.currency || 'EUR')}</div><small>{research.asking.label}</small></div> : <div className="valuation-highlight empty"><span className="valuation-kicker">VALOR ESTIMADO</span><strong>Sin precio automático todavía</strong><small>No se encontró un precio suficientemente exacto para esta pieza.</small></div>}
               <p>{research.summary}</p>
-              <div className="market-summary"><div><span>Páginas coincidentes</span><b>{new Set(research.sources.map((source) => source.url)).size || '—'}</b></div><div><span>Precios detectados</span><b>{research.listings.length || '—'}</b></div><div><span>Comparables usados</span><b>{research.comparables.length || '—'}</b></div><div><span>Mediana</span><b>{research.asking.median == null ? '—' : money(research.asking.median)}</b></div><div><span>Fuentes especializadas</span><b>{research.sources.filter((source) => source.kind.includes('funko-specialist') || source.kind.includes('pricecharting-api')).length || '—'}</b></div><div><span>Ventas cerradas</span><b>{research.sold.available ? `${research.sold.count || 1}${research.sold.median != null ? ` · ${money(research.sold.median)}` : ''}` : 'No verificadas'}</b></div></div>
+              <div className="market-summary"><div><span>Páginas útiles</span><b>{new Set(research.sources.map((source) => source.url)).size || '—'}</b></div><div><span>Precios detectados</span><b>{research.listings.length || '—'}</b></div><div><span>Comparables usados</span><b>{research.comparables.length || '—'}</b></div><div><span>Mediana</span><b>{research.asking.median == null ? '—' : money(research.asking.median)}</b></div><div><span>Ventas cerradas</span><b>{research.sold.available ? `${research.sold.count || 1}${research.sold.median != null ? ` · ${money(research.sold.median)}` : ''}` : 'No verificadas'}</b></div></div>
               {research.comparables.length > 0 && <div className="comparable-prices"><h4>Precios usados para el baremo</h4>{research.comparables.slice(0,8).map((listing) => <a className="comparable-price" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.condition}</small></span><strong>{money(listing.price, listing.currency)}</strong></a>)}</div>}
               <div className="research-facts">{research.facts.slice(0, 8).map((fact) => <div key={`${fact.label}-${fact.sourceId}`}><b>{fact.label}</b><span>{fact.value}</span></div>)}</div>
-              <div className="source-list"><a href={research.links.ebay} target="_blank" rel="noreferrer">Buscar artículo en eBay</a><a href={research.links.sold} target="_blank" rel="noreferrer">Revisar ventas cerradas</a>{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.filter((source) => !source.url.includes('hobbydb.com') && (source.kind.includes('pricecharting') || research.listings.some((listing) => listing.url === source.url))).slice(0, 8).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.kind.includes('pricecharting-api') ? 'PriceCharting API' : source.kind.startsWith('ebay') ? 'eBay público' : 'Fuente con precio'} · {source.title}</a>)}</div>
+              <div className="source-list"><a href={research.links.ebay} target="_blank" rel="noreferrer">eBay</a><a href={research.links.sold} target="_blank" rel="noreferrer">eBay vendidos</a>{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.slice(0,6).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div>
               {research.warnings.map((warning) => <small className="warning-line" key={warning}>{warning}</small>)}
-            </div>}
+            </div> : <p className="muted">Este artículo no tiene análisis unificado porque no se creó desde el escáner inteligente.</p>}
           </section>}
 
           {item && <section className="qr-panel"><div><h3 className="form-section-title"><QrCode/> Etiqueta de la pieza</h3><p className="muted">Escanéala para abrir directamente esta ficha. La ubicación puede cambiar sin cambiar el código.</p><div className="qr-actions"><button type="button" className="secondary" onClick={downloadQr} disabled={!qrDataUrl}><Download size={17}/> Descargar QR</button><button type="button" className="secondary" onClick={printQr} disabled={!qrDataUrl}><Eye size={17}/> Imprimir etiqueta</button></div></div>{qrDataUrl ? <img className="qr-image" src={qrDataUrl} alt={`Código QR de ${item.title}`}/> : <div className="qr-placeholder"><QrCode/></div>}</section>}

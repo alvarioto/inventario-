@@ -87,49 +87,23 @@ assert.equal(pcResult.listings[0].currency,'EUR');
 assert.equal(pcResult.listings[0].sourceType,'guide');
 assert.doesNotMatch(pcResult.sources[0].url,/t=/);
 
-// Con varias fotos: una consulta visual por foto + una fusión textual final.
-const identifyBodies=[];
-const partials=[
-  {title:'Funko Pop! Éomer #1982',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'1982',confidence:0.96,explanation:'Frontal y número visibles'},
-  {title:'Éomer',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'1982',confidence:0.90,explanation:'Trasera y colección visibles'},
-  {title:'Funko Pop! Éomer #1982',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'1982',confidence:0.98,explanation:'Etiqueta inferior y código visibles'}
-];
-let visualCall=0,activeVisual=0,maxConcurrentVisual=0;
-const multiImageFetch=async(_url,init)=>{
-  const body=JSON.parse(init.body); identifyBodies.push(body);
-  const hasImage=body.messages?.some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image_url'));
-  if(hasImage){
-    const result=partials[visualCall++];
-    activeVisual++; maxConcurrentVisual=Math.max(maxConcurrentVisual,activeVisual);
-    await new Promise(resolve=>setTimeout(resolve,20));
-    activeVisual--;
-    return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
-  }
-  const result={...partials[0],title:'Funko caja – dorso con código de barras e Item No. 1982 Funko',confidence:0.99,explanation:'Las tres vistas coinciden en personaje, línea y número 1982'};
-  return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
-};
-const mergedIdentification=await identify(['data:image/jpeg;base64,AAAA','data:image/jpeg;base64,BBBB','data:image/jpeg;base64,CCCC'],{key:'test',fetcher:multiImageFetch});
-assert.equal(identifyBodies.length,4);
-assert.equal(identifyBodies.slice(0,3).every(body=>body.messages[1].content.filter(block=>block.type==='image_url').length===1),true);
-assert.equal(Array.isArray(identifyBodies[3].messages[1].content),false);
-assert.equal(mergedIdentification.title,'Funko Pop! Éomer #1982');
-assert.equal(mergedIdentification.sku,'1982');
-assert.ok(maxConcurrentVisual>1,'Las vistas deben analizarse en paralelo');
-
-
-let fallbackMergeVisual=0;
-const emptyMergeFetch=async(_url,init)=>{
+// Con varias fotos: UNA sola llamada multimodal. La primera foto es principal y las demás complementarias.
+let unifiedIdentifyCalls=0;
+let unifiedImages=0;
+const unifiedIdentifyFetch=async(_url,init)=>{
+ unifiedIdentifyCalls++;
  const body=JSON.parse(init.body);
- const hasImage=body.messages?.some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image_url'));
- if(hasImage){
-  const result=partials[Math.min(fallbackMergeVisual++,partials.length-1)];
-  return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
- }
- return new Response(JSON.stringify({choices:[{message:{content:''}}]}),{status:200,headers:{'content-type':'application/json'}});
+ assert.equal(body.thinking?.type,'disabled');
+ assert.equal(body.reasoning_effort,'none');
+ unifiedImages=body.messages[1].content.filter(block=>block.type==='image_url').length;
+ const result={title:'Funko Pop! Éomer #1982',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'90310',confidence:.99,explanation:'Frontal como vista principal; trasera usada solo para la referencia'};
+ return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
 };
-const mergeFallback=await identify(['data:image/jpeg;base64,AAAA','data:image/jpeg;base64,BBBB'],{key:'test',fetcher:emptyMergeFetch});
-assert.equal(mergeFallback.sku,'1982');
-assert.match(mergeFallback.explanation,/fusión automática/i);
+const mergedIdentification=await identify(['data:image/jpeg;base64,AAAA','data:image/jpeg;base64,BBBB','data:image/jpeg;base64,CCCC'],{key:'test',fetcher:unifiedIdentifyFetch});
+assert.equal(unifiedIdentifyCalls,1);
+assert.equal(unifiedImages,3);
+assert.equal(mergedIdentification.title,'Funko Pop! Éomer #1982');
+assert.equal(mergedIdentification.sku,'90310');
 
 const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});
 assert.equal(noSources.sources.length,0);
@@ -150,11 +124,10 @@ const fallbackFetch=async(url,init)=>{
   return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
 };
 const fallbackResearch=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fallbackFetch});
-assert.equal(fallbackChatCalls,1);
+assert.equal(fallbackChatCalls,0);
 assert.equal(fallbackResearch.listings.length,1);
 assert.equal(fallbackResearch.asking.count,1);
-assert.match(fallbackResearch.summary,/conserva los datos verificables/i);
-assert.ok(fallbackResearch.warnings.some(x=>/Resumen IA/i.test(x)));
+assert.match(fallbackResearch.summary,/Valoración calculada localmente|única identidad/i);
 
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
 
@@ -175,12 +148,13 @@ assert.match(appSource,/País \/ mercado de la edición/);
 assert.match(appSource,/Idioma de la edición/);
 assert.match(appSource,/setTab\('home'\)/);
 assert.match(appSource,/valuation-highlight/);
+assert.match(appSource,/Analizar artículo/);
+assert.doesNotMatch(appSource,/Confirmar e investigar|Actualizar investigación/);
 const directAiSource=readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8');
 assert.match(directAiSource,/priceChartingToken/);
 assert.match(directAiSource,/settings', 'pricecharting'/);
 const coreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 assert.match(coreSource,/PriceCharting/);
-assert.match(coreSource,/funko-specialist/);
 assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 
 
@@ -188,10 +162,11 @@ assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 // Regresión: PriceCharting es prioritario y los botones del formulario conservan su estilo original.
 const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
-assert.match(currentCoreSource,/PRIMERA FUENTE: API oficial de PriceCharting/);
+assert.match(currentCoreSource,/UNA sola búsqueda web de precios/);
+assert.match(currentCoreSource,/thinking:\{type:'disabled'\}/);
 assert.match(currentCoreSource,/sourceLooksBroken/);
 assert.doesNotMatch(currentCoreSource,/ppg:'https:\/\/www\.hobbydb\.com/);
 assert.doesNotMatch(currentStylesSource,/\.sheet-foot \.primary,.sheet-foot \.secondary,.sheet-foot \.danger\{min-height:54px/);
 
 console.log('core tests ok');
-assert.match(readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8'),/Buscando precios para:/);
+
