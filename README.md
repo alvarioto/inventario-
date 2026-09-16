@@ -56,4 +56,4 @@ Las acciones de GitHub para `staging` y `main` necesitan, en cada entorno, `FIRE
 
 La aplicación guarda la fecha de cada consulta y las URLs de las fuentes. Distingue precio original, anuncios disponibles y ventas cerradas. Si no hay datos verificables, lo indica y ofrece enlaces para revisar eBay manualmente. El valor de tu unidad depende de edición, estado, caja, idioma y gastos de envío.
 
-<!-- deploy-trigger: deepseek-reasoning-fix -->
+<!-- deploy: ai-condition-normalization -->
