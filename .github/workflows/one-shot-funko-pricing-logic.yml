@@ -1,0 +1,30 @@
+name: Apply Funko pricing logic
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Run Funko pricing logic patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply patch
+        run: node scripts/fix-funko-pricing-logic.mjs
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit validated patch
+        run: |
+          rm scripts/fix-funko-pricing-logic.mjs
+          rm .github/workflows/one-shot-funko-pricing-logic.yml
+          git config user.name alvarioto
+          git config user.email aldipo7292@gmail.com
+          git add -A
+          git commit -m "Fix Funko identity and pricing logic"
+          git push
