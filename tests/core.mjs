@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify } from '../server/core.mjs';
+import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, fetchPriceChartingGuide, research, identify } from '../server/core.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
@@ -61,6 +61,24 @@ assert.equal(guideListings[0].price,17);
 assert.equal(guideListings[0].currency,'EUR');
 assert.equal(guideListings[0].sourceType,'guide');
 assert.match(guideListings[0].condition,/Guía de valoración/i);
+
+
+// API oficial PriceCharting: una coincidencia exacta con caja devuelve la guía CIB,
+// convierte centavos USD a EUR y nunca expone el token en la URL pública guardada.
+const pcToken='a'.repeat(40);
+const pcFetch=async(input)=>{
+  const url=new URL(String(input));
+  assert.equal(url.hostname,'www.pricecharting.com');
+  assert.equal(url.pathname,'/api/product');
+  assert.equal(url.searchParams.get('t'),pcToken);
+  return new Response(JSON.stringify({status:'success',id:'12345','product-name':'Eomer #1982','console-name':'Funko Pop Movies','loose-price':1399,'cib-price':2599,'new-price':3299}),{status:200,headers:{'content-type':'application/json'}});
+};
+const pcResult=await fetchPriceChartingGuide({title:'Funko Pop! Eomer #1982',type:'funko',line:'Pop! Movies',sku:'1982',hasBox:true},pcToken,pcFetch,.9);
+assert.equal(pcResult.listings.length,1);
+assert.equal(pcResult.listings[0].price,23.39);
+assert.equal(pcResult.listings[0].currency,'EUR');
+assert.equal(pcResult.listings[0].sourceType,'guide');
+assert.doesNotMatch(pcResult.sources[0].url,/t=/);
 
 // Con varias fotos: una consulta visual por foto + una fusión textual final.
 const identifyBodies=[];
@@ -148,6 +166,11 @@ assert.doesNotMatch(inventorySource,/getDocFromServer/);
 assert.match(appSource,/PPG \/ hobbyDB/);
 assert.match(appSource,/País \/ mercado de la edición/);
 assert.match(appSource,/Idioma de la edición/);
+assert.match(appSource,/setTab\('home'\)/);
+assert.match(appSource,/valuation-highlight/);
+const directAiSource=readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8');
+assert.match(directAiSource,/priceChartingToken/);
+assert.match(directAiSource,/settings', 'pricecharting'/);
 const coreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 assert.match(coreSource,/PriceCharting/);
 assert.match(coreSource,/funko-specialist/);

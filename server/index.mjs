@@ -13,7 +13,7 @@ const local=host==='127.0.0.1'||host==='localhost'||host==='::1';
 if(!local&&(!env.FIREBASE_PROJECT_ID||!env.OWNER_UID||!env.APP_ORIGIN)){console.error('Para exponer el servidor configura FIREBASE_PROJECT_ID, OWNER_UID y APP_ORIGIN (HTTPS).');process.exit(1)}
 if(!local&&!env.APP_ORIGIN?.startsWith('https://')){console.error('APP_ORIGIN debe usar HTTPS en producción.');process.exit(1)}
 if(!local)initializeApp({projectId:env.FIREBASE_PROJECT_ID});
-const config={key:env.DEEPSEEK_API_KEY,model:env.DEEPSEEK_MODEL||'deepseek-flash',braveKey:env.BRAVE_SEARCH_API_KEY};
+const config={key:env.DEEPSEEK_API_KEY,model:env.DEEPSEEK_MODEL||'deepseek-flash',braveKey:env.BRAVE_SEARCH_API_KEY,priceChartingToken:env.PRICECHARTING_API_TOKEN};
 const app=express();app.disable('x-powered-by');
 app.use((req,res,next)=>{res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');next()});
 const session=randomBytes(32).toString('hex');

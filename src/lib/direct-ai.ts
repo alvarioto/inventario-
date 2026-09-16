@@ -5,7 +5,9 @@ import { deepseek, identify, research } from './ai-core.mjs';
 import type { InventoryDraft } from '../types';
 
 const storageKey = 'frikivault.deepseek.personal.v1';
+const priceChartingStorageKey = 'frikivault.pricecharting.personal.v1';
 function scopedKey() { return storageKey + ':' + (auth?.currentUser?.uid || 'local'); }
+function scopedPriceChartingKey() { return priceChartingStorageKey + ':' + (auth?.currentUser?.uid || 'local'); }
 export function getPersonalKey(): string {
   return sessionStorage.getItem(scopedKey()) || localStorage.getItem(scopedKey()) || '';
 }
@@ -20,6 +22,28 @@ export async function removePersonalKey() {
   if (auth?.currentUser && db) await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'settings', 'deepseek'));
   sessionStorage.removeItem(scopedKey());
   localStorage.removeItem(scopedKey());
+}
+
+export function getPriceChartingToken(): string {
+  return sessionStorage.getItem(scopedPriceChartingKey()) || localStorage.getItem(scopedPriceChartingKey()) || '';
+}
+export function savePriceChartingToken(value: string, remember = false) {
+  const token = value.trim();
+  if (!/^[A-Za-z0-9]{40}$/.test(token)) throw new Error('El token de PriceCharting debe tener exactamente 40 caracteres.');
+  sessionStorage.removeItem(scopedPriceChartingKey());
+  localStorage.removeItem(scopedPriceChartingKey());
+  (remember ? localStorage : sessionStorage).setItem(scopedPriceChartingKey(), token);
+}
+export async function syncPriceChartingToken() {
+  if (!auth?.currentUser || !db) throw new Error('Inicia sesión con Google para sincronizar el token de PriceCharting.');
+  const token = getPriceChartingToken();
+  if (!token) throw new Error('Añade primero el token de PriceCharting.');
+  await setDoc(doc(db, 'users', auth.currentUser.uid, 'settings', 'pricecharting'), {token});
+}
+export async function removePriceChartingToken() {
+  if (auth?.currentUser && db) await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'settings', 'pricecharting'));
+  sessionStorage.removeItem(scopedPriceChartingKey());
+  localStorage.removeItem(scopedPriceChartingKey());
 }
 
 // One-time private activation. Fragments are not sent to Hosting.
@@ -50,6 +74,9 @@ if (auth && db) {
         const key = saved.data()?.key;
         if (typeof key === 'string' && /^sk-[A-Za-z0-9_-]{16,}$/.test(key)) savePersonalKey(key);
       }
+      const priceSaved = await getDoc(doc(db, 'users', user.uid, 'settings', 'pricecharting'));
+      const priceToken = priceSaved.data()?.token;
+      if (typeof priceToken === 'string' && /^[A-Za-z0-9]{40}$/.test(priceToken)) savePriceChartingToken(priceToken);
       window.dispatchEvent(new Event('frikivault-ai-ready'));
     })();
     keyReady.catch(() => { window.dispatchEvent(new Event('frikivault-ai-ready')); });
@@ -68,7 +95,7 @@ const directFetch: typeof fetch = async (input, init) => {
 function config() {
   const key = getPersonalKey();
   if (!key) throw new Error('Activa tu clave de DeepSeek en Ajustes → IA directa.');
-  return { key, model: 'deepseek-flash', fetcher: directFetch };
+  return { key, model: 'deepseek-flash', fetcher: directFetch, priceChartingToken: getPriceChartingToken() };
 }
 export const identifyDirect = (images: string[]) => identify(images, config());
 export const researchDirect = (item: Partial<InventoryDraft>) => research({confirmed: true, item}, config());

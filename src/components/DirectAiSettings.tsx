@@ -1,13 +1,26 @@
 import { useState, useEffect } from 'react';
-import { getPersonalKey, savePersonalKey, removePersonalKey, testDirect, syncPersonalKey } from '../lib/direct-ai';
+import {
+  getPersonalKey, savePersonalKey, removePersonalKey, testDirect, syncPersonalKey,
+  getPriceChartingToken, savePriceChartingToken, removePriceChartingToken, syncPriceChartingToken
+} from '../lib/direct-ai';
 
 export function DirectAiSettings() {
   const [key, setKey] = useState('');
   const [configured, setConfigured] = useState(() => Boolean(getPersonalKey()));
   const [remember, setRemember] = useState(false);
-  useEffect(() => { const refresh = () => setConfigured(Boolean(getPersonalKey())); window.addEventListener('frikivault-ai-ready', refresh); return () => window.removeEventListener('frikivault-ai-ready', refresh); }, []);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [priceToken, setPriceToken] = useState('');
+  const [priceConfigured, setPriceConfigured] = useState(() => Boolean(getPriceChartingToken()));
+  const [priceBusy, setPriceBusy] = useState(false);
+  const [priceMessage, setPriceMessage] = useState('');
+
+  useEffect(() => {
+    const refresh = () => { setConfigured(Boolean(getPersonalKey())); setPriceConfigured(Boolean(getPriceChartingToken())); };
+    window.addEventListener('frikivault-ai-ready', refresh);
+    return () => window.removeEventListener('frikivault-ai-ready', refresh);
+  }, []);
+
   async function connect() {
     setBusy(true); setMessage('Comprobando DeepSeek…');
     try {
@@ -20,16 +33,44 @@ export function DirectAiSettings() {
     } catch (e) { setMessage(e instanceof Error ? e.message : 'No se pudo comprobar la conexión.'); }
     finally { setBusy(false); }
   }
-  return <div className="panel">
-    <h3>IA directa · DeepSeek</h3>
-    <p className="muted">Analiza fotos desde este navegador sin arrancar un servidor. {configured ? 'Clave configurada; pulsa Comprobar conexión para verificarla.' : 'Añade tu clave personal para conectar.'}</p>
-    <label className="field"><span>Clave personal</span><input type="password" autoComplete="off" spellCheck={false} value={key} onChange={e => setKey(e.target.value)} placeholder={configured ? 'Clave guardada; escribe aquí para cambiarla' : 'sk-…'}/></label>
-    <p className="muted"><label><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}/> Recordar en este dispositivo privado</label></p>
-    <p className="muted">La clave se sincroniza en los ajustes privados de tu cuenta para usarla también desde el móvil. Este navegador la conserva durante la sesión, o hasta que la borres si marcas Recordar. No se incluye en GitHub ni en las copias de la colección. Cada consulta consume saldo de DeepSeek.</p>
-    <div className="button-stack">
-      <button className="primary" disabled={busy || (!configured && !key.trim())} onClick={connect}>{busy ? 'Comprobando…' : key.trim() ? 'Guardar y comprobar' : 'Comprobar conexión'}</button>
-      {configured && <button className="secondary" disabled={busy} onClick={async () => {try {await removePersonalKey(); setConfigured(false); setKey(''); setMessage('Clave eliminada de esta sesión y de los ajustes de tu cuenta.');} catch {setMessage('No se pudo eliminar la clave de tu cuenta. Comprueba la conexión.');}}}>Borrar clave</button>}
-    </div>
-    {message && <p className="muted" role="status">{message}</p>}
+
+  async function savePriceCharting() {
+    if (!priceToken.trim()) return;
+    setPriceBusy(true); setPriceMessage('Guardando token de PriceCharting…');
+    try {
+      savePriceChartingToken(priceToken);
+      await syncPriceChartingToken();
+      setPriceToken('');
+      setPriceConfigured(true);
+      setPriceMessage('PriceCharting API configurada. La investigación de Funko usará su guía oficial cuando encuentre el producto exacto.');
+    } catch (e) { setPriceMessage(e instanceof Error ? e.message : 'No se pudo guardar el token.'); }
+    finally { setPriceBusy(false); }
+  }
+
+  return <div className="panel provider-settings">
+    <section className="settings-integration">
+      <h3>IA directa · DeepSeek</h3>
+      <p className="muted">Analiza fotos e investiga fuentes públicas. {configured ? 'Clave configurada; pulsa Comprobar conexión para verificarla.' : 'Añade tu clave personal para conectar.'}</p>
+      <label className="field"><span>Clave personal</span><input type="password" autoComplete="off" spellCheck={false} value={key} onChange={e => setKey(e.target.value)} placeholder={configured ? 'Clave guardada; escribe aquí para cambiarla' : 'sk-…'}/></label>
+      <p className="muted"><label><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}/> Recordar en este dispositivo privado</label></p>
+      <div className="button-stack">
+        <button className="primary" disabled={busy || (!configured && !key.trim())} onClick={connect}>{busy ? 'Comprobando…' : key.trim() ? 'Guardar y comprobar' : 'Comprobar conexión'}</button>
+        {configured && <button className="secondary" disabled={busy} onClick={async () => {try {await removePersonalKey(); setConfigured(false); setKey(''); setMessage('Clave eliminada de esta sesión y de los ajustes de tu cuenta.');} catch {setMessage('No se pudo eliminar la clave de tu cuenta.');}}}>Borrar clave</button>}
+      </div>
+      {message && <p className="muted" role="status">{message}</p>}
+    </section>
+
+    <section className="settings-integration pricecharting-settings">
+      <h3>Guía de precios · PriceCharting <span className="provider-badge">Opcional</span></h3>
+      <p className="muted">Añade el token oficial de 40 caracteres de una suscripción PriceCharting con acceso API. Para Funko, FrikiVault consultará un solo producto por investigación y usará el valor correspondiente a su estado (con caja, sin caja o nuevo) como referencia especializada.</p>
+      <label className="field"><span>Token PriceCharting</span><input type="password" autoComplete="off" spellCheck={false} value={priceToken} onChange={e => setPriceToken(e.target.value)} placeholder={priceConfigured ? 'Token guardado; escribe aquí para cambiarlo' : '40 caracteres'}/></label>
+      <p className="muted">Se guarda en los ajustes privados de tu cuenta, igual que la clave de IA; no se incluye en GitHub ni en las exportaciones. No intenta saltarse CAPTCHA de hobbyDB.</p>
+      <div className="button-stack">
+        <button className="primary" disabled={priceBusy || !priceToken.trim()} onClick={savePriceCharting}>{priceBusy ? 'Guardando…' : priceConfigured ? 'Cambiar token' : 'Guardar token'}</button>
+        {priceConfigured && <button className="secondary" disabled={priceBusy} onClick={async () => {try {await removePriceChartingToken(); setPriceConfigured(false); setPriceToken(''); setPriceMessage('Token de PriceCharting eliminado.');} catch {setPriceMessage('No se pudo eliminar el token.');}}}>Desconectar PriceCharting</button>}
+      </div>
+      {priceMessage && <p className="muted" role="status">{priceMessage}</p>}
+      <a className="provider-doc-link" href="https://www.pricecharting.com/api-documentation" target="_blank" rel="noreferrer">Documentación oficial de PriceCharting API ↗</a>
+    </section>
   </div>;
 }
