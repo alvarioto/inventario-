@@ -12,6 +12,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
+      - name: Make regex replacements literal
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/patch-unified-fast-ai.py')
+          s=p.read_text()
+          needle='import re\n'
+          shim="""import re\n_real_subn = re.subn\ndef _literal_subn(pattern, repl, string, count=0, flags=0):\n    if isinstance(repl, str):\n        return _real_subn(pattern, lambda _m: repl, string, count=count, flags=flags)\n    return _real_subn(pattern, repl, string, count=count, flags=flags)\nre.subn = _literal_subn\n"""
+          if needle not in s:
+              raise SystemExit('import re not found')
+          p.write_text(s.replace(needle,shim,1))
+          PY
       - name: Apply patch
         run: python scripts/patch-unified-fast-ai.py
       - run: npm ci
