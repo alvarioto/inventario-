@@ -28,3 +28,4 @@ jobs:
           git add -A
           git commit -m "Fix real Funko price source selection"
           git push
+# run
