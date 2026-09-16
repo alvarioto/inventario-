@@ -365,6 +365,7 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
   const [barcode, setBarcode] = useState('');
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const barcodeScanRef = useRef<HTMLInputElement | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const photoLimit = maxCloudPhotos();
 
@@ -391,6 +392,22 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
       setPhotoBusy(false);
       if (cameraInputRef.current) cameraInputRef.current.value = '';
       if (uploadInputRef.current) uploadInputRef.current.value = '';
+    }
+  }
+
+  async function scanBarcodePhoto(file?: File) {
+    if (!file || busy || photoBusy) return;
+    setPhotoBusy(true);
+    try {
+      const prepared = await prepareImage(file);
+      const code = await tryReadBarcode(prepared);
+      if (code) { setBarcode(code); showToast(`Código detectado: ${code}`); }
+      else showToast('No se pudo leer el código. Acerca la cámara y evita reflejos.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se pudo escanear el código.');
+    } finally {
+      setPhotoBusy(false);
+      if (barcodeScanRef.current) barcodeScanRef.current.value = '';
     }
   }
 
@@ -511,6 +528,7 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
         <div className="camera-card">
           <input ref={cameraInputRef} hidden type="file" accept="image/*" capture="environment" onChange={(e) => addPicked(e.target.files ? [...e.target.files] : [])} />
           <input ref={uploadInputRef} hidden type="file" accept="image/*" multiple onChange={(e) => addPicked(e.target.files ? [...e.target.files] : [])} />
+          <input ref={barcodeScanRef} hidden type="file" accept="image/*" capture="environment" onChange={(e) => scanBarcodePhoto(e.target.files?.[0])} />
           {previews.length ? <>
             <img className="scan-preview" src={previews[0]} alt="Vista principal del objeto"/>
             <div className="scan-photo-strip">
@@ -522,7 +540,7 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
             </div>
             <p className="scan-photo-help"><b>{files.length}/{photoLimit} fotos.</b> La primera es la referencia principal; las demás solo aportan códigos, trasera, caja y detalles.</p>
           </> : <div className="camera-placeholder"><div className="scan-frame"><ScanLine/></div><h2>Fotografía el artículo</h2><p>Empieza por el frontal. Si añades más fotos, úsalas para la trasera, etiquetas o código de barras.</p></div>}
-          <div className="camera-actions"><button className="secondary" onClick={() => cameraInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy || busy}><Camera size={19}/>{files.length ? 'Hacer otra foto' : 'Abrir cámara'}</button><button className="secondary" onClick={() => uploadInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy || busy}><Upload size={19}/>{photoBusy ? 'Preparando…' : 'Subir fotos'}</button><button className="ai-button" onClick={analyzeAll} disabled={!files.length || busy || photoBusy}><WandSparkles size={19}/>{busy ? (stage || 'Analizando…') : `Analizar artículo${files.length > 1 ? ` · ${files.length} fotos` : ''}`}</button></div>
+          <div className="camera-actions"><button className="secondary" onClick={() => cameraInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy || busy}><Camera size={19}/>{files.length ? 'Hacer otra foto' : 'Abrir cámara'}</button><button className="secondary" onClick={() => uploadInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy || busy}><Upload size={19}/>{photoBusy ? 'Preparando…' : 'Subir fotos'}</button><button className="secondary" onClick={() => barcodeScanRef.current?.click()} disabled={photoBusy || busy}><QrCode size={19}/>Escanear código</button><button className="ai-button" onClick={analyzeAll} disabled={!files.length || busy || photoBusy}><WandSparkles size={19}/>{busy ? (stage || 'Analizando…') : `Analizar artículo${files.length > 1 ? ` · ${files.length} fotos` : ''}`}</button></div>
         </div>
         <div className="scan-side">
           <div className="panel scan-result"><div className="panel-head"><h2><Sparkles size={19}/> Análisis unificado</h2></div><div className="placeholder-copy"><Sparkles/><p>Al pulsar <b>Analizar artículo</b>, FrikiVault identifica el producto exacto, busca precios públicos comparables y abre directamente la ficha ya rellenada.</p>{busy && <p className="hint"><b>{stage}</b></p>}</div></div>
@@ -602,7 +620,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [photoError, setPhotoError] = useState('');
   const [saveErrorModal, setSaveErrorModal] = useState('');
   const initialPhotosHandled = useRef(false);
-  const [research] = useState<ResearchResult | undefined>(item?.research || seed?.research);
+  const [research, setResearch] = useState<ResearchResult | undefined>(item?.research || seed?.research);
+  const [researchBusy, setResearchBusy] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   useEffect(() => {
     if (!initialPhotos.length || initialPhotosHandled.current) return;
@@ -703,6 +722,19 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   }
 
 
+  async function refreshResearch() {
+    if (!draft.title.trim() || researchBusy) return;
+    setResearchBusy(true);
+    setPhotoError('');
+    try {
+      const next = await investigate(draft);
+      setResearch(next);
+      setDraft((current) => ({ ...current, currentValue: next.asking.median != null ? Number(next.asking.median.toFixed(2)) : current.currentValue }));
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : 'No se pudo mejorar la investigación.');
+    } finally { setResearchBusy(false); }
+  }
+
   function downloadQr() {
     if (!qrDataUrl || !item?.id) return;
     const link = document.createElement('a'); link.href = qrDataUrl; link.download = `${item.id}-qr.png`; link.click();
@@ -762,8 +794,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
           <div className="form-grid"><Field label="Habitación"><input value={draft.room || ''} onChange={(e)=>set('room',e.target.value)} placeholder="Despacho"/></Field><Field label="Mueble / vitrina"><input value={draft.furniture || ''} onChange={(e)=>set('furniture',e.target.value)} placeholder="Vitrina 1"/></Field><Field label="Balda"><input value={draft.shelf || ''} onChange={(e)=>set('shelf',e.target.value)} placeholder="Balda 3"/></Field><Field label="Caja"><input value={draft.box || ''} onChange={(e)=>set('box',e.target.value)} placeholder="Caja A"/></Field></div>
           <Field label="Notas" wide><textarea rows={4} value={draft.notes || ''} onChange={(e)=>set('notes',e.target.value)} placeholder="Detalles, defectos, procedencia, firma…"/></Field>
 
-          {item && <section className="research-panel">
-            <div className="research-head"><div><h3 className="form-section-title"><Sparkles/> Análisis del artículo</h3><p className="muted">Identificación, referencias y valoración obtenidas en la misma captura inteligente.</p></div></div>
+          {draft.title.trim() && <section className="research-panel">
+            <div className="research-head"><div><h3 className="form-section-title"><Sparkles/> Análisis del artículo</h3><p className="muted">Identificación, referencias y valoración obtenidas en la misma captura inteligente.</p></div><button type="button" className="ai-button" onClick={refreshResearch} disabled={researchBusy || busy}><WandSparkles size={17}/>{researchBusy ? 'Mejorando…' : 'Mejorar con IA'}</button></div>
             {research ? <div className="research-result">
               {research.searchIdentity && <p className="muted"><b>Producto buscado:</b> {research.searchIdentity}</p>}
               {research.resolvedIdentity?.title && <p className="muted"><b>Producto resuelto:</b> {research.resolvedIdentity.title}</p>}

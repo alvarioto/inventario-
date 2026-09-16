@@ -15,8 +15,9 @@ assert.equal(safeUrl('javascript:alert(1)'),null);
 assert.equal(isGenericProductTitle('Funko caja – dorso con código de barras e Item No. 90310 Funko'),true);
 const cleanIdentity=buildResearchIdentity({title:'Funko caja – dorso con código de barras e Item No. 90310 Funko',type:'funko',manufacturer:'Funko',sku:'90310',barcode:'889698903105'});
 assert.doesNotMatch(cleanIdentity,/dorso|codigo de barras/i);
-assert.match(cleanIdentity,/90310/);
-assert.match(cleanIdentity,/889698903105/);
+assert.equal(cleanIdentity,'Funko 90310');
+assert.doesNotMatch(cleanIdentity,/889698903105/);
+assert.equal(buildResearchIdentity({title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',sku:'90310',barcode:'889698903105'}),'Éomer Funko Pop');
 
 const market = summarizeListings([
   {price:10,currency:'EUR',shipping:2},
@@ -138,6 +139,8 @@ assert.match(fallbackResearch.summary,/Valoración calculada localmente|única i
 const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta.url),'utf8');
 assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
+assert.match(appSource,/Escanear código/);
+assert.match(appSource,/Mejorar con IA/);
 assert.match(appSource,/prepared\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/imageUrls: \[\.\.\.\(current\.imageUrls \|\| \[\]\), \.\.\.urls\]\.slice\(0, limit\)/);
 assert.doesNotMatch(appSource,/const \[photos, setPhotos\]/);
