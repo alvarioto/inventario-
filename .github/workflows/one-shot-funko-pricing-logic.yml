@@ -14,6 +14,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Remove brittle fixture rewrite
+        run: sed -i "/unified identify fixture/d" scripts/fix-funko-pricing-logic.mjs
       - name: Apply patch
         run: node scripts/fix-funko-pricing-logic.mjs
       - run: npm ci
@@ -28,4 +30,4 @@ jobs:
           git add -A
           git commit -m "Fix Funko identity and pricing logic"
           git push
-# run
+# run v2
