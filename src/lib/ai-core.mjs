@@ -355,9 +355,37 @@ function allowedPricingSource(source){
   ||/(^|\.)ebay\.[a-z.]+$/.test(host);
 }
 
-function limitPricingSources(rows){
+function pricingSourceScore(item,source){
+ const host=hostOf(source?.url);
+ const raw=`${source?.title||''} ${source?.snippet||''}`;
+ let score=0;
+ if(extractMoneyPrices(raw).length)score+=100;
+ if(item?.type==='funko'&&funkoTextMatches(item,raw))score+=50;
+ let path='';
+ try{path=new URL(source.url).pathname.toLowerCase()}catch{}
+ if(host.includes('pricecharting.com')){
+  if(/\/game\/funko-pop-/.test(path))score+=35;
+  if(/search-products|\/search/.test(path))score-=30;
+ }
+ if(host.includes('stockx.com')){
+  if(path&&path!=='/'&&!/\/brands\/funko|\/search/.test(path))score+=20;
+  if(/\/brands\/funko|\/search/.test(path))score-=20;
+ }
+ if(host.includes('ebay.')){
+  if(/\/itm\//.test(path))score+=25;
+  if(/\/sch\//.test(path))score-=20;
+ }
+ return score;
+}
+
+function prioritizePricingSources(item,rows){
+ return [...rows].sort((a,b)=>pricingSourceScore(item,b)-pricingSourceScore(item,a));
+}
+
+function limitPricingSources(rows,item=null){
  const counts={pricecharting:0,stockx:0,ebay:0};
- return rows.filter(allowedPricingSource).filter(source=>{
+ const ordered=item?prioritizePricingSources(item,rows):rows;
+ return ordered.filter(allowedPricingSource).filter(source=>{
   const host=hostOf(source.url);
   const group=host.includes('pricecharting.com')?'pricecharting':host.includes('stockx.com')?'stockx':'ebay';
   const max=group==='ebay'?2:1;
@@ -415,7 +443,7 @@ export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetche
    tools:[{
     type:'web_search_20250305',
     name:'web_search',
-    max_uses:3,
+    max_uses:searchMode==='pricecharting'?2:3,
     user_location:{type:'approximate',country:'ES',timezone:'Europe/Madrid'}
    }],
    tool_choice:{type:'auto'},
@@ -798,14 +826,29 @@ export async function research(input,config){
   }catch{}
  }
 
- // UNA sola búsqueda web de precios. El nombre/referencia se pasa literalmente y no se
- // vuelve a ampliar con consultas distintas para cada marketplace.
+ // Para Funko no se dispersa la búsqueda: PriceCharting va primero y, si ya aporta
+ // un precio exacto visible, no se consulta ningún otro marketplace.
  if(config.key){
   try{
    const exactQuery=identity.trim();
-   const found=normalizeSources(await deepseekWebSearch(exactQuery,{...config,searchMode:isFunko?'funko':'general'}),'price-search');
-   const allowed=limitPricingSources(keepUsableSources(found));
-   webSources=limitPricingSources(uniqueSources([...webSources,...relevantSourcesForItem(item,allowed)]));
+   let hasExactVisiblePrice=priceChartingListings.length>0;
+
+   if(isFunko&&!hasExactVisiblePrice){
+    const pcFound=normalizeSources(await deepseekWebSearch(exactQuery,{...config,searchMode:'pricecharting'}),'pricecharting-public');
+    const pcUsable=keepUsableSources(pcFound).filter(allowedPricingSource);
+    const pcRelevant=prioritizePricingSources(item,relevantSourcesForItem(item,pcUsable));
+    webSources=uniqueSources([...webSources,...pcRelevant]);
+    hasExactVisiblePrice=parsePublicListings(pcRelevant).length>0;
+   }
+
+   if(!isFunko||!hasExactVisiblePrice){
+    const found=normalizeSources(await deepseekWebSearch(exactQuery,{...config,searchMode:isFunko?'funko':'general'}),'price-search');
+    const usable=keepUsableSources(found).filter(allowedPricingSource);
+    const relevant=prioritizePricingSources(item,relevantSourcesForItem(item,usable));
+    webSources=uniqueSources([...webSources,...relevant]);
+   }
+
+   webSources=limitPricingSources(uniqueSources(webSources),item);
   }catch(error){
    warnings.push(error instanceof Error?`Búsqueda de precios: ${error.message}`:'No se pudo completar la búsqueda de precios.');
   }
@@ -825,7 +868,7 @@ export async function research(input,config){
  const listings=[...parsePublicListings(webSources.filter(source=>source.kind!=='pricecharting-api'),{USD_EUR:usdEurRate}),...priceChartingListings];
  const comparables=conservativeFallbackComparables(item,listings,webSources).slice(0,6);
  const asking=summarizeListings(comparables);
- const sources=limitPricingSources(uniqueSources(webSources));
+ const sources=limitPricingSources(uniqueSources(webSources),item);
 
  if(!listings.length)warnings.push('No se encontró un precio visible para el producto exacto; se han descartado páginas bloqueadas, ambiguas o sin importe.');
  else if(!comparables.length)warnings.push('Se detectaron precios, pero ninguno coincide con suficiente precisión con esta referencia/edición.');

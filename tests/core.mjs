@@ -136,6 +136,29 @@ assert.equal(fallbackResearch.listings.length,1);
 assert.equal(fallbackResearch.asking.count,1);
 assert.match(fallbackResearch.summary,/Valoración calculada localmente|única identidad/i);
 
+// Regresión realista: si DeepSeek devuelve primero una página genérica de PriceCharting
+// y después la ficha exacta con precio, la ficha exacta debe ganar y producir valoración.
+let realPcSearchCalls=0;
+const realPcFetch=async(url,init)=>{
+ if(String(url).includes('frankfurter.dev')){
+  return new Response(JSON.stringify({rate:.9}),{status:200,headers:{'content-type':'application/json'}});
+ }
+ if(String(url).includes('/anthropic/v1/messages')){
+  realPcSearchCalls++;
+  return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
+   {type:'web_search_result',title:'PriceCharting Search Products',url:'https://www.pricecharting.com/search-products?type=prices&q=Eomer+1982',cited_text:'Search Funko prices'},
+   {type:'web_search_result',title:'Eomer #1982 Prices | Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982',cited_text:'Full Price Guide: Eomer #1982. Out of Box $11.05 · In Box $16.00 · New $18.75'}
+  ]}]}),{status:200,headers:{'content-type':'application/json'}});
+ }
+ return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
+};
+const realPcResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',hasBox:true}},{key:'test',fetcher:realPcFetch});
+assert.equal(realPcSearchCalls,1);
+assert.equal(realPcResearch.searchIdentity,'Éomer 1982');
+assert.equal(realPcResearch.sources[0].url,'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982');
+assert.ok(realPcResearch.asking.median>0);
+assert.ok(realPcResearch.comparables.length>0);
+
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
 
 // Funko: la misma identidad corta debe mandar también en los filtros posteriores.
@@ -190,8 +213,8 @@ assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 // Regresión: PriceCharting es prioritario y los botones del formulario conservan su estilo original.
 const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
-assert.match(currentCoreSource,/UNA sola búsqueda web de precios/);
-assert.match(currentCoreSource,/max_uses:3/);
+assert.match(currentCoreSource,/PriceCharting va primero/);
+
 assert.doesNotMatch(currentCoreSource,/reasoning:\{effort:'none'\}/);
 assert.match(currentCoreSource,/limitPricingSources/);
 assert.match(currentCoreSource,/thinking:\{type:'disabled'\}/);
