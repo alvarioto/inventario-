@@ -18,6 +18,17 @@ jobs:
           cache: npm
       - name: Apply exact search patch
         run: node scripts/force-funko-number-search.mjs
+      - name: Make the regression assert the PriceCharting call, not the later fallback call
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const p='tests/core.mjs';
+          let t=fs.readFileSync(p,'utf8');
+          t=t.replace("let exactPcPrompt='';","let exactPcPrompts=[];");
+          t=t.replace("exactPcPrompt=String(body.messages?.[0]?.content||'');","exactPcPrompts.push(String(body.messages?.[0]?.content||''));");
+          t=t.replace("assert.equal(exactPcQueryResearch.searchIdentity,'Éomer 1982');\nassert.match(exactPcPrompt,/Eomer 1982/);","assert.equal(exactPcQueryResearch.searchIdentity,'Éomer 1982');\nconst exactPcPrompt=exactPcPrompts.find(x=>x.includes('MODO PRICECHARTING'))||'';\nassert.ok(exactPcPrompt,'No se ejecutó la llamada específica de PriceCharting');\nassert.match(exactPcPrompt,/Eomer 1982/);");
+          fs.writeFileSync(p,t);
+          NODE
       - run: npm ci
       - run: npm test
       - run: npm run build
