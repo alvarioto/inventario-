@@ -9,7 +9,7 @@ concurrency:
   group: firebase-production
   cancel-in-progress: true
 # Siempre publica únicamente la revisión más reciente de main ya validada por tests y build.
-# Este push publica resolución de identidad canónica antes de buscar precios en PriceCharting/StockX.
+# Este push publica el flujo unificado y rápido: una identificación multimodal + una búsqueda de precios.
 jobs:
   deploy:
     runs-on: ubuntu-latest
