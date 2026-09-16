@@ -1,6 +1,6 @@
 # FrikiVault
 
-FrikiVault es un inventario personal para figuras, cómics, manga, cartas, videojuegos, Funko, LEGO y merchandising. La interfaz está pensada para móvil: fotografías una pieza, revisas la identificación, confirmas que es correcta y solo entonces lanzas la investigación de fuentes y precios.
+FrikiVault es un inventario personal para figuras, cómics, manga, cartas, videojuegos, Funko, LEGO y merchandising. La interfaz está pensada para móvil: fotografías una pieza y una sola acción de IA identifica el artículo, busca referencias y precios públicos y abre la ficha ya rellenada para revisarla y guardarla.
 
 ## Arquitectura
 
