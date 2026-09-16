@@ -2,6 +2,14 @@ import { z } from 'zod';
 
 export const itemTypes=['figure','comic','manga','card','game','funko','lego','plush','replica','movie','merch','other'];
 const text=z.string().max(500).default('');
+const conditionValues=['new','like-new','very-good','good','fair','poor'];
+function normalizeCondition(value){
+ if(value==null)return null;
+ const raw=String(value).trim().toLowerCase().replace(/[_\s]+/g,'-');
+ if(!raw||['unknown','n-a','na','null','none','unspecified','desconocido'].includes(raw))return null;
+ const aliases={'brand-new':'new','mint':'new','sealed':'new','nuevo':'new','like-new':'like-new','near-mint':'like-new','como-nuevo':'like-new','very-good':'very-good','verygood':'very-good','excellent':'very-good','muy-bueno':'very-good','good':'good','used':'good','pre-owned':'good','bueno':'good','fair':'fair','acceptable':'fair','regular':'fair','poor':'poor','damaged':'poor','malo':'poor'};
+ return aliases[raw] || (conditionValues.includes(raw) ? raw : null);
+}
 
 export const identificationSchema=z.object({
  title:z.string().min(1).max(250),
@@ -23,7 +31,7 @@ export const identificationSchema=z.object({
  sku:text,
  country:text,
  language:text,
- condition:z.enum(['new','like-new','very-good','good','fair','poor']).nullable().default(null),
+ condition:z.preprocess(normalizeCondition,z.enum(conditionValues).nullable()).default(null),
  hasBox:z.boolean().nullable().default(null),
  sealed:z.boolean().nullable().default(null),
  signed:z.boolean().nullable().default(null),

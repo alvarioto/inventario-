@@ -6,6 +6,9 @@ const identification = identificationSchema.parse({title:'Batman #125',type:'com
 assert.equal(identification.franchise,'');
 assert.equal(identification.condition,null);
 assert.equal(identification.hasBox,null);
+assert.equal(identificationSchema.parse({title:'Test mint',type:'funko',condition:'mint',confidence:.9,explanation:'x'}).condition,'new');
+assert.equal(identificationSchema.parse({title:'Test used',type:'funko',condition:'used',confidence:.9,explanation:'x'}).condition,'good');
+assert.equal(identificationSchema.parse({title:'Test unknown',type:'funko',condition:'unknown',confidence:.9,explanation:'x'}).condition,null);
 assert.equal(safeUrl('javascript:alert(1)'),null);
 
 
