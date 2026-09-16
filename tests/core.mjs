@@ -94,7 +94,7 @@ const unifiedIdentifyFetch=async(_url,init)=>{
  unifiedIdentifyCalls++;
  const body=JSON.parse(init.body);
  assert.equal(body.thinking?.type,'disabled');
- assert.equal(body.reasoning_effort,'none');
+ assert.equal(body.reasoning_effort,undefined);
  unifiedImages=body.messages[1].content.filter(block=>block.type==='image_url').length;
  const result={title:'Funko Pop! Éomer #1982',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'90310',confidence:.99,explanation:'Frontal como vista principal; trasera usada solo para la referencia'};
  return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});

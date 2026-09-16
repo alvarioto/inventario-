@@ -555,7 +555,7 @@ export async function deepseek(messages,{key,model='deepseek-flash',fetcher=fetc
  let lastError=null;
  for(let attempt=0;attempt<=retries;attempt++){
   try{
-   const body={model,messages,max_tokens:maxTokens,stream:false,thinking:{type:'disabled'},reasoning_effort:'none'};
+   const body={model,messages,max_tokens:maxTokens,stream:false,thinking:{type:'disabled'}};
    if(jsonMode)body.response_format={type:'json_object'};
    const response=await fetcher('https://api.deepseek.com/chat/completions',{
     method:'POST',
