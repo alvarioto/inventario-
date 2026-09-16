@@ -26,3 +26,12 @@
 
 /* Save feedback + photo upload UX */
 .result-modal-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(3,7,16,.76);backdrop-filter:blur(7px);display:grid;place-items:center;padding:22px}.result-modal-backdrop.nested{z-index:1001}.result-modal{width:min(420px,100%);background:#11192a;border:1px solid var(--border);border-radius:20px;padding:26px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.48)}.result-modal-icon{width:58px;height:58px;border-radius:18px;margin:0 auto 15px;display:grid;place-items:center}.result-modal.success .result-modal-icon{background:rgba(71,215,163,.12);color:var(--green);border:1px solid rgba(71,215,163,.26)}.result-modal.error .result-modal-icon{background:rgba(255,102,128,.12);color:var(--red);border:1px solid rgba(255,102,128,.26)}.result-modal h3{font-family:'Space Grotesk';font-size:21px;margin:0 0 8px}.result-modal p{color:var(--muted);line-height:1.55;margin:0 0 20px}.photo-strip{align-items:stretch}.add-photo{min-width:92px}.camera-actions{flex-wrap:wrap}@media(max-width:700px){.camera-actions>button{flex:1 1 calc(50% - 8px)}.camera-actions>.ai-button{flex-basis:100%}.result-modal{padding:22px}}
+
+
+/* iOS/mobile: el cuerpo y la ficha solo deben desplazarse en vertical. */
+html,body,#root,.app-shell,.main-shell{max-width:100vw;overflow-x:hidden}
+body{overscroll-behavior-x:none}
+.modal-backdrop,.item-sheet,.sheet-scroll{max-width:100vw;overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y}
+.item-sheet,.sheet-scroll,.form-grid,.photo-section,.research-panel,.qr-panel{min-width:0}
+.field,.field input,.field select,.field textarea{min-width:0;max-width:100%}
+@media(max-width:760px){.item-sheet{width:100vw!important;max-width:100vw!important}.sheet-scroll{width:100%;max-width:100vw}.sheet-foot{max-width:100vw;overflow-x:hidden}}

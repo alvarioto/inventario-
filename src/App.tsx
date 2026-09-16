@@ -446,7 +446,7 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
     type: result.type,
     status: 'collection',
     currency: 'EUR',
-    condition: 'like-new',
+    condition: result.condition || 'like-new',
     franchise: result.franchise,
     character: result.character,
     manufacturer: result.manufacturer,
@@ -462,6 +462,14 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
     barcode: result.barcode || barcode,
     isbn: result.isbn,
     sku: result.sku,
+    country: result.country,
+    language: result.language,
+    hasBox: result.hasBox ?? false,
+    sealed: result.sealed ?? false,
+    signed: result.signed ?? false,
+    graded: result.graded ?? false,
+    gradingCompany: result.gradingCompany,
+    grade: result.grade,
     tags: result.tags,
     aiConfidence: result.confidence,
     aiExplanation: result.explanation,
@@ -732,9 +740,14 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
             {draft.type === 'game' && <Field label="Plataforma"><input value={draft.platform || ''} onChange={(e)=>set('platform',e.target.value)} placeholder="PS5, Switch…"/></Field>}
             <Field label="Año"><input type="number" value={draft.year ?? ''} onChange={(e)=>set('year',e.target.value ? Number(e.target.value) : null)}/></Field>
             <Field label="Código EAN / UPC"><input value={draft.barcode || ''} onChange={(e)=>set('barcode',e.target.value)}/></Field>
+            <Field label="SKU / referencia"><input value={draft.sku || ''} onChange={(e)=>set('sku',e.target.value)} placeholder="Referencia del fabricante"/></Field>
+            <Field label="País / mercado de la edición"><input value={draft.country || ''} onChange={(e)=>set('country',e.target.value)} placeholder="España, Japón, USA…"/></Field>
+            <Field label="Idioma de la edición"><input value={draft.language || ''} onChange={(e)=>set('language',e.target.value)} placeholder="Español, inglés, japonés…"/></Field>
+            {draft.graded && <Field label="Empresa de graduación"><input value={draft.gradingCompany || ''} onChange={(e)=>set('gradingCompany',e.target.value)} placeholder="PSA, CGC…"/></Field>}
+            {draft.graded && draft.type !== 'card' && <Field label="Grado"><input value={draft.grade || ''} onChange={(e)=>set('grade',e.target.value)} placeholder="9.8, 9.5…"/></Field>}
             <Field label="Estado físico"><select value={draft.condition || 'like-new'} onChange={(e)=>set('condition',e.target.value as InventoryDraft['condition'])}>{Object.entries(CONDITION_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>
             <Field label="Etiquetas"><input value={(draft.tags || []).join(', ')} onChange={(e)=>set('tags',e.target.value.split(','))} placeholder="pokemon, japon, edición limitada"/></Field>
-            <div className="checks wide"><Toggle label="Con caja" checked={!!draft.hasBox} onChange={(v)=>set('hasBox',v)}/><Toggle label="Precintado" checked={!!draft.sealed} onChange={(v)=>set('sealed',v)}/><Toggle label="Firmado" checked={!!draft.signed} onChange={(v)=>set('signed',v)}/><Toggle label="Favorito" checked={!!draft.favorite} onChange={(v)=>set('favorite',v)}/><Toggle label="Identificación confirmada" checked={!!draft.identificationConfirmed} onChange={(v)=>set('identificationConfirmed',v)}/></div>
+            <div className="checks wide"><Toggle label="Con caja" checked={!!draft.hasBox} onChange={(v)=>set('hasBox',v)}/><Toggle label="Precintado" checked={!!draft.sealed} onChange={(v)=>set('sealed',v)}/><Toggle label="Firmado" checked={!!draft.signed} onChange={(v)=>set('signed',v)}/><Toggle label="Graduado" checked={!!draft.graded} onChange={(v)=>set('graded',v)}/><Toggle label="Favorito" checked={!!draft.favorite} onChange={(v)=>set('favorite',v)}/><Toggle label="Identificación confirmada" checked={!!draft.identificationConfirmed} onChange={(v)=>set('identificationConfirmed',v)}/></div>
           </div>}
 
           <h3 className="form-section-title"><CircleDollarSign/> Dinero</h3>
@@ -748,7 +761,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
             <div className="research-head"><div><h3 className="form-section-title"><Sparkles/> Investigación inteligente</h3><p className="muted">Solo se consulta después de confirmar que esta es la pieza correcta.</p></div><button type="button" className="ai-button" onClick={researchItem} disabled={researchBusy || !draft.identificationConfirmed}>{researchBusy ? 'Investigando…' : research ? 'Actualizar investigación' : 'Confirmar e investigar'}</button></div>
             {!draft.identificationConfirmed && <p className="hint">Confirma los datos del escáner o marca la identificación como correcta para activar la consulta.</p>}
             {researchError && <div className="error-box">{researchError}</div>}
-            {research && <div className="research-result"><p>{research.summary}</p><div className="market-summary"><div><span>Páginas coincidentes</span><b>{new Set(research.sources.map((source) => source.url)).size || '—'}</b></div><div><span>Precios detectados</span><b>{research.listings.length || '—'}</b></div><div><span>Comparables usados</span><b>{research.comparables.length || '—'}</b></div><div><span>Mediana solicitada</span><b>{research.asking.median == null ? '—' : money(research.asking.median)}</b></div><div><span>Ventas cerradas</span><b>{research.sold.available ? 'Disponible' : 'No verificadas'}</b></div></div><div className="research-facts">{research.facts.slice(0, 8).map((fact) => <div key={`${fact.label}-${fact.sourceId}`}><b>{fact.label}</b><span>{fact.value}</span></div>)}</div><div className="source-list"><a href={research.links.ebay} target="_blank" rel="noreferrer">Buscar artículo en eBay</a><a href={research.links.sold} target="_blank" rel="noreferrer">Revisar ventas cerradas</a>{research.sources.slice(0, 8).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.kind.startsWith('ebay') ? 'eBay público' : 'Fuente'} · {source.title}</a>)}</div>{research.warnings.map((warning) => <small className="warning-line" key={warning}>{warning}</small>)}</div>}
+            {research && <div className="research-result"><p>{research.summary}</p><div className="market-summary"><div><span>Páginas coincidentes</span><b>{new Set(research.sources.map((source) => source.url)).size || '—'}</b></div><div><span>Precios detectados</span><b>{research.listings.length || '—'}</b></div><div><span>Comparables usados</span><b>{research.comparables.length || '—'}</b></div><div><span>Valor estimado</span><b>{research.asking.median == null ? '—' : money(research.asking.median)}</b></div><div><span>Fuentes especializadas</span><b>{research.sources.filter((source) => source.kind.includes('funko-specialist')).length || '—'}</b></div><div><span>Ventas cerradas</span><b>{research.sold.available ? `${research.sold.count || 1}${research.sold.median != null ? ` · ${money(research.sold.median)}` : ''}` : 'No verificadas'}</b></div></div><div className="research-facts">{research.facts.slice(0, 8).map((fact) => <div key={`${fact.label}-${fact.sourceId}`}><b>{fact.label}</b><span>{fact.value}</span></div>)}</div><div className="source-list"><a href={research.links.ebay} target="_blank" rel="noreferrer">Buscar artículo en eBay</a><a href={research.links.sold} target="_blank" rel="noreferrer">Revisar ventas cerradas</a>{research.links.ppg && <a href={research.links.ppg} target="_blank" rel="noreferrer">PPG / hobbyDB</a>}{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.slice(0, 8).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.kind.startsWith('ebay') ? 'eBay público' : 'Fuente'} · {source.title}</a>)}</div>{research.warnings.map((warning) => <small className="warning-line" key={warning}>{warning}</small>)}</div>}
           </section>}
 
           {item && <section className="qr-panel"><div><h3 className="form-section-title"><QrCode/> Etiqueta de la pieza</h3><p className="muted">Escanéala para abrir directamente esta ficha. La ubicación puede cambiar sin cambiar el código.</p><div className="qr-actions"><button type="button" className="secondary" onClick={downloadQr} disabled={!qrDataUrl}><Download size={17}/> Descargar QR</button><button type="button" className="secondary" onClick={printQr} disabled={!qrDataUrl}><Eye size={17}/> Imprimir etiqueta</button></div></div>{qrDataUrl ? <img className="qr-image" src={qrDataUrl} alt={`Código QR de ${item.title}`}/> : <div className="qr-placeholder"><QrCode/></div>}</section>}

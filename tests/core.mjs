@@ -4,6 +4,8 @@ import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWeb
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
+assert.equal(identification.condition,null);
+assert.equal(identification.hasBox,null);
 assert.equal(safeUrl('javascript:alert(1)'),null);
 
 const market = summarizeListings([
@@ -14,7 +16,7 @@ assert.deepEqual(
   {kind:market.kind,currency:market.currency,count:market.count,min:market.min,max:market.max,median:market.median},
   {kind:'asking',currency:'EUR',count:2,min:12,max:20,median:16}
 );
-assert.match(market.label,/no ventas cerradas/i);
+assert.match(market.label,/ventas cerradas/i);
 
 const fakeFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"summary":"Ficha contrastada","facts":[],"comparableIds":[]}'}}]}),{status:200,headers:{'content-type':'application/json'}});
 assert.equal((await deepseek([{role:'user',content:'test'}],{key:'test',fetcher:fakeFetch})).summary,'Ficha contrastada');
@@ -38,7 +40,15 @@ assert.equal(publicListings[1].price,30);
 const shopListings=parsePublicListings([{id:'shop-1',kind:'web',title:'Funko Pop Éomer #1982 - 29,95 €',url:'https://tienda-ejemplo.es/product/eomer-1982',snippet:'En stock · precio 29,95 €'}]);
 assert.equal(shopListings.length,1);
 assert.equal(shopListings[0].price,29.95);
-assert.match(shopListings[0].condition,/Precio público detectado/i);
+assert.match(shopListings[0].condition,/Precio de tienda/i);
+
+// PriceCharting/hobbyDB pueden publicar USD: se convierten a EUR solo con una tasa explícita.
+const guideListings=parsePublicListings([{id:'guide-1',kind:'funko-specialist',title:'Éomer #1982 Funko POP Movies $20.00',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982',snippet:'CIB Price $20.00'}],{USD_EUR:0.85});
+assert.equal(guideListings.length,1);
+assert.equal(guideListings[0].price,17);
+assert.equal(guideListings[0].currency,'EUR');
+assert.equal(guideListings[0].sourceType,'guide');
+assert.match(guideListings[0].condition,/Guía de valoración/i);
 
 // Con varias fotos: una consulta visual por foto + una fusión textual final.
 const identifyBodies=[];
@@ -99,6 +109,14 @@ assert.match(appSource,/const \[pendingPhotos, setPendingPhotos\] = useState<Fil
 assert.match(appSource,/pendingPhotos\.slice\(0, room\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/disabled=\{busy \|\| photoPreparing \|\| !draft\.title\.trim\(\)\}/);
 assert.doesNotMatch(inventorySource,/getDocFromServer/);
+
+assert.match(appSource,/PPG \/ hobbyDB/);
+assert.match(appSource,/País \/ mercado de la edición/);
+assert.match(appSource,/Idioma de la edición/);
+const coreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
+assert.match(coreSource,/PriceCharting/);
+assert.match(coreSource,/funko-specialist/);
+assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 
 
 console.log('core tests ok');
