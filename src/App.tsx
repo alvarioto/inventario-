@@ -460,7 +460,7 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
       barcode: result.barcode || barcode,
       isbn: result.isbn,
       sku: result.sku,
-      popNumber: result.popNumber,
+      popNumber: result.popNumber || result.title.match(/#\s*(\d{1,5})\b/)?.[1] || '',
       funkoCategory: result.funkoCategory,
       funkoVariant: result.funkoVariant,
       country: result.country,

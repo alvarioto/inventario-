@@ -136,6 +136,31 @@ assert.equal(fallbackResearch.listings.length,1);
 assert.equal(fallbackResearch.asking.count,1);
 assert.match(fallbackResearch.summary,/Valoración calculada localmente|única identidad/i);
 
+// La consulta REAL enviada al buscador de PriceCharting debe conservar nombre + número,
+// incluso si popNumber no venía guardado pero sí aparece en el título.
+let exactPcPrompts=[];
+const exactPcQueryFetch=async(url,init)=>{
+ if(String(url).includes('/anthropic/v1/messages')){
+  const body=JSON.parse(init.body);
+  exactPcPrompts.push(String(body.messages?.[0]?.content||''));
+  const prompt=String(body.messages?.[0]?.content||'');
+  if(prompt.includes('MODO PRICECHARTING')) return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[{type:'web_search_result',title:'Eomer #1982 Prices | Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982',cited_text:'Eomer #1982 · In Box $16.00'}]}]}),{status:200,headers:{'content-type':'application/json'}});
+  return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[]}]}),{status:200,headers:{'content-type':'application/json'}});
+ }
+ if(String(url).includes('frankfurter.dev'))return new Response(JSON.stringify({rate:.9}),{status:200,headers:{'content-type':'application/json'}});
+ return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
+};
+const exactPcQueryResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies'}},{key:'test',fetcher:exactPcQueryFetch});
+assert.equal(exactPcQueryResearch.searchIdentity,'Éomer 1982');
+const exactPcPrompt=exactPcPrompts.find(x=>x.includes('MODO PRICECHARTING'))||'';
+assert.ok(exactPcPrompt,'No se ejecutó la llamada específica de PriceCharting');
+assert.match(exactPcPrompt,/^Busca precios actuales para: Eomer 1982\./);
+assert.match(exactPcPrompt,/NO puedes quitarlo ni buscar solo el nombre/);
+assert.match(exactPcPrompt,/q=Eomer%201982/);
+assert.equal(exactPcQueryResearch.asking.count,1);
+assert.equal(exactPcQueryResearch.asking.median,14.4);
+assert.equal(exactPcQueryResearch.comparables[0].url,'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982');
+
 // Regresión realista: si DeepSeek devuelve primero una página genérica de PriceCharting
 // y después la ficha exacta con precio, la ficha exacta debe ganar y producir valoración.
 let realPcSearchCalls=0;

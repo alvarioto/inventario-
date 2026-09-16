@@ -427,9 +427,17 @@ function webSearchSources(response){
 export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetcher=fetch,searchMode='general'}){
  if(!key)throw new Error('Falta configurar DEEPSEEK_API_KEY en el servidor.');
  const specialistInstruction=searchMode==='identity'?'\n\nMODO IDENTIDAD: NO tasar todavía. Localiza el PRODUCTO EXACTO usando prioritariamente referencia/SKU/Item No., EAN/UPC, fabricante y texto literal de la caja. Busca páginas de producto concretas y devuelve citas donde aparezca el nombre comercial real. No describas la fotografía (dorso, caja, etiqueta, código de barras) como si fuera el nombre del producto.':searchMode==='pricecharting'?'\n\nMODO PRICECHARTING: busca primero y de forma prioritaria una ficha INDIVIDUAL del producto exacto en pricecharting.com. Devuelve cualquier precio público visible (Loose/OOB, CIB/In Box, New) con su importe explícito y cita esa ficha. No uses hobbyDB ni páginas con CAPTCHA, acceso denegado o error. Si no hay una coincidencia exacta en PriceCharting, indícalo buscando otra ficha del mismo sitio antes de abandonar.':searchMode==='funko'?'\n\nMODO FUNKO: PriceCharting es la primera fuente especializada. Después contrasta únicamente con StockX y eBay vendidos/completados. No uses tiendas públicas, hobbyDB ni ningún otro dominio. Distingue OOB/loose, con caja/CIB y nuevo. Solo llames venta cerrada a una página que lo indique explícitamente. Evita lotes, accesorios y variantes distintas. Si el precio está en USD, conserva USD; la aplicación lo convertirá a EUR con referencia ECB.': '';
+ const exactQuery=String(query||'').replace(/\s+/g,' ').trim();
+ const queryHasNumber=/\b\d{1,5}\b/.test(exactQuery);
+ const forcedQueryInstruction=queryHasNumber
+  ?`\n\nCONSULTA OBLIGATORIA: usa exactamente "${exactQuery}". El número forma parte de la identidad del Funko y NO puedes quitarlo ni buscar solo el nombre. Ejemplo: si recibes "Eomer 1982", la consulta debe ser "Eomer 1982", nunca "Eomer" ni "Eomer Funko Pop".`
+  :'';
+ const priceChartingExact=searchMode==='pricecharting'
+  ?`\n\nPRICECHARTING EXACTO: consulta específicamente esta búsqueda y no la reformules: https://www.pricecharting.com/search-products?type=prices&q=${encodeURIComponent(exactQuery)}`
+  :'';
  const requestText=searchMode==='identity'
   ?`Identifica el nombre comercial exacto de este artículo de colección a partir de sus códigos y referencias: ${query}. Busca coincidencias literales de SKU/Item No./EAN/UPC y fabricante. Necesito fuentes que permitan saber QUÉ PRODUCTO ES; todavía no busques una tasación. Si una página solo describe una caja, etiqueta o fotografía, no la uses como nombre del producto.${specialistInstruction}`
-  :`Busca precios actuales para: ${query}. Consulta EXCLUSIVAMENTE estas tres fuentes: PriceCharting (pricecharting.com), StockX (stockx.com) y eBay (ebay.*). NO uses tiendas, blogs, hobbyDB, Wallapop, TodoColeccion, Catawiki, Vinted, Amazon ni ningún otro dominio. Haz como máximo TRES búsquedas internas: una para PriceCharting, una para StockX y una para eBay. En cada sitio parte exactamente del nombre corto recibido; no lo amplíes con EAN, SKU, franquicia, año o edición salvo que ya formen parte literal de ese nombre. Devuelve cada precio en un párrafo separado con una única cita, para poder asociar importe y fuente sin ambigüedad. Para cada precio útil conserva importe, moneda, título y URL. En eBay distingue vendido/completado de anuncio activo solo si la página lo indica. Descarta lotes, accesorios, cajas vacías y variantes claramente distintas. Si una de las tres fuentes no tiene coincidencia, continúa con las otras dos sin buscar una cuarta.${specialistInstruction}`;
+  :`Busca precios actuales para: ${exactQuery}. Consulta EXCLUSIVAMENTE estas tres fuentes: PriceCharting (pricecharting.com), StockX (stockx.com) y eBay (ebay.*). NO uses tiendas, blogs, hobbyDB, Wallapop, TodoColeccion, Catawiki, Vinted, Amazon ni ningún otro dominio. Haz como máximo TRES búsquedas internas: una para PriceCharting, una para StockX y una para eBay. En cada sitio parte exactamente del nombre corto recibido; no lo amplíes con EAN, SKU, franquicia, año o edición salvo que ya formen parte literal de ese nombre. Devuelve cada precio en un párrafo separado con una única cita, para poder asociar importe y fuente sin ambigüedad. Para cada precio útil conserva importe, moneda, título y URL. En eBay distingue vendido/completado de anuncio activo solo si la página lo indica. Descarta lotes, accesorios, cajas vacías y variantes claramente distintas. Si una de las tres fuentes no tiene coincidencia, continúa con las otras dos sin buscar una cuarta.${forcedQueryInstruction}${priceChartingExact}${specialistInstruction}`;
  const response=await fetcher('https://api.deepseek.com/anthropic/v1/messages',{
   method:'POST',
   headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json'},
@@ -443,7 +451,7 @@ export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetche
    tools:[{
     type:'web_search_20250305',
     name:'web_search',
-    max_uses:searchMode==='pricecharting'?2:3,
+    max_uses:searchMode==='pricecharting'?1:3,
     user_location:{type:'approximate',country:'ES',timezone:'Europe/Madrid'}
    }],
    tool_choice:{type:'auto'},
@@ -784,7 +792,7 @@ export async function identify(input,config){
   ...rows.map((url,index)=>({type:'image_url',image_url:{url},detail:index===0?'high':'low'}))
  ];
  const call=rows=>deepseek([
-  {role:'system',content:system},
+  {role:'system',content:system+' En Funko revisa expresamente TODAS las fotos para localizar el número Pop. Si aparece un número Pop visible, popNumber no puede quedar vacío. No lo confundas con Item No./SKU.'},
   {role:'user',content:makeContent(rows)}
  ],{...config,maxTokens:1200,timeoutMs:30000,retries:1,jsonMode:false});
  let result;
@@ -808,6 +816,10 @@ export async function identify(input,config){
 export async function research(input,config){
  let {item}=researchSchema.parse(input);
  const isFunko=item.type==='funko'||/\bfunko\b|\bpop!?\b/i.test(`${item.title||''} ${item.manufacturer||''} ${item.line||''}`);
+ // Antes de construir la consulta, vuelve a derivar los campos Funko. Esto recupera
+ // el número Pop desde un título como "Éomer #1982" aunque una ficha antigua no
+ // tenga todavía popNumber guardado.
+ if(isFunko)item=deriveFunkoFields({...item,type:'funko'});
  let identity=buildResearchIdentity(item)||String(item.title||'').trim();
  const fetcher=config.fetcher||fetch;
  const warnings=[];
@@ -830,7 +842,10 @@ export async function research(input,config){
  // un precio exacto visible, no se consulta ningún otro marketplace.
  if(config.key){
   try{
-   const exactQuery=identity.trim();
+   // PriceCharting responde mejor sin adornos de marca. Conservamos la identidad
+   // visible, pero la consulta externa para Funko es SIEMPRE nombre + número + variante.
+   // También quitamos tildes para no degradar el buscador de PriceCharting.
+   const exactQuery=(isFunko?identity.normalize('NFD').replace(/[\u0300-\u036f]/g,''):identity).trim();
    let hasExactVisiblePrice=priceChartingListings.length>0;
 
    if(isFunko&&!hasExactVisiblePrice){
