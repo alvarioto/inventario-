@@ -28,3 +28,4 @@ jobs:
           git add -A
           git commit -m "Normalize AI condition values"
           git push
+# trigger
