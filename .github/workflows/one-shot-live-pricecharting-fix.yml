@@ -17,7 +17,9 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply live pricing fix
-        run: node scripts/fix-live-pricecharting-search.mjs
+        run: |
+          sed -i "s/const files=\['src\/lib\/ai-core.mjs','server\/core.mjs'\]/const files=['src\/lib\/ai-core.mjs']/" scripts/fix-live-pricecharting-search.mjs
+          node scripts/fix-live-pricecharting-search.mjs
       - run: npm ci
       - run: npm test
       - run: npm run build
