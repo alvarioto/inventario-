@@ -27,3 +27,4 @@ jobs:
           git add -A
           git commit -m "Restrict Funko pricing sources"
           git push
+# trigger
