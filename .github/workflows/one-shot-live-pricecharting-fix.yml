@@ -1,0 +1,32 @@
+name: Apply live PriceCharting parser fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/fix-live-pricecharting-search.mjs
+      - .github/workflows/one-shot-live-pricecharting-fix.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply live pricing fix
+        run: node scripts/fix-live-pricecharting-search.mjs
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit validated fix
+        run: |
+          rm scripts/fix-live-pricecharting-search.mjs
+          rm .github/workflows/one-shot-live-pricecharting-fix.yml
+          git config user.name alvarioto
+          git config user.email aldipo7292@gmail.com
+          git add -A
+          git commit -m "Fix live PriceCharting price extraction"
+          git push
