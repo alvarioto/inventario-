@@ -1,0 +1,17 @@
+@media (max-width: 640px) {
+  .camera-actions {
+    flex-wrap: wrap;
+  }
+
+  .camera-actions > .secondary {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+  }
+
+  .camera-actions > .ai-button {
+    display: inline-flex;
+    flex: 1 0 100%;
+    width: 100%;
+    min-width: 0;
+  }
+}
