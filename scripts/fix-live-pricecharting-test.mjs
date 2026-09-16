@@ -5,5 +5,9 @@ const old="const pcTextOnlyListings=parsePublicListings(pcTextOnlySources,{USD_E
 const next="const pcTextOnlyListings=parsePublicListings(pcTextOnlySources.map(source=>({...source,snippet:source.description||''})),{USD_EUR:.9});";
 if(!t.includes(old)) throw new Error('PriceCharting text-only regression line not found');
 t=t.replace(old,next);
+const oldPrompt="assert.match(exactPcPrompt,/^Busca precios actuales para: Eomer 1982\\./);";
+const newPrompt="assert.match(exactPcPrompt,/^Busca EXCLUSIVAMENTE en PriceCharting el producto \\\"Eomer 1982\\\"\\./);";
+if(!t.includes(oldPrompt)) throw new Error('PriceCharting exact prompt assertion not found');
+t=t.replace(oldPrompt,newPrompt);
 fs.writeFileSync(path,t);
 console.log('PriceCharting text-only regression test fixed');
