@@ -39,3 +39,4 @@ jobs:
           git add -A
           git commit -m "Fix DeepSeek analyze request"
           git push
+# one-shot trigger
