@@ -9,7 +9,7 @@ concurrency:
   group: firebase-production
   cancel-in-progress: true
 # Siempre publica únicamente la revisión más reciente de main ya validada por tests y build.
-# Este push publica valoración Funko especializada, autorrelleno ampliado y bloqueo del desplazamiento horizontal móvil.
+# Este push publica análisis multifoto en paralelo, reintento de respuestas vacías y fallback seguro de identificación.
 jobs:
   deploy:
     runs-on: ubuntu-latest
