@@ -16,7 +16,7 @@ import { deleteDemo, saveDemo, subscribeDemo } from './demo';
 import type { AiIdentification, InventoryDraft, InventoryItem } from '../types';
 
 const MAX_FIRESTORE_PHOTOS = 5;
-const TARGET_PHOTO_BYTES = 80 * 1024;
+const TARGET_PHOTO_BYTES = 92 * 1024;
 
 export function subscribeItems(callback: (items: InventoryItem[]) => void, onError?: (e: Error) => void) {
   if (demoMode || !db || !auth?.currentUser) return subscribeDemo(callback);
@@ -125,7 +125,7 @@ async function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality: nu
  * por debajo del límite de 1 MiB por documento.
  */
 export async function uploadItemImage(file: File) {
-  const url = await compressPhotoToDataUrl(file, TARGET_PHOTO_BYTES, 1280);
+  const url = await compressPhotoToDataUrl(file, TARGET_PHOTO_BYTES, 1600);
   return { path: '', url };
 }
 
@@ -135,43 +135,72 @@ async function compressPhotoToDataUrl(file: File, targetBytes: number, maxDimens
   let loaded: LoadedImage | null = null;
   try {
     loaded = await loadImage(file);
-    const scale = Math.min(1, maxDimension / Math.max(loaded.width, loaded.height));
-    const width = Math.max(1, Math.round(loaded.width * scale));
-    const height = Math.max(1, Math.round(loaded.height * scale));
-    const canvas = document.createElement('canvas');
+    const initialScale = Math.min(1, maxDimension / Math.max(loaded.width, loaded.height));
+    let width = Math.max(1, Math.round(loaded.width * initialScale));
+    let height = Math.max(1, Math.round(loaded.height * initialScale));
+
+    let canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
-    const ctx = canvas.getContext('2d');
+    let ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('No se pudo procesar la foto');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(loaded.source, 0, 0, width, height);
 
-    let quality = 0.82;
-    let blob = await canvasToBlob(canvas, 'image/jpeg', quality);
-    while (blob && blob.size > targetBytes && quality > 0.34) {
-      quality -= 0.08;
+    // Primero conservamos la máxima resolución posible y bajamos calidad muy poco.
+    // Solo cuando hace falta reducimos dimensiones gradualmente. Así una foto de un
+    // iPhone de muchos megapíxeles nunca se rechaza por pesar demasiado.
+    let quality = 0.9;
+    let blob: Blob | null = null;
+    for (let pass = 0; pass < 18; pass++) {
       blob = await canvasToBlob(canvas, 'image/jpeg', quality);
-    }
-    if (!blob) throw new Error('No se pudo comprimir la foto');
+      if (!blob) throw new Error('No se pudo comprimir la foto');
+      if (blob.size <= targetBytes) return blobToDataUrl(blob);
 
-    // Segundo escalado si la escena es especialmente compleja.
-    if (blob.size > targetBytes * 1.25) {
-      const shrink = Math.max(0.45, Math.sqrt(targetBytes / blob.size));
-      const smaller = document.createElement('canvas');
-      smaller.width = Math.max(420, Math.round(width * shrink));
-      smaller.height = Math.max(420, Math.round(height * shrink));
-      const sctx = smaller.getContext('2d');
-      if (sctx) {
-        sctx.drawImage(canvas, 0, 0, smaller.width, smaller.height);
-        blob = await canvasToBlob(smaller, 'image/jpeg', 0.62) || blob;
+      if (quality > 0.68) {
+        quality = Math.max(0.68, quality - 0.055);
+        continue;
       }
+
+      const ratio = Math.min(0.9, Math.max(0.72, Math.sqrt(targetBytes / blob.size) * 0.96));
+      const nextWidth = Math.max(420, Math.round(width * ratio));
+      const nextHeight = Math.max(420, Math.round(height * ratio));
+      if (nextWidth === width && nextHeight === height) {
+        quality = Math.max(0.42, quality - 0.06);
+        continue;
+      }
+
+      const smaller = document.createElement('canvas');
+      smaller.width = nextWidth;
+      smaller.height = nextHeight;
+      const smallerCtx = smaller.getContext('2d');
+      if (!smallerCtx) throw new Error('No se pudo redimensionar la foto');
+      smallerCtx.imageSmoothingEnabled = true;
+      smallerCtx.imageSmoothingQuality = 'high';
+      smallerCtx.drawImage(canvas, 0, 0, nextWidth, nextHeight);
+      canvas = smaller;
+      ctx = smallerCtx;
+      width = nextWidth;
+      height = nextHeight;
+      quality = 0.82;
     }
 
-    // Una foto en base64 crece aproximadamente un 33 %. Este margen mantiene las
-    // cinco imágenes dentro del límite de Firestore junto con el resto de la ficha.
-    if (blob.size > 120 * 1024) {
-      throw new Error('La foto sigue siendo demasiado grande para guardarla. Hazla de nuevo con algo menos de detalle.');
+    // Último salvavidas: incluso una imagen extremadamente compleja se adapta en vez
+    // de impedir el guardado del artículo.
+    const finalScale = Math.min(1, 720 / Math.max(width, height));
+    if (finalScale < 1) {
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = Math.max(360, Math.round(width * finalScale));
+      finalCanvas.height = Math.max(360, Math.round(height * finalScale));
+      const finalCtx = finalCanvas.getContext('2d');
+      if (!finalCtx) throw new Error('No se pudo adaptar la foto');
+      finalCtx.imageSmoothingEnabled = true;
+      finalCtx.imageSmoothingQuality = 'high';
+      finalCtx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+      blob = await canvasToBlob(finalCanvas, 'image/jpeg', 0.58);
     }
-
+    if (!blob) throw new Error('No se pudo preparar la foto para guardar.');
     return blobToDataUrl(blob);
   } finally {
     loaded?.close();

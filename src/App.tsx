@@ -113,6 +113,7 @@ function App() {
   const [formSeed, setFormSeed] = useState<Partial<InventoryDraft> | undefined>();
   const [formPhotos, setFormPhotos] = useState<File[]>([]);
   const [toast, setToast] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
 
   useEffect(() => {
     if (demoMode || !auth) return;
@@ -203,11 +204,12 @@ function App() {
           seed={formSeed}
           initialPhotos={formPhotos}
           onClose={() => { setFormItem(undefined); setFormSeed(undefined); setFormPhotos([]); }}
-          onSaved={() => { showToast('Guardado'); setFormItem(undefined); setFormSeed(undefined); setFormPhotos([]); }}
+          onSaved={() => { setFormItem(undefined); setFormSeed(undefined); setFormPhotos([]); setSaveNotice('El artículo y sus fotos se han guardado correctamente.'); }}
           onDeleted={() => { showToast('Eliminado'); setFormItem(undefined); setFormSeed(undefined); setFormPhotos([]); }}
         />
       )}
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
+      {saveNotice && <div className="result-modal-backdrop" role="dialog" aria-modal="true" aria-label="Guardado correctamente"><div className="result-modal success"><div className="result-modal-icon"><Check/></div><h3>Guardado correctamente</h3><p>{saveNotice}</p><button className="primary wide" onClick={() => setSaveNotice('')}>Aceptar</button></div></div>}
     </div>
   );
 }
@@ -361,23 +363,36 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AiIdentification | null>(null);
   const [barcode, setBarcode] = useState('');
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const photoLimit = maxCloudPhotos();
 
-  async function addPicked(next: File | null) {
-    if (!next) return;
-    if (files.length >= photoLimit) {
-      showToast(`Puedes usar hasta ${photoLimit} fotos por artículo.`);
+  async function addPicked(picked: File[]) {
+    if (!picked.length || photoBusy) return;
+    const room = Math.max(0, photoLimit - files.length);
+    const selected = picked.filter((file) => !file.type || file.type.startsWith('image/')).slice(0, room);
+    if (!selected.length) {
+      if (files.length >= photoLimit) showToast(`Puedes usar hasta ${photoLimit} fotos por artículo.`);
       return;
     }
+    setPhotoBusy(true);
     setResult(null);
-    const prepared = await prepareImage(next);
-    const preview = await fileToDataUrl(prepared);
-    setFiles((current) => [...current, prepared]);
-    setPreviews((current) => [...current, preview]);
-    const code = await tryReadBarcode(prepared);
-    if (code) setBarcode((current) => current || code);
-    if (inputRef.current) inputRef.current.value = '';
+    try {
+      const prepared = await Promise.all(selected.map((file) => prepareImage(file)));
+      const previewRows = await Promise.all(prepared.map(fileToDataUrl));
+      setFiles((current) => [...current, ...prepared].slice(0, photoLimit));
+      setPreviews((current) => [...current, ...previewRows].slice(0, photoLimit));
+      const codes = await Promise.all(prepared.map(tryReadBarcode));
+      const code = codes.find(Boolean);
+      if (code) setBarcode((current) => current || code || '');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se pudieron preparar las fotos.');
+    } finally {
+      setPhotoBusy(false);
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      if (uploadInputRef.current) uploadInputRef.current.value = '';
+    }
   }
 
   async function removePhoto(index: number) {
@@ -458,7 +473,8 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
       <div className="page-heading"><div><span className="eyebrow">CAPTURA INTELIGENTE</span><h1>Escanear objeto</h1><p>Haz varias fotos del mismo artículo. La IA analizará todas juntas para identificarlo con más precisión.</p></div></div>
       <div className="scan-layout">
         <div className="camera-card">
-          <input ref={inputRef} hidden type="file" accept="image/*" capture="environment" onChange={(e) => addPicked(e.target.files?.[0] || null)} />
+          <input ref={cameraInputRef} hidden type="file" accept="image/*" capture="environment" onChange={(e) => addPicked(e.target.files ? [...e.target.files] : [])} />
+          <input ref={uploadInputRef} hidden type="file" accept="image/*" multiple onChange={(e) => addPicked(e.target.files ? [...e.target.files] : [])} />
           {previews.length ? <>
             <img className="scan-preview" src={previews[0]} alt="Vista principal del objeto"/>
             <div className="scan-photo-strip">
@@ -471,11 +487,11 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
                   <button type="button" title="Eliminar foto" onClick={() => removePhoto(index)}><X size={14}/></button>
                 </div>
               </div>)}
-              {files.length < photoLimit && <button type="button" className="scan-add-photo" onClick={() => inputRef.current?.click()}><ImagePlus/><span>Otra foto</span></button>}
+              {files.length < photoLimit && <button type="button" className="scan-add-photo" onClick={() => cameraInputRef.current?.click()}><Camera/><span>Otra foto</span></button>}
             </div>
             <p className="scan-photo-help"><b>{files.length}/{photoLimit} fotos.</b> Haz frontal, trasera, caja, etiqueta o código de barras. Todas se envían juntas a la IA.</p>
           </> : <div className="camera-placeholder"><div className="scan-frame"><ScanLine/></div><h2>Fotografía el artículo desde varios ángulos</h2><p>Empieza por el frontal y añade después caja, parte trasera, etiquetas, texto o código de barras.</p></div>}
-          <div className="camera-actions"><button className="secondary" onClick={() => inputRef.current?.click()} disabled={files.length >= photoLimit}><Camera size={19}/>{files.length ? 'Hacer otra foto' : 'Abrir cámara'}</button><button className="ai-button" onClick={identify} disabled={!files.length || busy}><WandSparkles size={19}/>{busy ? 'Analizando…' : `Identificar con IA${files.length > 1 ? ` · ${files.length} fotos` : ''}`}</button></div>
+          <div className="camera-actions"><button className="secondary" onClick={() => cameraInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy}><Camera size={19}/>{files.length ? 'Hacer otra foto' : 'Abrir cámara'}</button><button className="secondary" onClick={() => uploadInputRef.current?.click()} disabled={files.length >= photoLimit || photoBusy}><Upload size={19}/>{photoBusy ? 'Preparando…' : 'Subir fotos'}</button><button className="ai-button" onClick={identify} disabled={!files.length || busy || photoBusy}><WandSparkles size={19}/>{busy ? 'Analizando…' : `Identificar con IA${files.length > 1 ? ` · ${files.length} fotos` : ''}`}</button></div>
         </div>
         <div className="scan-side">
           <div className="panel scan-result">
@@ -556,6 +572,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [previews, setPreviews] = useState<string[]>(initial.imageUrls || []);
   const [photoPreparing, setPhotoPreparing] = useState(false);
   const [photoError, setPhotoError] = useState('');
+  const [saveErrorModal, setSaveErrorModal] = useState('');
   const initialPhotosHandled = useRef(false);
   const [research, setResearch] = useState<ResearchResult | undefined>(item?.research);
   const [researchBusy, setResearchBusy] = useState(false);
@@ -593,7 +610,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   }, [item?.id]);
   const [busy, setBusy] = useState(false);
   const [advanced, setAdvanced] = useState(Boolean(item));
-  const photoRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
+  const galleryRef = useRef<HTMLInputElement | null>(null);
   const set = <K extends keyof InventoryDraft>(key: K, value: InventoryDraft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
   async function addPhotos(files: FileList | null) {
@@ -621,7 +639,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       setPhotoError(error instanceof Error ? error.message : 'No se pudieron preparar las fotos para guardar.');
     } finally {
       setPhotoPreparing(false);
-      if (photoRef.current) photoRef.current.value = '';
+      if (cameraRef.current) cameraRef.current.value = '';
+      if (galleryRef.current) galleryRef.current.value = '';
     }
   }
 
@@ -651,7 +670,9 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       setPendingPhotos([]);
       onSaved();
     } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : 'No se pudo guardar el artículo.');
+      const message = error instanceof Error ? error.message : 'No se pudo guardar el artículo.';
+      setPhotoError(message);
+      setSaveErrorModal(message);
     } finally { setBusy(false); }
   }
 
@@ -692,7 +713,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       <form className="item-sheet" onSubmit={submit}>
         <div className="sheet-head"><div><span className="eyebrow">{item ? 'EDITAR OBJETO' : 'NUEVO OBJETO'}</span><h2>{item ? item.title : 'Añadir a FrikiVault'}</h2></div><button type="button" className="icon-button" onClick={onClose}><X/></button></div>
         <div className="sheet-scroll">
-          <section className="photo-section"><div className="photo-strip">{previews.map((url,i)=><div className="photo-thumb" key={`${url.slice(0,25)}-${i}`}><img src={url}/></div>)}<button type="button" className="add-photo" disabled={photoPreparing || previews.length >= maxCloudPhotos()} onClick={()=>photoRef.current?.click()}><ImagePlus/><span>{photoPreparing ? 'Procesando…' : 'Foto'}</span></button></div><input ref={photoRef} hidden type="file" accept="image/*" capture="environment" multiple onChange={(e)=>addPhotos(e.target.files)}/>{photoPreparing && <small className="muted">Preparando las fotos para guardarlas en Firebase…</small>}{photoError && <div className="error-box">{photoError}</div>}</section>
+          <section className="photo-section"><div className="photo-strip">{previews.map((url,i)=><div className="photo-thumb" key={`${url.slice(0,25)}-${i}`}><img src={url}/></div>)}<button type="button" className="add-photo" disabled={photoPreparing || previews.length >= maxCloudPhotos()} onClick={()=>cameraRef.current?.click()}><Camera/><span>{photoPreparing ? 'Procesando…' : 'Cámara'}</span></button><button type="button" className="add-photo" disabled={photoPreparing || previews.length >= maxCloudPhotos()} onClick={()=>galleryRef.current?.click()}><Upload/><span>Subir fotos</span></button></div><input ref={cameraRef} hidden type="file" accept="image/*" capture="environment" onChange={(e)=>addPhotos(e.target.files)}/><input ref={galleryRef} hidden type="file" accept="image/*" multiple onChange={(e)=>addPhotos(e.target.files)}/>{photoPreparing && <small className="muted">Adaptando resolución y peso de las fotos automáticamente…</small>}{photoError && <div className="error-box">{photoError}</div>}</section>
 
           <div className="form-grid">
             <Field label="Nombre *" wide><input required value={draft.title} onChange={(e)=>set('title',e.target.value)} placeholder="Ej. S.H.Figuarts Son Goku"/></Field>
@@ -734,6 +755,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         </div>
         <div className="sheet-foot">{item ? <button type="button" className="danger" onClick={destroy} disabled={busy}><Trash2 size={18}/> Eliminar</button> : <span/>}<div><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button className="primary" disabled={busy || photoPreparing || !draft.title.trim()}><Check size={18}/>{busy ? 'Guardando…' : photoPreparing ? 'Preparando fotos…' : 'Guardar'}</button></div></div>
       </form>
+      {saveErrorModal && <div className="result-modal-backdrop nested" role="dialog" aria-modal="true" aria-label="Error al guardar" onMouseDown={(event) => event.stopPropagation()}><div className="result-modal error"><div className="result-modal-icon"><X/></div><h3>No se ha podido guardar</h3><p>{saveErrorModal}</p><button className="secondary wide" type="button" onClick={() => setSaveErrorModal('')}>Volver y reintentar</button></div></div>}
     </div>
   );
 }
