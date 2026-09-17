@@ -20,7 +20,7 @@ function hobbyDbSourceUrl(research?:ResearchResult){
   try{
    const url=new URL(raw);
    const host=url.hostname.toLowerCase().replace(/^www\./,'');
-   if(host==='hobbydb.com'&&/\/catalog_items\/[^/?#]+/i.test(url.pathname))return url.href;
+   if(host==='hobbydb.com'&&/\/marketplaces\/hobbydb\/catalog_items(?:\/|$)/i.test(url.pathname))return url.href;
   }catch{}
  }
  return '';
