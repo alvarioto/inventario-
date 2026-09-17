@@ -256,6 +256,7 @@ const orientativeFunko=await research({confirmed:true,item:{title:'Funko Pop! Mo
 assert.equal(orientativeAiCalls,1);
 assert.equal(orientativeFunko.asking.median,17.5);
 assert.match(orientativeFunko.summary,/Estimación orientativa/i);
+assert.match(orientativeFunko.comparables[0].url,/hobbydb\.com/);
 
 // Incluso si también falla la estimación IA, la ficha conserva un valor base orientativo.
 const totalFailureFetch=async(url)=>{

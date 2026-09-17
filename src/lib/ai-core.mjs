@@ -461,7 +461,7 @@ export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetche
   ?`Identifica el nombre comercial exacto de este artículo de colección a partir de sus códigos y referencias: ${query}. Busca coincidencias literales de SKU/Item No./EAN/UPC y fabricante. Necesito fuentes que permitan saber QUÉ PRODUCTO ES; todavía no busques una tasación. Si una página solo describe una caja, etiqueta o fotografía, no la uses como nombre del producto.${specialistInstruction}`
   :searchMode==='pricecharting'
    ?`Busca EXCLUSIVAMENTE en PriceCharting el producto "${exactQuery}". Usa exactamente nombre + número tal como lo recibes y NO añadas "Funko Pop", EAN, SKU, franquicia ni otras palabras. Prioriza una ficha individual /game/funko-pop-* frente a una página de búsqueda. Devuelve en el texto final el título exacto, la URL exacta y todos los precios públicos visibles que encuentres (Out of Box/Loose, In Box/CIB y New), manteniendo el símbolo $ y los decimales. Si encuentras la ficha exacta, no busques ninguna otra web.${forcedQueryInstruction}${priceChartingExact}${specialistInstruction}`
-   :`Busca precios actuales para: ${exactQuery}. Consulta EXCLUSIVAMENTE estas tres fuentes: ${searchMode==='funko'?'hobbyDB/Pop Price Guide (hobbydb.com), StockX (stockx.com) y eBay (ebay.*)':'PriceCharting (pricecharting.com), StockX (stockx.com) y eBay (ebay.*)' }. ${searchMode==='funko'?'NO uses PriceCharting, tiendas, blogs, Wallapop, TodoColeccion, Catawiki, Vinted, Amazon ni ningún otro dominio.':'NO uses tiendas, blogs, hobbyDB, Wallapop, TodoColeccion, Catawiki, Vinted, Amazon ni ningún otro dominio.'} Haz como máximo TRES búsquedas internas: una para PriceCharting, una para StockX y una para eBay. En cada sitio parte exactamente del nombre corto recibido; no lo amplíes con EAN, SKU, franquicia, año o edición salvo que ya formen parte literal de ese nombre. Devuelve cada precio en un párrafo separado con una única cita, para poder asociar importe y fuente sin ambigüedad. Para cada precio útil conserva importe, moneda, título y URL. En eBay distingue vendido/completado de anuncio activo solo si la página lo indica. Descarta lotes, accesorios, cajas vacías y variantes claramente distintas. Si una de las tres fuentes no tiene coincidencia, continúa con las otras dos sin buscar una cuarta.${forcedQueryInstruction}${priceChartingExact}${specialistInstruction}`;
+   :`Busca precios actuales para: ${exactQuery}. Consulta EXCLUSIVAMENTE estas tres fuentes: ${searchMode==='funko'?'hobbyDB/Pop Price Guide (hobbydb.com), StockX (stockx.com) y eBay (ebay.*)':'PriceCharting (pricecharting.com), StockX (stockx.com) y eBay (ebay.*)' }. ${searchMode==='funko'?'NO uses PriceCharting, tiendas, blogs, Wallapop, TodoColeccion, Catawiki, Vinted, Amazon ni ningún otro dominio.':'NO uses tiendas, blogs, hobbyDB, Wallapop, TodoColeccion, Catawiki, Vinted, Amazon ni ningún otro dominio.'} Haz como máximo TRES búsquedas internas: ${searchMode==='funko'?'una para hobbyDB, una para StockX y una para eBay':'una para PriceCharting, una para StockX y una para eBay'}. En cada sitio parte exactamente del nombre corto recibido; no lo amplíes con EAN, SKU, franquicia, año o edición salvo que ya formen parte literal de ese nombre. Devuelve cada precio en un párrafo separado con una única cita, para poder asociar importe y fuente sin ambigüedad. Para cada precio útil conserva importe, moneda, título y URL. En eBay distingue vendido/completado de anuncio activo solo si la página lo indica. Descarta lotes, accesorios, cajas vacías y variantes claramente distintas. Si una de las tres fuentes no tiene coincidencia, continúa con las otras dos sin buscar una cuarta.${forcedQueryInstruction}${priceChartingExact}${specialistInstruction}`;
  const response=await fetcher('https://api.deepseek.com/anthropic/v1/messages',{
   method:'POST',
   headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json'},
@@ -862,13 +862,12 @@ export async function research(input,config){
   }catch{}
  }
 
- // Para Funko no se dispersa la búsqueda: PriceCharting va primero y, si ya aporta
- // un precio exacto visible, no se consulta ningún otro marketplace.
+ // Para Funko hacemos una única búsqueda pública: hobbyDB/PPG identifica la pieza
+ // y eBay/StockX aportan el precio visible si el Price Guide exige login.
  if(config.key){
   try{
-   // PriceCharting responde mejor sin adornos de marca. Conservamos la identidad
-   // visible, pero la consulta externa para Funko es SIEMPRE nombre + número + variante.
-   // También quitamos tildes para no degradar el buscador de PriceCharting.
+   // Para Funko conservamos una identidad mínima: nombre + número + variante.
+   // Quitamos tildes solo en la consulta externa para robustecer la búsqueda.
    const exactQuery=(isFunko?identity.normalize('NFD').replace(/[\u0300-\u036f]/g,''):identity).trim();
    let hasExactVisiblePrice=priceChartingListings.length>0;
 
@@ -931,7 +930,7 @@ export async function research(input,config){
    else if(variant)base*=1.25;
    estimate=Number(base.toFixed(2));
   }
-  const estimateUrl='https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity);
+  const estimateUrl='https://www.hobbydb.com/marketplaces/hobbydb/catalog_items?filters%5Bq%5D%5B0%5D='+encodeURIComponent(identity);
   const estimateRow={
    id:'funko-orientative-estimate',title:`Estimación orientativa · ${identity}`,url:estimateUrl,
    price:estimate,currency:'EUR',shipping:null,condition:'Estimación orientativa · sin cotización pública legible',
