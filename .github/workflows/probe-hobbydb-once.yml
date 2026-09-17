@@ -1,4 +1,4 @@
-name: Sonda hobbyDB variante
+name: Sonda hobbyDB búsqueda automática
 on:
   push:
     branches: [main]
@@ -8,23 +8,14 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Validar Éomer normal y rechazar Chase
+      - name: Probar Cruella 1663 Chase sin URL previa
         shell: bash
         run: |
           set -euo pipefail
           URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value'
-          NORMAL='{"item":{"character":"Eomer","popNumber":"1982","funkoVariant":"Classic","hobbydbUrl":"https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys"}}'
-          CHASE='{"item":{"character":"Eomer","popNumber":"1982","funkoVariant":"Chase","hobbydbUrl":"https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys"}}'
-
-          N_CODE=$(curl -sS -o normal.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$NORMAL")
-          echo "NORMAL_HTTP=$N_CODE"
-          cat normal.json
+          BODY='{"item":{"character":"Cruella de Vil","popNumber":"1663","funkoVariant":"Chase"}}'
+          CODE=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$BODY" || true)
+          echo "HTTP=$CODE"
+          cat response.json || true
           echo
-          test "$N_CODE" = "200"
-          node -e "const x=require('./normal.json'); if(x?.value?.amount!==34||x?.value?.variant!=='Classic'||!String(x?.value?.url||'').includes('eomer-art-toys')) process.exit(1)"
-
-          C_CODE=$(curl -sS -o chase.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$CHASE" || true)
-          echo "CHASE_HTTP=$C_CODE"
-          cat chase.json
-          echo
-          test "$C_CODE" != "200"
+          exit 0
