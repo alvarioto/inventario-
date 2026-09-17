@@ -46,6 +46,7 @@ body{overscroll-behavior-x:none}
 .valuation-highlight.empty>strong{font-size:20px;color:#ffd399}
 .valuation-range{margin-top:8px;font-size:13px;font-weight:700;color:#d9e7f2}
 .valuation-highlight small{display:block;margin-top:8px;line-height:1.45;color:var(--muted)}
+.comparable-price.primary-guide{border-color:rgba(80,215,242,.4);background:rgba(80,215,242,.08)}
 .comparable-prices{margin:16px 0;padding:15px;border-radius:14px;border:1px solid var(--border);background:#0b1322;display:grid;gap:8px}
 .comparable-prices h4{margin:0 0 4px;font-size:13px}
 .comparable-price{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 11px;border:1px solid #26324b;border-radius:11px;text-decoration:none;color:inherit;background:#10192a}

@@ -267,6 +267,8 @@ assert.match(appSource,/País \/ mercado de la edición/);
 assert.match(appSource,/Idioma de la edición/);
 assert.match(appSource,/setTab\('home'\)/);
 assert.match(appSource,/valuation-highlight/);
+assert.match(appSource,/Referencia principal · hobbyDB Price Guide/);
+assert.match(appSource,/Otras referencias orientativas/);
 assert.match(appSource,/Analizar artículo/);
 assert.doesNotMatch(appSource,/Confirmar e investigar|Actualizar investigación/);
 const directAiSource=readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8');
