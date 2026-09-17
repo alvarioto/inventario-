@@ -15,7 +15,14 @@ async function hobbyDbPost(payload:unknown){
  const result=await r.json();if(!r.ok)throw new Error(result.error||`hobbyDB HTTP ${r.status}`);return result;
 }
 function hobbyDbSourceUrl(research?:ResearchResult){
- return research?.sources.find(source=>/https:\/\/(?:www\.)?hobbydb\.com\/marketplaces\/hobbydb\/catalog_items\//i.test(source.url))?.url||'';
+ for(const source of research?.sources||[]){
+  try{
+   const url=new URL(source.url);
+   const host=url.hostname.toLowerCase().replace(/^www\./,'');
+   if(host==='hobbydb.com'&&/\/catalog_items\/[^/?#]+/i.test(url.pathname))return url.href;
+  }catch{}
+ }
+ return '';
 }
 function cleanFunkoIdentification(row:AiIdentification):AiIdentification{
  if(row.type!=='funko')return row;
