@@ -189,6 +189,26 @@ assert.match(hobbyResearch.links.ppg,/hobbydb\.com/);
 assert.match(hobbyResearch.links.ppg,/\?q=/);
 assert.equal(hobbyResearch.links.priceCharting,undefined);
 
+// Dos tarjetas con el mismo personaje/número: la variante de la foto manda.
+const chaseFetch=async(url,init)=>{
+ if(String(url).includes('/anthropic/v1/messages')){
+  const prompt=String(JSON.parse(init.body).messages?.[0]?.content||'');
+  assert.match(prompt,/See Value/);
+  assert.match(prompt,/descartar Classic\/Regular\/Standard/);
+  assert.match(prompt,/Click to See Estimated Value and Historical Price Points/);
+  assert.match(prompt,/NO confundas ese valor con un anuncio de la sección "For Sale or Trade"/);
+  return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
+   {type:'web_search_result',title:'Cruella De Vil Chase | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/cruella-de-vil-chase',cited_text:'Type: Art Toys Brand: Funko Series: Pop! Disney Reference #: 1663 Variant: Chase Cruella De Vil'},
+   {type:'web_search_result',title:'Cruella De Vil Classic | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/cruella-de-vil-classic',cited_text:'Type: Art Toys Brand: Funko Series: Pop! Disney Reference #: 1663 Variant: Classic Cruella De Vil'}
+  ]}]}),{status:200,headers:{'content-type':'application/json'}});
+ }
+ return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
+};
+const chaseResearch=await research({confirmed:true,item:{title:'Funko Pop! Disney Cruella De Vil #1663 Chase',type:'funko',manufacturer:'Funko',character:'Cruella De Vil',line:'Pop! Disney',popNumber:'1663',funkoVariant:'Chase',hasBox:true}},{key:'test',fetcher:chaseFetch});
+assert.equal(chaseResearch.searchIdentity,'Cruella De Vil 1663 Chase');
+assert.ok(chaseResearch.sources.some(source=>source.url.endsWith('cruella-de-vil-chase')));
+assert.ok(!chaseResearch.sources.some(source=>source.url.endsWith('cruella-de-vil-classic')));
+
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
 
 // Funko: la misma identidad corta debe mandar también en los filtros posteriores.
@@ -277,4 +297,3 @@ assert.ok(guaranteedFunko.asking.median>0);
 assert.match(guaranteedFunko.summary,/Estimación orientativa/i);
 
 console.log('core tests ok');
-
