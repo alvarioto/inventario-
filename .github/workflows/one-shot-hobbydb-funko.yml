@@ -18,6 +18,15 @@ jobs:
           cache: npm
       - name: Apply hobbyDB pricing patch
         run: node scripts/switch-funko-hobbydb.mjs
+      - name: Fix generated hobbyDB assertion
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const p='tests/core.mjs';
+          let t=fs.readFileSync(p,'utf8');
+          t=t.replace("assert.match(hobbyPrompts[0],/hobbyDB/Pop Price Guide/);","assert.ok(hobbyPrompts[0].includes('hobbyDB/Pop Price Guide'));");
+          fs.writeFileSync(p,t);
+          NODE
       - run: npm ci
       - run: npm test
       - run: npm run build
