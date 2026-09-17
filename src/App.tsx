@@ -640,6 +640,9 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [researchBusy, setResearchBusy] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   useEffect(() => {
+    if (research?.asking.originalCurrency) setDisplayCurrency(research.asking.originalCurrency);
+  }, [research?.asking.originalCurrency, research?.asking.originalMedian]);
+  useEffect(() => {
     if (!initialPhotos.length || initialPhotosHandled.current) return;
     initialPhotosHandled.current = true;
     let active = true;

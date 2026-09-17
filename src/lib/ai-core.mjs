@@ -953,43 +953,15 @@ export async function research(input,config){
  }
  let listings=[...parsePublicListings(webSources.filter(source=>source.kind!=='pricecharting-api'),{USD_EUR:usdEurRate}),...priceChartingListings];
  let comparables=conservativeFallbackComparables(item,listings,webSources).slice(0,6);
- let asking=summarizeListings(comparables);
- let usedOrientativeEstimate=false;
-
- // Un Funko nunca se queda sin valor visible. Primero usamos las cotizaciones públicas;
- // si no son legibles, pedimos una estimación conservadora y, como último recurso,
- // mostramos un valor base claramente marcado como orientativo.
- if(isFunko&&!asking.count){
-  let estimate=null;
-  if(config.key){
-   try{
-    const ai=await deepseek([
-     {role:'system',content:'Estima de forma conservadora el valor actual en euros de un Funko concreto para inventario personal. Devuelve SOLO JSON con median, min, max y reason. No inventes ventas ni fuentes. median debe ser un número EUR razonable. Considera número Pop, variante y si tiene caja o está sellado.'},
-     {role:'user',content:`Artículo: ${identity}. Variante: ${item.funkoVariant||'normal'}. Caja: ${item.hasBox===false?'no':item.hasBox===true?'sí':'desconocido'}. Sellado: ${item.sealed?'sí':'no/desconocido'}.`}
-    ],{...config,maxTokens:300,timeoutMs:18000,retries:0});
-    const candidate=Number(ai?.median);
-    if(Number.isFinite(candidate)&&candidate>=3&&candidate<=5000)estimate=Number(candidate.toFixed(2));
-   }catch{}
-  }
-  if(estimate==null){
-   let base=item.sealed?18:item.hasBox===false?10:15;
-   const variant=normalizeComparableText(item.funkoVariant||'');
-   if(variant.includes('chase'))base*=1.6;
-   else if(variant)base*=1.25;
-   estimate=Number(base.toFixed(2));
-  }
-  const estimateUrl='https://www.hobbydb.com/marketplaces/hobbydb/catalog_items?filters%5Bq%5D%5B0%5D='+encodeURIComponent(identity);
-  const estimateRow={
-   id:'funko-orientative-estimate',title:`Estimación orientativa · ${identity}`,url:estimateUrl,
-   price:estimate,currency:'EUR',shipping:null,condition:'Estimación orientativa · sin cotización pública legible',
-   sourceType:'market',originalPrice:estimate,originalCurrency:'EUR'
-  };
-  listings=[...listings,estimateRow];
-  comparables=[estimateRow];
-  asking=summarizeListings(comparables);
-  usedOrientativeEstimate=true;
-  warnings.push('No se pudo leer una cotización pública suficientemente fiable; se muestra una estimación orientativa para que la ficha no quede sin valor.');
- }
+ // Para Funko, el valor principal SOLO puede salir del texto explícito
+ // "Estimated Value" de hobbyDB. eBay/StockX permanecen como orientación.
+ const hobbyDbEstimated=isFunko?comparables.filter(row=>{
+  const source=webSources.find(current=>current.url===row.url||current.id===row.id);
+  const raw=`${source?.title||''} ${source?.snippet||''} ${row.title||''} ${row.condition||''}`;
+  return hostOf(row.url).includes('hobbydb.com')&&/\bestimated\s+value\b/i.test(raw);
+ }):[];
+ let asking=summarizeListings(isFunko?hobbyDbEstimated:comparables);
+ if(isFunko&&!asking.count)warnings.push('hobbyDB no devolvió un “Estimated Value” verificable. Los precios de eBay y StockX se muestran solo como referencias orientativas y no sustituyen al Price Guide.');
  const sources=limitPricingSources(uniqueSources(webSources),item);
  const exchangeRates=isFunko?await fetchDisplayCurrencyRates(fetcher,usdEurRate):{};
 
@@ -1001,10 +973,10 @@ export async function research(input,config){
  if(asking.count){
   const range=asking.min===asking.max?euro(asking.min):`${euro(asking.min)} – ${euro(asking.max)}`;
   const baremo=`${range}; mediana ${euro(asking.median)} con ${asking.count} comparable${asking.count===1?'':'s'} exacto${asking.count===1?'':'s'}.`;
-  summary=usedOrientativeEstimate
-   ?`Estimación orientativa para ${identity}: ${euro(asking.median)}. No es una venta cerrada ni una cotización pública verificada.`
+  summary=isFunko
+   ?`Valor principal tomado del “Estimated Value” de hobbyDB Price Guide.${usedFallbackRate?' Conversión USD/EUR orientativa.':''}`
    :`Valoración calculada localmente a partir de precios públicos del producto exacto.${usedFallbackRate?' Conversión USD/EUR orientativa.':''} ${baremo}`;
-  facts=[{label:usedOrientativeEstimate?'Estimación orientativa':'Baremo de mercado',value:baremo,sourceId:sources[0]?.id||comparables[0].id},...comparables.slice(0,6).map(row=>({label:usedOrientativeEstimate?'Valor estimado':'Precio comparable',value:`${euro(row.price)} · ${row.condition}`,sourceId:sources[0]?.id||row.id}))];
+  facts=[{label:isFunko?'hobbyDB Estimated Value':'Baremo de mercado',value:baremo,sourceId:sources[0]?.id||comparables[0].id},...comparables.slice(0,6).map(row=>({label:row.sourceType==='guide'?'Valor principal':'Referencia orientativa',value:`${euro(row.price)} · ${row.condition}`,sourceId:sources[0]?.id||row.id}))];
  }else{
   summary=`Se buscaron precios usando una única identidad: “${identity}”. ${sources.length} página${sources.length===1?'':'s'} útil${sources.length===1?'':'es'} y ${listings.length} precio${listings.length===1?'':'s'} detectado${listings.length===1?'':'s'}; ninguno permite todavía un baremo suficientemente exacto.`;
  }

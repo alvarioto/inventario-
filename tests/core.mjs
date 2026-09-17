@@ -173,7 +173,7 @@ assert.equal(fallbackResearch.listings.length,1);
 assert.equal(fallbackResearch.asking.count,1);
 assert.match(fallbackResearch.summary,/Valoración calculada localmente|única identidad/i);
 
-// Funko: una sola búsqueda usa hobbyDB como guía y eBay/StockX como respaldo de precio.
+// Funko: hobbyDB aporta el único valor principal; eBay/StockX son orientación.
 let hobbyPrompts=[];
 const hobbyMarketFetch=async(url,init)=>{
  if(String(url).includes('frankfurter.dev'))return new Response(JSON.stringify({rate:.9}),{status:200,headers:{'content-type':'application/json'}});
@@ -182,7 +182,7 @@ const hobbyMarketFetch=async(url,init)=>{
   hobbyPrompts.push(prompt);
   return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
    {type:'web_search_result',title:'Éomer | Statues & Busts | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-bust',cited_text:'Type: Statues & Busts Brand: Weta Workshop Reference #: 1982 Éomer'},
-   {type:'web_search_result',title:'Éomer | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys',cited_text:'Type: Art Toys Brand: Funko Series: Pop! Movies Reference #: 1982 Related Subjects: The Lord of the Rings Éomer'},
+   {type:'web_search_result',title:'Éomer | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys',cited_text:'Type: Art Toys Brand: Funko Series: Pop! Movies Reference #: 1982 Related Subjects: The Lord of the Rings Éomer Estimated Value $37'},
    {type:'web_search_result',title:'Funko Pop Éomer #1982 - 29,95 EUR',url:'https://www.ebay.es/itm/eomer1982',cited_text:'Éomer #1982 · 29,95 EUR'},
    {type:'web_search_result',title:'Funko Pop Eomer 1982',url:'https://stockx.com/funko-pop-eomer-1982',cited_text:'Eomer #1982'}
   ]}]}),{status:200,headers:{'content-type':'application/json'}});
@@ -195,7 +195,9 @@ assert.equal(hobbyResearch.searchIdentity,'Éomer 1982');
 assert.ok(hobbyPrompts[0].includes('hobbyDB/Pop Price Guide'));
 assert.match(hobbyPrompts[0],/Eomer 1982/);
 assert.ok(hobbyResearch.asking.median>0);
-assert.equal(hobbyResearch.asking.median,29.95);
+assert.equal(hobbyResearch.asking.median,33.3);
+assert.equal(hobbyResearch.asking.originalMedian,37);
+assert.equal(hobbyResearch.asking.originalCurrency,'USD');
 assert.ok(hobbyResearch.sources.some(source=>source.url.includes('hobbydb.com')));
 assert.equal(hobbyResearch.sources.filter(source=>source.url.includes('hobbydb.com')).length,1);
 assert.ok(hobbyResearch.sources.some(source=>source.url.includes('eomer-art-toys')));
@@ -238,8 +240,9 @@ const funkoPriceFetch=async(url)=>{
 };
 const funkoResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',sku:'90310'}},{key:'test',fetcher:funkoPriceFetch});
 assert.equal(funkoResearch.searchIdentity,'Éomer 1982');
-assert.equal(funkoResearch.asking.count,1);
-assert.equal(funkoResearch.asking.median,29.95);
+assert.equal(funkoResearch.asking.count,0);
+assert.equal(funkoResearch.asking.median,null);
+assert.ok(funkoResearch.comparables.some(row=>row.url.includes('ebay.es')));
 
 
 // Regresión: las fotos se convierten a datos persistentes antes de pulsar Guardar.
@@ -292,7 +295,7 @@ assert.match(currentCoreSource,/sourceLooksBroken/);
 assert.ok(currentCoreSource.includes("ppg:'https://www.hobbydb.com"));
 assert.doesNotMatch(currentStylesSource,/\.sheet-foot \.primary,.sheet-foot \.secondary,.sheet-foot \.danger\{min-height:54px/);
 
-// Un Funko debe terminar SIEMPRE con un valor visible aunque las fuentes públicas no devuelvan importe legible.
+// Sin un “Estimated Value” explícito de hobbyDB no se inventa un valor principal.
 let orientativeAiCalls=0;
 const noPriceFunkoFetch=async(url,init)=>{
  if(String(url).includes('/anthropic/v1/messages'))return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[]}]}),{status:200,headers:{'content-type':'application/json'}});
@@ -300,10 +303,9 @@ const noPriceFunkoFetch=async(url,init)=>{
  return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
 };
 const orientativeFunko=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',hasBox:true}},{key:'test',fetcher:noPriceFunkoFetch});
-assert.equal(orientativeAiCalls,1);
-assert.equal(orientativeFunko.asking.median,17.5);
-assert.match(orientativeFunko.summary,/Estimación orientativa/i);
-assert.match(orientativeFunko.comparables[0].url,/hobbydb\.com/);
+assert.equal(orientativeAiCalls,0);
+assert.equal(orientativeFunko.asking.median,null);
+assert.match(orientativeFunko.warnings.join(' '),/Estimated Value/);
 
 // Incluso si también falla la estimación IA, la ficha conserva un valor base orientativo.
 const totalFailureFetch=async(url)=>{
@@ -312,8 +314,6 @@ const totalFailureFetch=async(url)=>{
  return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
 };
 const guaranteedFunko=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',hasBox:true}},{key:'test',fetcher:totalFailureFetch});
-assert.equal(guaranteedFunko.asking.median,15);
-assert.ok(guaranteedFunko.asking.median>0);
-assert.match(guaranteedFunko.summary,/Estimación orientativa/i);
+assert.equal(guaranteedFunko.asking.median,null);
 
 console.log('core tests ok');
