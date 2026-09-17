@@ -1,0 +1,30 @@
+name: Verificar hobbyDB live
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/verify-hobbydb-live.yml']
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Esperar Vercel y comprobar Éomer
+        shell: bash
+        run: |
+          set -u
+          URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value'
+          BODY='{"item":{"character":"Eomer","popNumber":"1","funkoVariant":"Classic","hobbydbUrl":"https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys"}}'
+          for i in $(seq 1 24); do
+            echo "Intento $i"
+            CODE=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$BODY" || true)
+            cat response.json 2>/dev/null || true
+            echo
+            if [ "$CODE" = "200" ] && jq -e '.status == "completed" and .value.amount == 34 and .value.currency == "USD"' response.json >/dev/null 2>&1; then
+              echo 'OK: hobbyDB Estimated Value = $34 USD'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'No se obtuvo $34 desde el backend live.'
+          exit 1
