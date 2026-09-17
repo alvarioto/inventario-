@@ -12,7 +12,7 @@
     "deploy:hosting": "npm run check:config && npm run build && firebase deploy --only hosting",
     "start": "node scripts/SERVIR-LOCAL.mjs",
     "check:config": "node scripts/COMPROBAR-CONFIG.mjs",
-    "test": "node tests/core.mjs"
+    "test": "node tests/core.mjs && node tests/hobbydb.mjs"
   },
   "dependencies": {
     "@zxing/browser": "^0.2.1",
