@@ -155,53 +155,32 @@ assert.equal(fallbackResearch.listings.length,1);
 assert.equal(fallbackResearch.asking.count,1);
 assert.match(fallbackResearch.summary,/Valoración calculada localmente|única identidad/i);
 
-// La consulta REAL enviada al buscador de PriceCharting debe conservar nombre + número,
-// incluso si popNumber no venía guardado pero sí aparece en el título.
-let exactPcPrompts=[];
-const exactPcQueryFetch=async(url,init)=>{
- if(String(url).includes('/anthropic/v1/messages')){
-  const body=JSON.parse(init.body);
-  exactPcPrompts.push(String(body.messages?.[0]?.content||''));
-  const prompt=String(body.messages?.[0]?.content||'');
-  if(prompt.includes('MODO PRICECHARTING')) return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[{type:'web_search_result',title:'Eomer #1982 Prices | Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982',cited_text:'Eomer #1982 · In Box $16.00'}]}]}),{status:200,headers:{'content-type':'application/json'}});
-  return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[]}]}),{status:200,headers:{'content-type':'application/json'}});
- }
+// Funko: una sola búsqueda usa hobbyDB como guía y eBay/StockX como respaldo de precio.
+let hobbyPrompts=[];
+const hobbyMarketFetch=async(url,init)=>{
  if(String(url).includes('frankfurter.dev'))return new Response(JSON.stringify({rate:.9}),{status:200,headers:{'content-type':'application/json'}});
- return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
-};
-const exactPcQueryResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies'}},{key:'test',fetcher:exactPcQueryFetch});
-assert.equal(exactPcQueryResearch.searchIdentity,'Éomer 1982');
-const exactPcPrompt=exactPcPrompts.find(x=>x.includes('MODO PRICECHARTING'))||'';
-assert.ok(exactPcPrompt,'No se ejecutó la llamada específica de PriceCharting');
-assert.match(exactPcPrompt,/^Busca EXCLUSIVAMENTE en PriceCharting el producto \"Eomer 1982\"\./);
-assert.match(exactPcPrompt,/NO puedes quitarlo ni buscar solo el nombre/);
-assert.match(exactPcPrompt,/q=Eomer%201982/);
-assert.equal(exactPcQueryResearch.asking.count,1);
-assert.equal(exactPcQueryResearch.asking.median,14.4);
-assert.equal(exactPcQueryResearch.comparables[0].url,'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982');
-
-// Regresión realista: si DeepSeek devuelve primero una página genérica de PriceCharting
-// y después la ficha exacta con precio, la ficha exacta debe ganar y producir valoración.
-let realPcSearchCalls=0;
-const realPcFetch=async(url,init)=>{
- if(String(url).includes('frankfurter.dev')){
-  return new Response(JSON.stringify({rate:.9}),{status:200,headers:{'content-type':'application/json'}});
- }
  if(String(url).includes('/anthropic/v1/messages')){
-  realPcSearchCalls++;
+  const prompt=String(JSON.parse(init.body).messages?.[0]?.content||'');
+  hobbyPrompts.push(prompt);
   return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
-   {type:'web_search_result',title:'PriceCharting Search Products',url:'https://www.pricecharting.com/search-products?type=prices&q=Eomer+1982',cited_text:'Search Funko prices'},
-   {type:'web_search_result',title:'Eomer #1982 Prices | Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982',cited_text:'Full Price Guide: Eomer #1982. Out of Box $11.05 · In Box $16.00 · New $18.75'}
+   {type:'web_search_result',title:'Éomer | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys',cited_text:'Funko Pop Movies The Lord of the Rings Éomer #1982'},
+   {type:'web_search_result',title:'Funko Pop Éomer #1982 - 29,95 EUR',url:'https://www.ebay.es/itm/eomer1982',cited_text:'Éomer #1982 · 29,95 EUR'},
+   {type:'web_search_result',title:'Funko Pop Eomer 1982',url:'https://stockx.com/funko-pop-eomer-1982',cited_text:'Eomer #1982'}
   ]}]}),{status:200,headers:{'content-type':'application/json'}});
  }
  return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
 };
-const realPcResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',hasBox:true}},{key:'test',fetcher:realPcFetch});
-assert.equal(realPcSearchCalls,1);
-assert.equal(realPcResearch.searchIdentity,'Éomer 1982');
-assert.equal(realPcResearch.sources[0].url,'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982');
-assert.ok(realPcResearch.asking.median>0);
-assert.ok(realPcResearch.comparables.length>0);
+const hobbyResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',hasBox:true}},{key:'test',fetcher:hobbyMarketFetch,priceChartingToken:'a'.repeat(40)});
+assert.equal(hobbyPrompts.length,1);
+assert.equal(hobbyResearch.searchIdentity,'Éomer 1982');
+assert.ok(hobbyPrompts[0].includes('hobbyDB/Pop Price Guide'));
+assert.match(hobbyPrompts[0],/Eomer 1982/);
+assert.ok(hobbyResearch.asking.median>0);
+assert.equal(hobbyResearch.asking.median,29.95);
+assert.ok(hobbyResearch.sources.some(source=>source.url.includes('hobbydb.com')));
+assert.ok(hobbyResearch.comparables.some(row=>row.url.includes('ebay.es')));
+assert.match(hobbyResearch.links.ppg,/hobbydb\.com/);
+assert.equal(hobbyResearch.links.priceCharting,undefined);
 
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
 
@@ -223,7 +202,7 @@ const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta.url),'utf8');
 const aiCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 assert.doesNotMatch(aiCoreSource,/eBay vendidos\/completados y tiendas públicas/);
-assert.match(aiCoreSource,/contrasta únicamente con StockX y eBay vendidos\/completados/);
+assert.ok(aiCoreSource.includes('hobbyDB/Pop Price Guide'));
 assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/Escanear código/);
 assert.match(appSource,/Mejorar con IA/);
@@ -257,13 +236,13 @@ assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 // Regresión: PriceCharting es prioritario y los botones del formulario conservan su estilo original.
 const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
-assert.match(currentCoreSource,/PriceCharting va primero/);
+assert.ok(currentCoreSource.includes('hobbyDB/Pop Price Guide'));
 
 assert.doesNotMatch(currentCoreSource,/reasoning:\{effort:'none'\}/);
 assert.match(currentCoreSource,/limitPricingSources/);
 assert.match(currentCoreSource,/thinking:\{type:'disabled'\}/);
 assert.match(currentCoreSource,/sourceLooksBroken/);
-assert.doesNotMatch(currentCoreSource,/ppg:'https:\/\/www\.hobbydb\.com/);
+assert.ok(currentCoreSource.includes("ppg:'https://www.hobbydb.com"));
 assert.doesNotMatch(currentStylesSource,/\.sheet-foot \.primary,.sheet-foot \.secondary,.sheet-foot \.danger\{min-height:54px/);
 
 // Un Funko debe terminar SIEMPRE con un valor visible aunque las fuentes públicas no devuelvan importe legible.

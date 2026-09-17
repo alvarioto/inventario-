@@ -356,7 +356,8 @@ function keepUsableSources(rows){
 function allowedPricingSource(source){
  const host=hostOf(source?.url);
  if(!host)return false;
- return host==='pricecharting.com'||host.endsWith('.pricecharting.com')
+ return host==='hobbydb.com'||host.endsWith('.hobbydb.com')
+  ||host==='pricecharting.com'||host.endsWith('.pricecharting.com')
   ||host==='stockx.com'||host.endsWith('.stockx.com')
   ||/(^|\.)ebay\.[a-z.]+$/.test(host);
 }
@@ -369,6 +370,10 @@ function pricingSourceScore(item,source){
  if(item?.type==='funko'&&funkoTextMatches(item,raw))score+=50;
  let path='';
  try{path=new URL(source.url).pathname.toLowerCase()}catch{}
+ if(host.includes('hobbydb.com')){
+  if(/\/catalog_items\/[^/?]+/.test(path))score+=40;
+  if(/\/catalog_items\/?$/.test(path))score-=15;
+ }
  if(host.includes('pricecharting.com')){
   if(/\/game\/funko-pop-/.test(path))score+=35;
   if(/search-products|\/search/.test(path))score-=30;
@@ -389,16 +394,16 @@ function prioritizePricingSources(item,rows){
 }
 
 function limitPricingSources(rows,item=null){
- const counts={pricecharting:0,stockx:0,ebay:0};
+ const counts={hobbydb:0,pricecharting:0,stockx:0,ebay:0};
  const ordered=item?prioritizePricingSources(item,rows):rows;
  return ordered.filter(allowedPricingSource).filter(source=>{
   const host=hostOf(source.url);
-  const group=host.includes('pricecharting.com')?'pricecharting':host.includes('stockx.com')?'stockx':'ebay';
-  const max=group==='ebay'?2:1;
+  const group=host.includes('hobbydb.com')?'hobbydb':host.includes('pricecharting.com')?'pricecharting':host.includes('stockx.com')?'stockx':'ebay';
+  const max=group==='ebay'?3:1;
   if(counts[group]>=max)return false;
   counts[group]++;
   return true;
- }).slice(0,4);
+ }).slice(0,6);
 }
 
 function webSearchSources(response,{attachAllText=false}={}){
@@ -443,7 +448,7 @@ function webSearchSources(response,{attachAllText=false}={}){
 
 export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetcher=fetch,searchMode='general'}){
  if(!key)throw new Error('Falta configurar DEEPSEEK_API_KEY en el servidor.');
- const specialistInstruction=searchMode==='identity'?'\n\nMODO IDENTIDAD: NO tasar todavía. Localiza el PRODUCTO EXACTO usando prioritariamente referencia/SKU/Item No., EAN/UPC, fabricante y texto literal de la caja. Busca páginas de producto concretas y devuelve citas donde aparezca el nombre comercial real. No describas la fotografía (dorso, caja, etiqueta, código de barras) como si fuera el nombre del producto.':searchMode==='pricecharting'?'\n\nMODO PRICECHARTING: busca primero y de forma prioritaria una ficha INDIVIDUAL del producto exacto en pricecharting.com. Devuelve cualquier precio público visible (Loose/OOB, CIB/In Box, New) con su importe explícito y cita esa ficha. No uses hobbyDB ni páginas con CAPTCHA, acceso denegado o error. Si no hay una coincidencia exacta en PriceCharting, indícalo buscando otra ficha del mismo sitio antes de abandonar.':searchMode==='funko'?'\n\nMODO FUNKO: PriceCharting es la primera fuente especializada. Después contrasta únicamente con StockX y eBay vendidos/completados. No uses tiendas públicas, hobbyDB ni ningún otro dominio. Distingue OOB/loose, con caja/CIB y nuevo. Solo llames venta cerrada a una página que lo indique explícitamente. Evita lotes, accesorios y variantes distintas. Si el precio está en USD, conserva USD; la aplicación lo convertirá a EUR con referencia ECB.': '';
+ const specialistInstruction=searchMode==='identity'?'\n\nMODO IDENTIDAD: NO tasar todavía. Localiza el PRODUCTO EXACTO usando prioritariamente referencia/SKU/Item No., EAN/UPC, fabricante y texto literal de la caja. Busca páginas de producto concretas y devuelve citas donde aparezca el nombre comercial real. No describas la fotografía (dorso, caja, etiqueta, código de barras) como si fuera el nombre del producto.':searchMode==='pricecharting'?'\n\nMODO PRICECHARTING: busca primero y de forma prioritaria una ficha INDIVIDUAL del producto exacto en pricecharting.com. Devuelve cualquier precio público visible (Loose/OOB, CIB/In Box, New) con su importe explícito y cita esa ficha. No uses hobbyDB ni páginas con CAPTCHA, acceso denegado o error. Si no hay una coincidencia exacta en PriceCharting, indícalo buscando otra ficha del mismo sitio antes de abandonar.':searchMode==='funko'?'\n\nMODO FUNKO: hobbyDB/Pop Price Guide es la primera guía para identificar la pieza exacta. Después contrasta con eBay y StockX para obtener precios públicos del MISMO Funko. Si hobbyDB exige login, Premium o CAPTCHA para mostrar el Price Guide, no lo inventes ni intentes saltarlo: continúa con eBay y StockX para que la valoración no se quede vacía. Distingue Chase, Flocked, Glow, Metallic, Diamond y demás variantes. Evita lotes, accesorios, protectores y cajas vacías. Si el precio está en USD, conserva USD; la aplicación lo convertirá a EUR con referencia ECB.': '';
  const exactQuery=String(query||'').replace(/\s+/g,' ').trim();
  const queryHasNumber=/\b\d{1,5}\b/.test(exactQuery);
  const forcedQueryInstruction=queryHasNumber
@@ -456,7 +461,7 @@ export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetche
   ?`Identifica el nombre comercial exacto de este artículo de colección a partir de sus códigos y referencias: ${query}. Busca coincidencias literales de SKU/Item No./EAN/UPC y fabricante. Necesito fuentes que permitan saber QUÉ PRODUCTO ES; todavía no busques una tasación. Si una página solo describe una caja, etiqueta o fotografía, no la uses como nombre del producto.${specialistInstruction}`
   :searchMode==='pricecharting'
    ?`Busca EXCLUSIVAMENTE en PriceCharting el producto "${exactQuery}". Usa exactamente nombre + número tal como lo recibes y NO añadas "Funko Pop", EAN, SKU, franquicia ni otras palabras. Prioriza una ficha individual /game/funko-pop-* frente a una página de búsqueda. Devuelve en el texto final el título exacto, la URL exacta y todos los precios públicos visibles que encuentres (Out of Box/Loose, In Box/CIB y New), manteniendo el símbolo $ y los decimales. Si encuentras la ficha exacta, no busques ninguna otra web.${forcedQueryInstruction}${priceChartingExact}${specialistInstruction}`
-   :`Busca precios actuales para: ${exactQuery}. Consulta EXCLUSIVAMENTE estas tres fuentes: PriceCharting (pricecharting.com), StockX (stockx.com) y eBay (ebay.*). NO uses tiendas, blogs, hobbyDB, Wallapop, TodoColeccion, Catawiki, Vinted, Amazon ni ningún otro dominio. Haz como máximo TRES búsquedas internas: una para PriceCharting, una para StockX y una para eBay. En cada sitio parte exactamente del nombre corto recibido; no lo amplíes con EAN, SKU, franquicia, año o edición salvo que ya formen parte literal de ese nombre. Devuelve cada precio en un párrafo separado con una única cita, para poder asociar importe y fuente sin ambigüedad. Para cada precio útil conserva importe, moneda, título y URL. En eBay distingue vendido/completado de anuncio activo solo si la página lo indica. Descarta lotes, accesorios, cajas vacías y variantes claramente distintas. Si una de las tres fuentes no tiene coincidencia, continúa con las otras dos sin buscar una cuarta.${forcedQueryInstruction}${priceChartingExact}${specialistInstruction}`;
+   :`Busca precios actuales para: ${exactQuery}. Consulta EXCLUSIVAMENTE estas tres fuentes: ${searchMode==='funko'?'hobbyDB/Pop Price Guide (hobbydb.com), StockX (stockx.com) y eBay (ebay.*)':'PriceCharting (pricecharting.com), StockX (stockx.com) y eBay (ebay.*)' }. ${searchMode==='funko'?'NO uses PriceCharting, tiendas, blogs, Wallapop, TodoColeccion, Catawiki, Vinted, Amazon ni ningún otro dominio.':'NO uses tiendas, blogs, hobbyDB, Wallapop, TodoColeccion, Catawiki, Vinted, Amazon ni ningún otro dominio.'} Haz como máximo TRES búsquedas internas: una para PriceCharting, una para StockX y una para eBay. En cada sitio parte exactamente del nombre corto recibido; no lo amplíes con EAN, SKU, franquicia, año o edición salvo que ya formen parte literal de ese nombre. Devuelve cada precio en un párrafo separado con una única cita, para poder asociar importe y fuente sin ambigüedad. Para cada precio útil conserva importe, moneda, título y URL. En eBay distingue vendido/completado de anuncio activo solo si la página lo indica. Descarta lotes, accesorios, cajas vacías y variantes claramente distintas. Si una de las tres fuentes no tiene coincidencia, continúa con las otras dos sin buscar una cuarta.${forcedQueryInstruction}${priceChartingExact}${specialistInstruction}`;
  const response=await fetcher('https://api.deepseek.com/anthropic/v1/messages',{
   method:'POST',
   headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json'},
@@ -697,7 +702,7 @@ function canonicalTitleFromSources(item,sources){
  if(!isGenericProductTitle(item?.title))return String(item.title).trim();
  const ids=[item?.sku,item?.barcode,item?.isbn].filter(Boolean).map(normalizeComparableText);
  const candidates=sources.map(source=>{
-  const title=String(source.title||'').replace(/\s*[|–—-]\s*(PriceCharting|eBay|StockX|Amazon|Wallapop).*$/i,'').replace(/\s+/g,' ').trim();
+  const title=String(source.title||'').replace(/\s*[|–—-]\s*(PriceCharting|hobbyDB|eBay|StockX|Amazon|Wallapop).*$/i,'').replace(/\s+/g,' ').trim();
   const hay=normalizeComparableText(`${source.title||''} ${source.snippet||''}`);
   let score=specificTitleScore(title);
   if(ids.some(id=>id&&hay.includes(id)))score+=12;
@@ -842,7 +847,7 @@ export async function research(input,config){
  let identity=buildResearchIdentity(item)||String(item.title||'').trim();
  const fetcher=config.fetcher||fetch;
  const warnings=[];
- const priceChartingSupported=isFunko||['game','card','comic','lego'].includes(item.type);
+ const priceChartingSupported=!isFunko&&['game','card','comic','lego'].includes(item.type);
  let webSources=[];
  let priceChartingListings=[];
  let usdEurRate=null;
@@ -866,14 +871,6 @@ export async function research(input,config){
    // También quitamos tildes para no degradar el buscador de PriceCharting.
    const exactQuery=(isFunko?identity.normalize('NFD').replace(/[\u0300-\u036f]/g,''):identity).trim();
    let hasExactVisiblePrice=priceChartingListings.length>0;
-
-   if(isFunko&&!hasExactVisiblePrice){
-    const pcFound=normalizeSources(await deepseekWebSearch(exactQuery,{...config,searchMode:'pricecharting'}),'pricecharting-public');
-    const pcUsable=keepUsableSources(pcFound).filter(allowedPricingSource);
-    const pcRelevant=prioritizePricingSources(item,relevantSourcesForItem(item,pcUsable));
-    webSources=uniqueSources([...webSources,...pcRelevant]);
-    hasExactVisiblePrice=parsePublicListings(pcRelevant).length>0;
-   }
 
    if(!isFunko||!hasExactVisiblePrice){
     const found=normalizeSources(await deepseekWebSearch(exactQuery,{...config,searchMode:isFunko?'funko':'general'}),'price-search');
@@ -982,7 +979,7 @@ export async function research(input,config){
    ebay:'https://www.ebay.es/sch/i.html?_nkw='+encodeURIComponent(identity),
    sold:'https://www.ebay.es/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw='+encodeURIComponent(identity),
    web:'https://www.google.com/search?q='+encodeURIComponent(identity+' precio'),
-   ...(priceChartingSupported?{priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity)}:{}),
+   ...(isFunko?{ppg:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items?filters%5Bq%5D%5B0%5D='+encodeURIComponent(identity)}:priceChartingSupported?{priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity)}:{}),
    ...(isFunko?{stockx:'https://stockx.com/search?s='+encodeURIComponent(identity)}:{})
   }
  };

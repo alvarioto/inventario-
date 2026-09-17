@@ -62,9 +62,9 @@ export function DirectAiSettings() {
 
     <section className="settings-integration pricecharting-settings">
       <h3>Guía de precios · PriceCharting <span className="provider-badge">Opcional</span></h3>
-      <p className="muted">Añade el token oficial de 40 caracteres de una suscripción PriceCharting con acceso API. FrikiVault consulta PriceCharting antes que la búsqueda web en categorías compatibles (Funko, videojuegos, cartas, cómics y LEGO) y usa el valor correspondiente a su estado como referencia principal.</p>
+      <p className="muted">Añade el token oficial de 40 caracteres de una suscripción PriceCharting con acceso API. FrikiVault conserva PriceCharting solo como guía opcional para videojuegos, cartas, cómics y LEGO. Los Funko se investigan con hobbyDB/Pop Price Guide y se contrastan con eBay y StockX.</p>
       <label className="field"><span>Token PriceCharting</span><input type="password" autoComplete="off" spellCheck={false} value={priceToken} onChange={e => setPriceToken(e.target.value)} placeholder={priceConfigured ? 'Token guardado; escribe aquí para cambiarlo' : '40 caracteres'}/></label>
-      <p className="muted">Se guarda en los ajustes privados de tu cuenta, igual que la clave de IA; no se incluye en GitHub ni en las exportaciones. No intenta saltarse CAPTCHA de hobbyDB.</p>
+      <p className="muted">Se guarda en los ajustes privados de tu cuenta, igual que la clave de IA; no se incluye en GitHub ni en las exportaciones. hobbyDB puede exigir inicio de sesión, Premium o CAPTCHA para partes de su Price Guide; FrikiVault no intenta saltarse esas protecciones y usa eBay/StockX como respaldo automático.</p>
       <div className="button-stack">
         <button className="primary" disabled={priceBusy || !priceToken.trim()} onClick={savePriceCharting}>{priceBusy ? 'Guardando…' : priceConfigured ? 'Cambiar token' : 'Guardar token'}</button>
         {priceConfigured && <button className="secondary" disabled={priceBusy} onClick={async () => {try {await removePriceChartingToken(); setPriceConfigured(false); setPriceToken(''); setPriceMessage('Token de PriceCharting eliminado.');} catch {setPriceMessage('No se pudo eliminar el token.');}}}>Desconectar PriceCharting</button>}
