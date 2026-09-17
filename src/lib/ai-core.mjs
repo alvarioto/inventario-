@@ -111,7 +111,7 @@ export function summarizeListings(listings){
  // Dos o más ventas cerradas exactas son la evidencia principal. Si no las hay,
  // comparamos TODAS las referencias ya validadas (guías + mercado + tiendas),
  // en vez de quedarnos con una única guía y perder el contexto de mercado.
- const selected=sold.length>=2?sold:eur;
+ const selected=guides.length?guides:sold.length>=2?sold:eur;
  let totals=selected
   .map(x=>x.price+(Number.isFinite(x.shipping)&&x.shipping>=0?x.shipping:0))
   .sort((a,b)=>a-b);
@@ -137,7 +137,9 @@ export function summarizeListings(listings){
   min:n?totals[0]:null,
   max:n?totals[n-1]:null,
   median:n?(totals[Math.floor((n-1)/2)]+totals[Math.ceil((n-1)/2)])/2:null,
-  label
+  label,
+  originalCurrency:guides[0]?.originalCurrency||null,
+  originalMedian:guides.length&&Number.isFinite(guides[0]?.originalPrice)?guides[0].originalPrice:null
  };
 }
 
@@ -219,6 +221,22 @@ async function fetchUsdEurRate(fetcher){
   }catch{}
  }
  return null;
+}
+
+async function fetchDisplayCurrencyRates(fetcher,usdEurRate=null){
+ const fallback={USD:1};
+ if(Number.isFinite(usdEurRate))fallback.EUR=usdEurRate;
+ try{
+  const response=await fetcher('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY,CAD,AUD,CHF,CNY,MXN,KRW',{signal:AbortSignal.timeout(10000)});
+  if(!response.ok)return fallback;
+  const data=await response.json();
+  const rates={USD:1};
+  for(const code of ['EUR','GBP','JPY','CAD','AUD','CHF','CNY','MXN','KRW']){
+   const value=Number(data?.rates?.[code]);
+   if(Number.isFinite(value)&&value>0)rates[code]=value;
+  }
+  return {...fallback,...rates};
+ }catch{return fallback;}
 }
 
 function centsValue(value){
@@ -973,6 +991,7 @@ export async function research(input,config){
   warnings.push('No se pudo leer una cotización pública suficientemente fiable; se muestra una estimación orientativa para que la ficha no quede sin valor.');
  }
  const sources=limitPricingSources(uniqueSources(webSources),item);
+ const exchangeRates=isFunko?await fetchDisplayCurrencyRates(fetcher,usdEurRate):{};
 
  if(!listings.length)warnings.push('No se encontró un precio visible para el producto exacto; se han descartado páginas bloqueadas, ambiguas o sin importe.');
  else if(!comparables.length)warnings.push('Se detectaron precios, pero ninguno coincide con suficiente precisión con esta referencia/edición.');
@@ -1002,6 +1021,7 @@ export async function research(input,config){
   listings,
   comparables,
   asking,
+  exchangeRates,
   sold:{available:soldRows.length>0,count:soldRows.length,median:soldSummary.median,reason:soldRows.length?'Ventas cerradas detectadas entre los comparables exactos.':'No se detectó una venta cerrada verificable entre los comparables exactos.'},
   warnings,
   links:{

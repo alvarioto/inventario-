@@ -30,6 +30,15 @@ assert.deepEqual(
 );
 assert.match(market.label,/ventas cerradas/i);
 
+const guidePriority=summarizeListings([
+  {price:31.82,currency:'EUR',sourceType:'guide',originalPrice:37,originalCurrency:'USD'},
+  {price:48,currency:'EUR',sourceType:'market',originalPrice:55.8,originalCurrency:'USD'}
+]);
+assert.equal(guidePriority.kind,'guide');
+assert.equal(guidePriority.median,31.82);
+assert.equal(guidePriority.originalMedian,37);
+assert.equal(guidePriority.originalCurrency,'USD');
+
 const fakeFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"summary":"Ficha contrastada","facts":[],"comparableIds":[]}'}}]}),{status:200,headers:{'content-type':'application/json'}});
 assert.equal((await deepseek([{role:'user',content:'test'}],{key:'test',fetcher:fakeFetch})).summary,'Ficha contrastada');
 

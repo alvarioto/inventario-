@@ -94,6 +94,18 @@ function money(value?: number | null, currency = 'EUR') {
   catch { return `${value.toFixed(2)} ${currency}`; }
 }
 
+const DISPLAY_CURRENCIES = ['USD','EUR','GBP','JPY','CAD','AUD','CHF','CNY','MXN','KRW'];
+
+function displayedResearchValue(research: ResearchResult, currency: string) {
+  const original = research.asking.originalMedian;
+  const originalCurrency = research.asking.originalCurrency;
+  if (original != null && originalCurrency === 'USD') {
+    const rate = currency === 'USD' ? 1 : research.exchangeRates?.[currency];
+    if (rate) return original * rate;
+  }
+  return currency === research.asking.currency ? research.asking.median : null;
+}
+
 function normalizeText(value: unknown) {
   return String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -624,6 +636,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [saveErrorModal, setSaveErrorModal] = useState('');
   const initialPhotosHandled = useRef(false);
   const [research, setResearch] = useState<ResearchResult | undefined>(item?.research || seed?.research);
+  const [displayCurrency, setDisplayCurrency] = useState(item?.research?.asking.originalCurrency || seed?.research?.asking.originalCurrency || 'EUR');
   const [researchBusy, setResearchBusy] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   useEffect(() => {
@@ -807,7 +820,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
             {research ? <div className="research-result">
               {research.searchIdentity && <p className="muted"><b>Producto buscado:</b> {research.searchIdentity}</p>}
               {research.resolvedIdentity?.title && <p className="muted"><b>Producto resuelto:</b> {research.resolvedIdentity.title}</p>}
-              {research.asking.median != null ? <div className="valuation-highlight"><span className="valuation-kicker">VALOR ESTIMADO ACTUAL</span><strong>{money(research.asking.median, research.asking.currency || 'EUR')}</strong><div className="valuation-range">Rango observado: {money(research.asking.min, research.asking.currency || 'EUR')} – {money(research.asking.max, research.asking.currency || 'EUR')}</div><small>{research.asking.label}</small></div> : <div className="valuation-highlight empty"><span className="valuation-kicker">VALOR ESTIMADO</span><strong>Sin precio automático todavía</strong><small>No se encontró un precio suficientemente exacto para esta pieza.</small></div>}
+              {research.asking.median != null ? <div className="valuation-highlight"><div className="valuation-head"><span className="valuation-kicker">VALOR ESTIMADO ACTUAL</span><select aria-label="Moneda del valor estimado" value={displayCurrency} onChange={(event) => setDisplayCurrency(event.target.value)}>{DISPLAY_CURRENCIES.filter((code) => code === research.asking.originalCurrency || code === research.asking.currency || research.exchangeRates?.[code]).map((code) => <option key={code} value={code}>{code}</option>)}</select></div><strong>{money(displayedResearchValue(research, displayCurrency) ?? research.asking.median, displayedResearchValue(research, displayCurrency) != null ? displayCurrency : research.asking.currency || 'EUR')}</strong>{research.asking.originalMedian != null && research.asking.originalCurrency && <div className="valuation-range">Valor original de hobbyDB: {money(research.asking.originalMedian, research.asking.originalCurrency)}</div>}<small>{research.asking.label}</small></div> : <div className="valuation-highlight empty"><span className="valuation-kicker">VALOR ESTIMADO</span><strong>Sin precio automático todavía</strong><small>No se encontró un precio suficientemente exacto para esta pieza.</small></div>}
               <p>{research.summary}</p>
               <div className="market-summary"><div><span>Páginas útiles</span><b>{new Set(research.sources.map((source) => source.url)).size || '—'}</b></div><div><span>Precios detectados</span><b>{research.listings.length || '—'}</b></div><div><span>Comparables usados</span><b>{research.comparables.length || '—'}</b></div><div><span>Mediana</span><b>{research.asking.median == null ? '—' : money(research.asking.median)}</b></div><div><span>Ventas cerradas</span><b>{research.sold.available ? `${research.sold.count || 1}${research.sold.median != null ? ` · ${money(research.sold.median)}` : ''}` : 'No verificadas'}</b></div></div>
               {research.comparables.length > 0 && <div className="comparable-prices"><h4>Precios usados para el baremo</h4>{research.comparables.slice(0,8).map((listing) => <a className="comparable-price" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.condition}</small></span><strong>{money(listing.price, listing.currency)}</strong></a>)}</div>}
