@@ -932,6 +932,13 @@ export async function research(input,config){
   }
  } else if(!priceChartingListings.length) warnings.push('No hay proveedor de búsqueda pública configurado.');
 
+ if(isFunko&&config.hobbyDbReader){
+  // Replace search snippets from hobbyDB with the value actually revealed by the browser.
+  webSources=webSources.filter(source=>!['hobbydb.com','www.hobbydb.com'].includes(hostOf(source.url)));
+  try{webSources.unshift(...normalizeSources([await config.hobbyDbReader(item)],'hobbydb-browser'));}
+  catch(error){warnings.push(error instanceof Error?error.message:'No se pudo abrir Price Guide en hobbyDB.');}
+ }
+
  // Si la visión dejó un título genérico pero los códigos llevan a una página exacta,
  // tomamos el nombre comercial de esa evidencia SIN hacer otra llamada de IA.
  const canonical=canonicalTitleFromSources(item,webSources);

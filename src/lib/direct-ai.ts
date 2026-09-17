@@ -99,7 +99,18 @@ function config() {
   if (!key) throw new Error('Activa tu clave de DeepSeek en Ajustes → IA directa.');
   // PriceCharting documenta CORS para peticiones desde navegador, así que usamos
   // el token privado que ya guarda FrikiVault en este dispositivo/cuenta.
-  return { key, model: 'deepseek-flash', fetcher: directFetch, priceChartingToken: getPriceChartingToken() };
+  return { key, model: 'deepseek-flash', fetcher: directFetch, priceChartingToken: getPriceChartingToken(),
+    ...(import.meta.env.VITE_HOBBYDB_BROWSER_ENABLED === 'true' ? { hobbyDbReader: async (item: Partial<InventoryDraft>) => {
+      const token = await auth?.currentUser?.getIdToken();
+      if (!token) throw new Error('Inicia sesión para consultar hobbyDB.');
+      const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+      const response = await fetch(base + '/api/hobbydb', { method: 'POST', headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + token}, body: JSON.stringify({item}), signal: AbortSignal.timeout(180000) });
+      if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('El servicio de navegación de hobbyDB no está desplegado.');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'No se pudo abrir hobbyDB.');
+      return result;
+    }} : {})
+  };
 }
 export const identifyDirect = (images: string[]) => identify(images, config());
 export const researchDirect = (item: Partial<InventoryDraft>) => research({confirmed: true, item}, config());
