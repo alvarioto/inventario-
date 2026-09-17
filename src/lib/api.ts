@@ -17,6 +17,19 @@ async function hobbyDbPost(payload:unknown){
 function hobbyDbSourceUrl(research?:ResearchResult){
  return research?.sources.find(source=>/https:\/\/(?:www\.)?hobbydb\.com\/marketplaces\/hobbydb\/catalog_items\//i.test(source.url))?.url||'';
 }
+function cleanFunkoIdentification(row:AiIdentification):AiIdentification{
+ if(row.type!=='funko')return row;
+ const variant=String(row.funkoVariant||'').trim();
+ if(!variant)return row;
+ const explicit=`${row.title||''} ${row.edition||''} ${(row.tags||[]).join(' ')}`;
+ const explanation=String(row.explanation||'');
+ const negativeChase=/(?:\bno\b|\bnot\b|\bwithout\b|\bsin\b).{0,28}\bchase\b/i.test(`${explicit} ${explanation}`);
+ if(/^chase$/i.test(variant)&&(!/\bchase\b/i.test(explicit)||negativeChase))return {...row,funkoVariant:''};
+ const specials=[['Flocked',/\bflocked\b/i],['Glow in the Dark',/glow in the dark|\bgitd\b/i],['Metallic',/\bmetallic\b/i],['Diamond',/\bdiamond(?: collection)?\b/i],['Black Light',/black light/i],['Chrome',/\bchrome\b/i]] as const;
+ const known=specials.find(([name])=>name.toLowerCase()===variant.toLowerCase());
+ if(known&&!known[1].test(explicit))return {...row,funkoVariant:''};
+ return row;
+}
 async function readHobbyDbValue(item:Partial<InventoryDraft>,research?:ResearchResult){
  if(!hobbyDbValueUrl||item.type!=='funko'||!item.character||!item.popNumber)return null;
  const identity={character:item.character,popNumber:item.popNumber,funkoVariant:item.funkoVariant||'Classic',hobbydbUrl:hobbyDbSourceUrl(research)||undefined};
@@ -36,7 +49,11 @@ function applyHobbyDbValue(research:ResearchResult,guide:{amount:number;currency
   links:{...research.links,ppg:guide.url}
  };
 }
-export async function identifyPhoto(images:string[]):Promise<AiIdentification>{await keyReady.catch(()=>{});return getPersonalKey()?identifyDirect(images):post<AiIdentification>('identify',{images});}
+export async function identifyPhoto(images:string[]):Promise<AiIdentification>{
+ await keyReady.catch(()=>{});
+ const result=getPersonalKey()?await identifyDirect(images):await post<AiIdentification>('identify',{images});
+ return cleanFunkoIdentification(result);
+}
 export async function investigate(item:Partial<InventoryDraft>):Promise<ResearchResult>{
  await keyReady.catch(()=>{});
  const research=await (getPersonalKey()?researchDirect(item):post<ResearchResult>('research',{confirmed:true,item}));
