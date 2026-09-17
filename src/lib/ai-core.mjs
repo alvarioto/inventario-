@@ -373,6 +373,7 @@ function pricingSourceScore(item,source){
  if(host.includes('hobbydb.com')){
   if(/\/catalog_items\/[^/?]+/.test(path))score+=40;
   if(/\/catalog_items\/?$/.test(path))score-=15;
+  if(item?.type==='funko')score+=hobbyDbTextMatches(item,raw)?80:-120;
  }
  if(host.includes('pricecharting.com')){
   if(/\/game\/funko-pop-/.test(path))score+=35;
@@ -448,7 +449,7 @@ function webSearchSources(response,{attachAllText=false}={}){
 
 export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetcher=fetch,searchMode='general'}){
  if(!key)throw new Error('Falta configurar DEEPSEEK_API_KEY en el servidor.');
- const specialistInstruction=searchMode==='identity'?'\n\nMODO IDENTIDAD: NO tasar todavía. Localiza el PRODUCTO EXACTO usando prioritariamente referencia/SKU/Item No., EAN/UPC, fabricante y texto literal de la caja. Busca páginas de producto concretas y devuelve citas donde aparezca el nombre comercial real. No describas la fotografía (dorso, caja, etiqueta, código de barras) como si fuera el nombre del producto.':searchMode==='pricecharting'?'\n\nMODO PRICECHARTING: busca primero y de forma prioritaria una ficha INDIVIDUAL del producto exacto en pricecharting.com. Devuelve cualquier precio público visible (Loose/OOB, CIB/In Box, New) con su importe explícito y cita esa ficha. No uses hobbyDB ni páginas con CAPTCHA, acceso denegado o error. Si no hay una coincidencia exacta en PriceCharting, indícalo buscando otra ficha del mismo sitio antes de abandonar.':searchMode==='funko'?'\n\nMODO FUNKO: hobbyDB/Pop Price Guide es la primera guía para identificar la pieza exacta. Después contrasta con eBay y StockX para obtener precios públicos del MISMO Funko. Si hobbyDB exige login, Premium o CAPTCHA para mostrar el Price Guide, no lo inventes ni intentes saltarlo: continúa con eBay y StockX para que la valoración no se quede vacía. Distingue Chase, Flocked, Glow, Metallic, Diamond y demás variantes. Evita lotes, accesorios, protectores y cajas vacías. Si el precio está en USD, conserva USD; la aplicación lo convertirá a EUR con referencia ECB.': '';
+ const specialistInstruction=searchMode==='identity'?'\n\nMODO IDENTIDAD: NO tasar todavía. Localiza el PRODUCTO EXACTO usando prioritariamente referencia/SKU/Item No., EAN/UPC, fabricante y texto literal de la caja. Busca páginas de producto concretas y devuelve citas donde aparezca el nombre comercial real. No describas la fotografía (dorso, caja, etiqueta, código de barras) como si fuera el nombre del producto.':searchMode==='pricecharting'?'\n\nMODO PRICECHARTING: busca primero y de forma prioritaria una ficha INDIVIDUAL del producto exacto en pricecharting.com. Devuelve cualquier precio público visible (Loose/OOB, CIB/In Box, New) con su importe explícito y cita esa ficha. No uses hobbyDB ni páginas con CAPTCHA, acceso denegado o error. Si no hay una coincidencia exacta en PriceCharting, indícalo buscando otra ficha del mismo sitio antes de abandonar.':searchMode==='funko'?'\n\nMODO FUNKO: hobbyDB/Pop Price Guide es la primera guía para IDENTIFICAR la pieza exacta. En hobbyDB busca primero nombre + número Pop, abre los candidatos y NO aceptes la página general de resultados como coincidencia. La ficha individual válida debe confirmar Brand: Funko, una Series que contenga Pop!, y Reference # igual al número Pop solicitado; si aparecen metadatos Type, para un Funko normal debe ser Art Toys. Descarta cartas, bustos, cascos, libros u otros objetos aunque tengan el mismo personaje. Si hay variante (Chase, Flocked, Glow, Metallic, Diamond, Black Light, Exclusive, etc.), debe coincidir también Production Status, variante o título. Después contrasta con eBay y StockX para obtener precios públicos del MISMO Funko. Si hobbyDB exige login, Premium o CAPTCHA para mostrar el Price Guide, no inventes el valor ni saltes la protección: conserva la ficha exacta y continúa con eBay/StockX. Si el precio está en USD, conserva USD; la aplicación lo convertirá a EUR con referencia ECB.': '';
  const exactQuery=String(query||'').replace(/\s+/g,' ').trim();
  const queryHasNumber=/\b\d{1,5}\b/.test(exactQuery);
  const forcedQueryInstruction=queryHasNumber
@@ -608,6 +609,28 @@ function funkoTextMatches(item,raw){
  return Boolean(nameTokens.length||popNumber);
 }
 
+function hobbyDbTextMatches(item,raw){
+ if(!funkoTextMatches(item,raw))return false;
+ const text=String(raw||'').replace(/\s+/g,' ').trim();
+ const popNumber=normalizeFunkoNumber(deriveFunkoFields({...item,type:'funko'}).popNumber)||funkoNumberFromTitle(item?.title);
+ const brand=text.match(/\bBrand\s*:\s*([^|·]{1,100})/i);
+ if(brand&&!/\bFunko\b/i.test(brand[1]))return false;
+ const series=text.match(/\bSeries\s*:\s*([^|·]{1,140})/i);
+ if(series&&!/\bPop!?\b/i.test(series[1]))return false;
+ const type=text.match(/\bType\s*:\s*([^|·]{1,100})/i);
+ if(type&&!/\bArt Toys?\b/i.test(type[1]))return false;
+ const refs=[...text.matchAll(/\b(?:Reference|Ref(?:erence)?)\s*(?:#|No\.?)?\s*:?\s*#?\s*(\d{1,5})\b/gi)].map(match=>match[1]);
+ if(popNumber&&refs.length&&!refs.includes(popNumber))return false;
+ // Una ficha detallada de hobbyDB que expone sus metadatos debe confirmar marca + serie + referencia.
+ const detailed=/\b(?:Brand|Series|Reference)\s*:/i.test(text);
+ if(detailed){
+  if(!/\bBrand\s*:\s*Funko\b/i.test(text))return false;
+  if(!/\bSeries\s*:[^|·]{0,140}\bPop!?\b/i.test(text))return false;
+  if(popNumber&&!new RegExp('\\b(?:Reference|Ref(?:erence)?)\\s*(?:#|No\\.?)?\\s*:?\\s*#?\\s*'+popNumber+'\\b','i').test(text))return false;
+ }
+ return true;
+}
+
 export function buildResearchIdentity(item){
  const title=!isGenericProductTitle(item?.title)?String(item.title).trim():'';
  const isFunko=item?.type==='funko'||/\bfunko\b|\bpop!?\b/i.test(`${title} ${item?.manufacturer||''} ${item?.line||''}`);
@@ -686,7 +709,12 @@ async function resolveCanonicalResearchIdentity(item,config){
 
 function relevantSourcesForItem(item,rows){
  const isFunko=item?.type==='funko'||/\bfunko\b|\bpop!?\b/i.test(`${item?.title||''} ${item?.manufacturer||''} ${item?.line||''}`);
- if(isFunko)return rows.filter(source=>funkoTextMatches({...item,type:'funko'},`${source.title||''} ${source.snippet||''}`)).slice(0,6);
+ if(isFunko)return rows.filter(source=>{
+  const raw=`${source.title||''} ${source.snippet||''}`;
+  return hostOf(source.url).includes('hobbydb.com')
+   ?hobbyDbTextMatches({...item,type:'funko'},raw)
+   :funkoTextMatches({...item,type:'funko'},raw);
+ }).slice(0,6);
  const stop=new Set(['the','and','for','with','from','funko','pop','movies','movie','figure','figura','edition','edicion','price','prices','buy','shop']);
  const titleTokens=normalizeComparableText(!isGenericProductTitle(item?.title)?item.title:`${item?.manufacturer||''} ${item?.line||''} ${item?.character||''}`).split(' ').filter(x=>x.length>=3&&!stop.has(x)&&!/^\d+$/.test(x));
  const ids=[item?.sku,item?.barcode,item?.isbn,item?.cardNumber,item?.issueNumber,...(String(item?.title||'').match(/\d{2,}/g)||[])].filter(Boolean).map(normalizeComparableText);
@@ -978,7 +1006,7 @@ export async function research(input,config){
    ebay:'https://www.ebay.es/sch/i.html?_nkw='+encodeURIComponent(identity),
    sold:'https://www.ebay.es/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw='+encodeURIComponent(identity),
    web:'https://www.google.com/search?q='+encodeURIComponent(identity+' precio'),
-   ...(isFunko?{ppg:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items?filters%5Bq%5D%5B0%5D='+encodeURIComponent(identity)}:priceChartingSupported?{priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity)}:{}),
+   ...(isFunko?{ppg:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items?q='+encodeURIComponent(identity)}:priceChartingSupported?{priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity)}:{}),
    ...(isFunko?{stockx:'https://stockx.com/search?s='+encodeURIComponent(identity)}:{})
   }
  };

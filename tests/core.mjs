@@ -163,7 +163,8 @@ const hobbyMarketFetch=async(url,init)=>{
   const prompt=String(JSON.parse(init.body).messages?.[0]?.content||'');
   hobbyPrompts.push(prompt);
   return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
-   {type:'web_search_result',title:'Éomer | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys',cited_text:'Funko Pop Movies The Lord of the Rings Éomer #1982'},
+   {type:'web_search_result',title:'Éomer | Statues & Busts | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-bust',cited_text:'Type: Statues & Busts Brand: Weta Workshop Reference #: 1982 Éomer'},
+   {type:'web_search_result',title:'Éomer | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys',cited_text:'Type: Art Toys Brand: Funko Series: Pop! Movies Reference #: 1982 Related Subjects: The Lord of the Rings Éomer'},
    {type:'web_search_result',title:'Funko Pop Éomer #1982 - 29,95 EUR',url:'https://www.ebay.es/itm/eomer1982',cited_text:'Éomer #1982 · 29,95 EUR'},
    {type:'web_search_result',title:'Funko Pop Eomer 1982',url:'https://stockx.com/funko-pop-eomer-1982',cited_text:'Eomer #1982'}
   ]}]}),{status:200,headers:{'content-type':'application/json'}});
@@ -178,8 +179,14 @@ assert.match(hobbyPrompts[0],/Eomer 1982/);
 assert.ok(hobbyResearch.asking.median>0);
 assert.equal(hobbyResearch.asking.median,29.95);
 assert.ok(hobbyResearch.sources.some(source=>source.url.includes('hobbydb.com')));
+assert.equal(hobbyResearch.sources.filter(source=>source.url.includes('hobbydb.com')).length,1);
+assert.ok(hobbyResearch.sources.some(source=>source.url.includes('eomer-art-toys')));
+assert.ok(!hobbyResearch.sources.some(source=>source.url.includes('eomer-bust')));
+assert.match(hobbyPrompts[0],/Brand: Funko/);
+assert.match(hobbyPrompts[0],/Reference #/);
 assert.ok(hobbyResearch.comparables.some(row=>row.url.includes('ebay.es')));
 assert.match(hobbyResearch.links.ppg,/hobbydb\.com/);
+assert.match(hobbyResearch.links.ppg,/\?q=/);
 assert.equal(hobbyResearch.links.priceCharting,undefined);
 
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
