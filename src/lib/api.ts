@@ -3,7 +3,7 @@ import { getPersonalKey, identifyDirect, researchDirect, keyReady } from './dire
 import type { AiIdentification, InventoryDraft, ResearchResult } from '../types';
 export type ApiStatus={deepseek:boolean;model:string;webSearch:boolean;publicSearch:boolean;mode:string;session?:string};
 const base=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');
-const hobbyDbValueUrl=(import.meta.env.VITE_HOBBYDB_VALUE_URL||'').replace(/\/$/,'');
+const hobbyDbValueUrl=(import.meta.env.VITE_HOBBYDB_VALUE_URL||'https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value').replace(/\/$/,'');
 export async function getApiStatus():Promise<ApiStatus>{await keyReady.catch(()=>{});if(getPersonalKey())return {deepseek:true,model:'deepseek-flash',webSearch:true,publicSearch:true,mode:'direct'};const r=await fetch(base+'/api/status');if(!r.ok||!r.headers.get('content-type')?.includes('application/json'))throw new Error('Configura IA directa en Ajustes para analizar fotos con tu clave de DeepSeek.');return r.json()}
 async function post<T>(route:string,payload:unknown):Promise<T>{
  const status=await getApiStatus();const token=await auth?.currentUser?.getIdToken();
@@ -15,9 +15,10 @@ async function hobbyDbPost(payload:unknown){
  const result=await r.json();if(!r.ok)throw new Error(result.error||`hobbyDB HTTP ${r.status}`);return result;
 }
 function hobbyDbSourceUrl(research?:ResearchResult){
- for(const source of research?.sources||[]){
+ const candidates=[research?.links?.ppg,...(research?.sources||[]).map(source=>source.url)].filter(Boolean) as string[];
+ for(const raw of candidates){
   try{
-   const url=new URL(source.url);
+   const url=new URL(raw);
    const host=url.hostname.toLowerCase().replace(/^www\./,'');
    if(host==='hobbydb.com'&&/\/catalog_items\/[^/?#]+/i.test(url.pathname))return url.href;
   }catch{}
