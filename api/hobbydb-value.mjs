@@ -16,6 +16,27 @@ function candidateScore(item,candidate,detailHtml){const checked=exactMatch(item
 async function inspectCandidate(item,url,cookie,candidateTitle=''){const response=await hobbydbFetch(url,cookie);const html=await response.text();const id=extractCatalogItemId(html);if(!id)return null;const match=exactMatch(item,html,candidateTitle);if(!match.ok)return null;return {id,url,title:match.title||candidateTitle,score:candidateScore(item,{url,title:candidateTitle},html),variant:match.variant};}
 async function searchCandidates(query,cookie){const path=`/marketplaces/hobbydb/catalog_items?q=${encodeURIComponent(query)}`;const response=await hobbydbFetch(path,cookie);const html=await response.text();return extractCandidates(html);}
 async function candidatesFromUrl(url,cookie){const response=await hobbydbFetch(url,cookie);const html=await response.text();return extractCandidates(html);}
+async function debugSearch(item,cookie){
+ const query=[item.character,item.popNumber,item.funkoVariant].filter(Boolean).join(' ');
+ const paths=[
+  `/marketplaces/hobbydb/catalog_items?q=${encodeURIComponent(query)}`,
+  `/marketplaces/hobbydb/catalog_items?filters[q][0]=${encodeURIComponent(query)}`,
+  `/api/catalog_items?q=${encodeURIComponent(query)}`,
+  `/api/catalog_items?search=${encodeURIComponent(query)}`,
+  `/api/catalog_items?filters[q][0]=${encodeURIComponent(query)}`,
+  '/api/catalog_items/323645'
+ ];
+ const out=[];
+ for(const path of paths){
+  try{
+   const response=await fetch(HOBBYDB+path,{method:'GET',headers:{Accept:'application/json,text/html;q=0.9,*/*;q=0.8',Cookie:cookie,'User-Agent':'Mozilla/5.0 FrikiVault/1.0',Referer:HOBBYDB+'/marketplaces/hobbydb'},redirect:'follow',cache:'no-store',signal:AbortSignal.timeout(15000)});
+   const text=await response.text();
+   const hrefs=[...text.matchAll(/href=["']([^"']+)["']/gi)].map(m=>m[1]).filter(h=>/catalog_items/i.test(h)).slice(0,12);
+   out.push({path,status:response.status,finalUrl:response.url,contentType:response.headers.get('content-type')||'',length:text.length,humanVerification:/human_verification|human verification|verify you are human/i.test(`${response.url} ${text}`),candidateCount:extractCandidates(text).length,catalogHrefs:hrefs,prefix:decodeHtml(text.slice(0,500))});
+  }catch(error){out.push({path,error:String(error?.message||error)});}
+ }
+ return out;
+}
 async function resolveItem(item,cookie){
  const candidateMap=new Map();
  if(item.hobbydbUrl){
@@ -54,4 +75,4 @@ async function resolveItem(item,cookie){
 }
 async function readPriceGuide(catalogItemId,cookie){const response=await hobbydbFetch(`/api/price_guide?catalog_item_id=${encodeURIComponent(catalogItemId)}`,cookie,'application/json');const payload=await response.json();const attributes=payload?.data?.[0]?.attributes;const amount=Number(attributes?.estimated_value);if(!Number.isFinite(amount)||amount<=0)return null;return {amount,currency:'USD',timestamp:attributes?.timestamp||null,calculatedFor:attributes?.calculated_for||null};}
 export default async function handler(req,res){const origin=String(req.headers.origin||'');const allowedOrigin=String(process.env.APP_ORIGIN||'').replace(/\/$/,'');if(origin&&allowedOrigin&&origin!==allowedOrigin)return json(res,403,{error:'Origen no autorizado.'});if(origin&&allowedOrigin)res.setHeader('Access-Control-Allow-Origin',allowedOrigin);res.setHeader('Access-Control-Allow-Headers','Content-Type');res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');if(req.method==='OPTIONS')return res.status(204).end();if(req.method!=='POST')return json(res,405,{error:'Método no permitido.'});
- try{const cookie=String(process.env.HOBBYDB_COOKIE||'').trim();if(!cookie)return json(res,503,{error:'La sesión de hobbyDB no está configurada.'});const body=typeof req.body==='string'?JSON.parse(req.body):(req.body||{});const item=body.item||{};if(!item.character||!/^\d{1,5}$/.test(String(item.popNumber||'')))return json(res,400,{error:'Faltan personaje o número Pop.'});const match=await resolveItem(item,cookie);const guide=await readPriceGuide(match.id,cookie);if(!guide)return json(res,404,{error:'Sin valor publicado en hobbyDB.'});return json(res,200,{status:'completed',value:{amount:guide.amount,currency:'USD',url:match.url,evidence:`Estimated Value $${guide.amount}`,variant:match.variant==='classic'?'Classic':match.variant,title:match.title,catalogItemId:match.id,timestamp:guide.timestamp,calculatedFor:guide.calculatedFor}});}catch(error){const message=String(error?.message||'No se pudo leer hobbyDB.');const status=error?.code==='SESSION_EXPIRED'?401:502;return json(res,status,{error:message});}}
+ try{const cookie=String(process.env.HOBBYDB_COOKIE||'').trim();if(!cookie)return json(res,503,{error:'La sesión de hobbyDB no está configurada.'});const body=typeof req.body==='string'?JSON.parse(req.body):(req.body||{});const item=body.item||{};if(body.debug===true)return json(res,200,{debug:await debugSearch(item,cookie)});if(!item.character||!/^\d{1,5}$/.test(String(item.popNumber||'')))return json(res,400,{error:'Faltan personaje o número Pop.'});const match=await resolveItem(item,cookie);const guide=await readPriceGuide(match.id,cookie);if(!guide)return json(res,404,{error:'Sin valor publicado en hobbyDB.'});return json(res,200,{status:'completed',value:{amount:guide.amount,currency:'USD',url:match.url,evidence:`Estimated Value $${guide.amount}`,variant:match.variant==='classic'?'Classic':match.variant,title:match.title,catalogItemId:match.id,timestamp:guide.timestamp,calculatedFor:guide.calculatedFor}});}catch(error){const message=String(error?.message||'No se pudo leer hobbyDB.');const status=error?.code==='SESSION_EXPIRED'?401:502;return json(res,status,{error:message});}}
