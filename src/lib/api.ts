@@ -11,24 +11,18 @@ async function post<T>(route:string,payload:unknown):Promise<T>{
  const result=await r.json();if(!r.ok)throw new Error(result.error||`Error HTTP ${r.status}`);return result;
 }
 async function hobbyDbPost(payload:unknown){
- const r=await fetch(hobbyDbValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)});
+ const r=await fetch(hobbyDbValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(60000)});
  const result=await r.json();if(!r.ok)throw new Error(result.error||`hobbyDB HTTP ${r.status}`);return result;
 }
-async function readHobbyDbValue(item:Partial<InventoryDraft>){
+function hobbyDbSourceUrl(research?:ResearchResult){
+ return research?.sources.find(source=>/https:\/\/(?:www\.)?hobbydb\.com\/marketplaces\/hobbydb\/catalog_items\//i.test(source.url))?.url||'';
+}
+async function readHobbyDbValue(item:Partial<InventoryDraft>,research?:ResearchResult){
  if(!hobbyDbValueUrl||item.type!=='funko'||!item.character||!item.popNumber)return null;
- const identity={character:item.character,popNumber:item.popNumber,funkoVariant:item.funkoVariant||'Classic'};
- const started=await hobbyDbPost({action:'start',item:identity});
- if(!started.runId)throw new Error('No se pudo iniciar la consulta de hobbyDB.');
- try{
-  for(let i=0;i<36;i++){
-   await new Promise(resolve=>setTimeout(resolve,2500));
-   const polled=await hobbyDbPost({action:'poll',runId:started.runId,item:identity});
-   if(polled.status==='completed'&&polled.value)return polled.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string};
-  }
-  throw new Error('hobbyDB tardó demasiado en mostrar el valor.');
- }finally{
-  hobbyDbPost({action:'cancel',runId:started.runId,item:identity}).catch(()=>{});
- }
+ const identity={character:item.character,popNumber:item.popNumber,funkoVariant:item.funkoVariant||'Classic',hobbydbUrl:hobbyDbSourceUrl(research)||undefined};
+ const result=await hobbyDbPost({item:identity});
+ if(result.status==='completed'&&result.value)return result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string};
+ throw new Error('hobbyDB no devolvió un Estimated Value verificable.');
 }
 function applyHobbyDbValue(research:ResearchResult,guide:{amount:number;currency:'USD';url:string;evidence:string;variant:string}):ResearchResult{
  const sourceId='hobbydb-estimated-value';
@@ -46,6 +40,6 @@ export async function identifyPhoto(images:string[]):Promise<AiIdentification>{a
 export async function investigate(item:Partial<InventoryDraft>):Promise<ResearchResult>{
  await keyReady.catch(()=>{});
  const research=await (getPersonalKey()?researchDirect(item):post<ResearchResult>('research',{confirmed:true,item}));
- try{const guide=await readHobbyDbValue(item);return guide?applyHobbyDbValue(research,guide):research;}
+ try{const guide=await readHobbyDbValue(item,research);return guide?applyHobbyDbValue(research,guide):research;}
  catch(error){return {...research,warnings:[`hobbyDB: ${error instanceof Error?error.message:'no se pudo leer el Estimated Value.'}`,...research.warnings]};}
 }
