@@ -131,6 +131,15 @@ assert.equal(mergedIdentification.sku,'90310');
 assert.equal(mergedIdentification.popNumber,'1982');
 assert.equal(mergedIdentification.funkoCategory,'Movies');
 
+// Si la visión describe la pegatina CHASE pero omite el campo, se recupera sin
+// permitir que la búsqueda de precios caiga en la variante Classic.
+const chaseVisionFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
+ title:'Funko Pop! 101 Dalmatians Cruella De Vil #1663',type:'funko',character:'Cruella De Vil',manufacturer:'Funko',line:'Pop! Disney',popNumber:'1663',funkoVariant:'',confidence:.98,explanation:'Pegatina amarilla CHASE visible en el frontal',tags:[]
+})}}]}),{status:200,headers:{'content-type':'application/json'}});
+const chaseIdentification=await identify('data:image/jpeg;base64,CHASEPHOTO',{key:'test',fetcher:chaseVisionFetch});
+assert.equal(chaseIdentification.funkoVariant,'Chase');
+assert.equal(buildResearchIdentity(chaseIdentification),'Cruella De Vil 1663 Chase');
+
 const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});
 assert.equal(noSources.sources.length,0);
 assert.equal(noSources.warnings.length,1);
