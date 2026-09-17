@@ -8,13 +8,12 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Diagnosticar búsqueda hobbyDB para Cruella 1663 Chase
+      - name: Inspeccionar cargador de búsqueda hobbyDB
         shell: bash
         run: |
           set -euo pipefail
-          URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value'
-          BODY='{"debug":true,"item":{"character":"Cruella de Vil","popNumber":"1663","funkoVariant":"Chase"}}'
-          CODE=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$BODY" || true)
+          URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-debug'
+          CODE=$(curl -sS -o response.json -w '%{http_code}' "$URL" || true)
           echo "HTTP=$CODE"
           cat response.json || true
           echo
