@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths: ['.github/workflows/probe-hobbydb-once.yml']
 
+# redeploy production after HOBBYDB_COOKIE was enabled for Production
 jobs:
   probe:
     runs-on: ubuntu-latest
