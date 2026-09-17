@@ -1,0 +1,32 @@
+name: Apply hobbyDB Funko pricing
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/switch-funko-hobbydb.mjs
+      - .github/workflows/one-shot-hobbydb-funko.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply hobbyDB pricing patch
+        run: node scripts/switch-funko-hobbydb.mjs
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit validated patch
+        run: |
+          rm scripts/switch-funko-hobbydb.mjs
+          rm .github/workflows/one-shot-hobbydb-funko.yml
+          git config user.name alvarioto
+          git config user.email aldipo7292@gmail.com
+          git add -A
+          git commit -m "Use hobbyDB with market fallback for Funko pricing"
+          git push
