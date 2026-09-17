@@ -1,0 +1,20 @@
+name: Sonda hobbyDB una vez
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/probe-hobbydb-once.yml']
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probar backend live
+        shell: bash
+        run: |
+          URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value'
+          BODY='{"item":{"character":"Eomer","popNumber":"1","funkoVariant":"Classic","hobbydbUrl":"https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys"}}'
+          CODE=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$BODY" || true)
+          echo "HTTP=$CODE"
+          cat response.json || true
+          echo
+          exit 0
