@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const coreFiles=['src/lib/ai-core.mjs','server/core.mjs'];
+const coreFiles=['src/lib/ai-core.mjs'];
 
 function replaceRequired(text, search, replacement, label){
   if(search instanceof RegExp){
