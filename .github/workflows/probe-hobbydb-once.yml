@@ -8,12 +8,12 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probar Cruella 1663 Chase sin URL previa
+      - name: Diagnosticar búsqueda hobbyDB para Cruella 1663 Chase
         shell: bash
         run: |
           set -euo pipefail
           URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value'
-          BODY='{"item":{"character":"Cruella de Vil","popNumber":"1663","funkoVariant":"Chase"}}'
+          BODY='{"debug":true,"item":{"character":"Cruella de Vil","popNumber":"1663","funkoVariant":"Chase"}}'
           CODE=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$BODY" || true)
           echo "HTTP=$CODE"
           cat response.json || true
