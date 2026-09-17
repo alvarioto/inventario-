@@ -1,21 +1,30 @@
-name: Sonda hobbyDB una vez
+name: Sonda hobbyDB variante
 on:
   push:
     branches: [main]
     paths: ['.github/workflows/probe-hobbydb-once.yml']
 
-# redeploy production after HOBBYDB_COOKIE was enabled for Production
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probar backend live
+      - name: Validar Éomer normal y rechazar Chase
         shell: bash
         run: |
+          set -euo pipefail
           URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value'
-          BODY='{"item":{"character":"Eomer","popNumber":"1","funkoVariant":"Classic","hobbydbUrl":"https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys"}}'
-          CODE=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$BODY" || true)
-          echo "HTTP=$CODE"
-          cat response.json || true
+          NORMAL='{"item":{"character":"Eomer","popNumber":"1982","funkoVariant":"Classic","hobbydbUrl":"https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys"}}'
+          CHASE='{"item":{"character":"Eomer","popNumber":"1982","funkoVariant":"Chase","hobbydbUrl":"https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys"}}'
+
+          N_CODE=$(curl -sS -o normal.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$NORMAL")
+          echo "NORMAL_HTTP=$N_CODE"
+          cat normal.json
           echo
-          exit 0
+          test "$N_CODE" = "200"
+          node -e "const x=require('./normal.json'); if(x?.value?.amount!==34||x?.value?.variant!=='Classic'||!String(x?.value?.url||'').includes('eomer-art-toys')) process.exit(1)"
+
+          C_CODE=$(curl -sS -o chase.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$CHASE" || true)
+          echo "CHASE_HTTP=$C_CODE"
+          cat chase.json
+          echo
+          test "$C_CODE" != "200"
