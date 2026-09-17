@@ -8,13 +8,15 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspeccionar cargador de búsqueda hobbyDB
+      - name: Validar Cruella 1663 Chase y su Estimated Value
         shell: bash
         run: |
           set -euo pipefail
-          URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-debug'
-          CODE=$(curl -sS -o response.json -w '%{http_code}' "$URL" || true)
+          URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value'
+          BODY='{"item":{"character":"Cruella de Vil","popNumber":"1663","funkoVariant":"Chase","hobbydbUrl":"https://www.hobbydb.com/marketplaces/hobbydb/catalog_items?q=Cruella%20de%20Vil%201663%20Chase"}}'
+          CODE=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$BODY" || true)
           echo "HTTP=$CODE"
-          cat response.json || true
+          cat response.json
           echo
-          exit 0
+          test "$CODE" = "200"
+          node -e "const x=require('./response.json'); const v=x?.value; if(v?.amount!==37||v?.currency!=='USD'||v?.variant!=='Chase'||String(v?.catalogItemId)!=='1705140'||!String(v?.url||'').includes('cruella-de-vil-e68aee1c-19bb-4a1d-b5cb-ec7c7bc50be4')) process.exit(1)"
