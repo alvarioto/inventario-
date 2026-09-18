@@ -2,6 +2,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { deepseek, identify, research } from './ai-core.mjs';
+import { FUNKO_STICKERS } from './funko-stickers';
 import type { InventoryDraft } from '../types';
 
 const storageKey = 'frikivault.deepseek.personal.v1';
@@ -74,7 +75,7 @@ if (auth && db) {
         const key = saved.data()?.key;
         if (typeof key === 'string' && /^sk-[A-Za-z0-9_-]{16,}$/.test(key)) savePersonalKey(key);
       }
-      const priceSaved = await getDoc(doc(db, 'users', user.uid, 'settings', 'pricecharting'));
+      const priceSaved = await getDoc(doc(db, 'users', auth.currentUser.uid, 'settings', 'pricecharting'));
       const priceToken = priceSaved.data()?.token;
       if (typeof priceToken === 'string' && /^[A-Za-z0-9]{40}$/.test(priceToken)) savePriceChartingToken(priceToken);
       window.dispatchEvent(new Event('frikivault-ai-ready'));
@@ -114,6 +115,28 @@ function config() {
 }
 export const identifyDirect = (images: string[]) => identify(images, config());
 export const researchDirect = (item: Partial<InventoryDraft>) => research({confirmed: true, item}, config());
+
+export async function inspectFunkoStickersDirect(images: string[]): Promise<{performed:boolean;stickerTexts:string[];confidence:number}> {
+  const known = FUNKO_STICKERS.map(row => row.label).join(', ');
+  const content: any[] = [{
+    type: 'text',
+    text: `Analiza SOLO las pegatinas visibles de la caja Funko. NO identifiques la figura ni deduzcas una variante por color, forma o apariencia. Transcribe literalmente el texto que puedas LEER en cada pegatina. Si una pegatina está borrosa, cortada o no puedes leer sus palabras, NO adivines: omítela. Puede haber varias pegatinas a la vez (por ejemplo Chase + tienda/convenio). Referencias conocidas para ayudarte a reconocer texto, nunca para inventarlo: ${known}. Devuelve ÚNICAMENTE JSON con esta forma: {"stickerTexts":["texto literal 1","texto literal 2"],"confidence":0.0}. confidence debe reflejar la legibilidad REAL del texto.`
+  }];
+  for (const image of images) content.push({type:'image_url',image_url:{url:image}});
+  try {
+    const result = await deepseek([{role:'user',content}], {...config(), maxTokens:350, timeoutMs:45000, retries:1});
+    const stickerTexts = Array.isArray(result?.stickerTexts)
+      ? result.stickerTexts.map((x:unknown)=>String(x||'').trim()).filter(Boolean).slice(0,6)
+      : [];
+    const confidence = Math.max(0, Math.min(1, Number(result?.confidence)||0));
+    return {performed:true,stickerTexts,confidence};
+  } catch {
+    // La inspección secundaria no debe impedir identificar el artículo. Si falla,
+    // volvemos al modo conservador del resultado principal.
+    return {performed:false,stickerTexts:[],confidence:0};
+  }
+}
+
 export const testDirect = () => deepseek([
   {role: 'user', content: 'Responde únicamente con este JSON: {"ok":true}'}
 ], config());
