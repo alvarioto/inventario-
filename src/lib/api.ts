@@ -74,6 +74,20 @@ async function readHobbyDbValue(item:Partial<InventoryDraft>,research?:ResearchR
  if(result.status==='completed'&&result.value)return result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string};
  throw new Error('hobbyDB no devolvió un Estimated Value verificable.');
 }
+async function ensureUsdDisplayRates(research:ResearchResult):Promise<ResearchResult>{
+ if(research.exchangeRates?.EUR)return research;
+ try{
+  const response=await fetch('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY,CAD,AUD,CHF,CNY,MXN,KRW',{signal:AbortSignal.timeout(10000)});
+  if(!response.ok)return research;
+  const data=await response.json();
+  const rates:Record<string,number>={...(research.exchangeRates||{}),USD:1};
+  for(const code of ['EUR','GBP','JPY','CAD','AUD','CHF','CNY','MXN','KRW']){
+   const value=Number(data?.rates?.[code]);
+   if(Number.isFinite(value)&&value>0)rates[code]=value;
+  }
+  return {...research,exchangeRates:rates};
+ }catch{return research;}
+}
 function applyHobbyDbValue(research:ResearchResult,guide:{amount:number;currency:'USD';url:string;evidence:string;variant:string}):ResearchResult{
  const sourceId='hobbydb-estimated-value';
  const source={id:sourceId,kind:'price-guide',title:'hobbyDB Estimated Value',url:guide.url,snippet:guide.evidence};
@@ -97,6 +111,6 @@ export async function identifyPhoto(images:string[]):Promise<AiIdentification>{
 export async function investigate(item:Partial<InventoryDraft>):Promise<ResearchResult>{
  await keyReady.catch(()=>{});
  const research=await (getPersonalKey()?researchDirect(item):post<ResearchResult>('research',{confirmed:true,item}));
- try{const guide=await readHobbyDbValue(item,research);return guide?applyHobbyDbValue(research,guide):research;}
+ try{const guide=await readHobbyDbValue(item,research);if(!guide)return research;const withRates=await ensureUsdDisplayRates(research);return applyHobbyDbValue(withRates,guide);}
  catch(error){return {...research,warnings:[`hobbyDB: ${error instanceof Error?error.message:'no se pudo leer el Estimated Value.'}`,...research.warnings]};}
 }
