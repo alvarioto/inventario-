@@ -38,28 +38,38 @@ function cleanKnownStickerWords(value:string){
  return clean.replace(/\s+/g,' ').trim();
 }
 function cleanFunkoTitle(title:string,variant:string){
- const clean=cleanKnownStickerWords(title);
+ let clean=cleanKnownStickerWords(title)
+  .replace(/\bupside down\b|\bclear\b|\btranslucent\b|\bwood deco\b|\bdo it yourself\b|\bdiy\b/gi,' ')
+  .replace(/\s+/g,' ').trim();
  return variant?`${clean} ${variant}`.replace(/\s+/g,' ').trim():clean;
+}
+function visualFunkoVariant(row:AiIdentification){
+ const claimed=String(row.funkoVariant||'').trim();
+ const evidence=`${row.title||''} ${row.edition||''} ${(row.tags||[]).join(' ')} ${row.explanation||''}`;
+ if(/\bupside down\b/i.test(claimed)&&/\bupside down\b/i.test(evidence))return'Upside Down';
+ if(/\bclear\b|\btranslucent\b/i.test(claimed)&&/\bclear\b|\btranslucent\b/i.test(evidence))return'Clear / Translucent';
+ if(/\bwood deco\b|\bwood(?:en)?\b/i.test(claimed)&&/\bwood deco\b|\bwood(?:en)?\b/i.test(evidence))return'Wood Deco';
+ if(/^(?:DIY|Do It Yourself)$/i.test(claimed)&&/\bDIY\b|do it yourself|sin pintar|unpainted/i.test(evidence))return'DIY';
+ return'';
 }
 function cleanFunkoIdentification(row:AiIdentification,audit?:{performed:boolean;stickerTexts:string[];confidence:number}):AiIdentification{
  if(row.type!=='funko')return row;
 
- // Si la segunda pasada especializada se ejecutó, SOLO su transcripción literal decide stickers.
- // Si no pudo leerlos, no se conserva una variante inventada por el primer análisis.
+ // Las variantes de sticker se deciden SOLO con texto realmente leído en pegatinas.
  const fallbackEvidence=`${row.edition||''} ${(row.tags||[]).join(' ')} ${row.explanation||''}`.trim();
- const evidence=audit?.performed?(audit.stickerTexts||[]).join(' | '):fallbackEvidence;
- const hits=detectAllFunkoStickers(evidence);
+ const stickerEvidence=audit?.performed?(audit.stickerTexts||[]).join(' | '):fallbackEvidence;
+ const hits=detectAllFunkoStickers(stickerEvidence);
  const variantHits=hits.filter(hit=>hit.definition.kind==='variant');
- const primaryVariant=variantHits.find(hit=>hit.definition.id==='chase')||variantHits[0]||null;
- const finalVariant=primaryVariant?.definition.variant||'';
+ const primaryStickerVariant=variantHits.find(hit=>hit.definition.id==='chase')||variantHits[0]||null;
+
+ // Otras variantes no dependen de pegatina y sí pueden distinguirse visualmente.
+ // Ej.: las minis promocionales de Stranger Things tienen versión base y "Upside Down".
+ const visualVariant=visualFunkoVariant(row);
+ const finalVariant=primaryStickerVariant?.definition.variant||visualVariant||'';
 
  const identityStickers=hits.filter(hit=>hit.definition.kind!=='variant').map(hit=>hit.definition.label);
  const variantLabels=variantHits.map(hit=>hit.definition.label);
  const stickerLabels=[...new Set([...variantLabels,...identityStickers])];
-
- // Quitamos de título/edición las variantes que el primer análisis pudo inventar y reconstruimos
- // únicamente a partir de stickers realmente leídos. Los stickers de tienda/convenio se guardan
- // como edición/tags, pero NO se convierten en variante.
  const title=cleanFunkoTitle(String(row.title||''),finalVariant);
  const baseEdition=cleanKnownStickerWords(String(row.edition||''));
  const edition=[baseEdition,...identityStickers].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' · ');
@@ -68,8 +78,15 @@ function cleanFunkoIdentification(row:AiIdentification,audit?:{performed:boolean
  return {...row,title,funkoVariant:finalVariant,edition,tags};
 }
 async function readHobbyDbValue(item:Partial<InventoryDraft>,research?:ResearchResult){
- if(!hobbyDbValueUrl||item.type!=='funko'||!item.character||!item.popNumber)return null;
- const identity={character:item.character,popNumber:item.popNumber,funkoVariant:item.funkoVariant||'Classic',hobbydbUrl:hobbyDbSourceUrl(research)||undefined};
+ if(!hobbyDbValueUrl||item.type!=='funko'||!item.character)return null;
+ const identity={
+  character:item.character,
+  popNumber:item.popNumber||'',
+  funkoCategory:item.funkoCategory||item.line||'',
+  funkoVariant:item.funkoVariant||'Classic',
+  sku:item.sku||'',
+  hobbydbUrl:hobbyDbSourceUrl(research)||undefined
+ };
  const result=await hobbyDbPost({item:identity});
  if(result.status==='completed'&&result.value)return result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string};
  throw new Error('hobbyDB no devolvió un Estimated Value verificable.');
