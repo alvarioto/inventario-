@@ -1,0 +1,9 @@
+const H='https://www.hobbydb.com';
+async function fetchRows(q,cookie){
+ const p=new URLSearchParams({include_cit:'true',include_last_page:'true',include_main_images:'true',per:'20',from_index:'true',serializer:'CatalogItemPudbSerializer',market_id:'hobbydb','order[name]':'created_at','order[sort]':'desc',page:'1',q,subvariants:'true',grouped:'false'});
+ const r=await fetch(`${H}/api/catalog_items?${p}`,{headers:{Accept:'application/json',Cookie:cookie,'User-Agent':'Mozilla/5.0 FrikiVault/1.0',Referer:`${H}/marketplaces/hobbydb`},cache:'no-store'});
+ if(!r.ok)throw new Error(`hobbyDB ${r.status}`);
+ const j=await r.json();return Array.isArray(j?.data)?j.data:[];
+}
+function safeRow(row){const a=row?.attributes||{};const images={};for(const [k,v] of Object.entries(a))if(/image/i.test(k))images[k]=v;return{id:String(row?.id||''),name:a.name||'',aka:a.aka||'',ref_number:a.ref_number||'',estimated_value:a.estimated_value||null,variant_details_summary:a.variant_details_summary||'',variant_group_name:a.variant_group_name||'',brand:(a.brand||[]).map(x=>x?.name).filter(Boolean),series:(a.series||[]).map?.(x=>x?.name).filter(Boolean)||[],related_subjects:(a.related_subjects||[]).map(x=>x?.name).filter(Boolean),production_status:a.production_status||[],urls:a.urls||{},images};}
+export default async function handler(req,res){res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json; charset=utf-8');try{const cookie=String(process.env.HOBBYDB_COOKIE||'').trim();if(!cookie){res.status(503).end(JSON.stringify({error:'no session'}));return;}const queries=['G0644','Wolverine Weapon X','Hasbro Marvel Legends Weapon X'];const out={};for(const q of queries)out[q]=(await fetchRows(q,cookie)).map(safeRow);res.status(200).end(JSON.stringify(out));}catch(e){res.status(500).end(JSON.stringify({error:String(e?.message||e)}));}}
