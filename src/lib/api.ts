@@ -1,5 +1,6 @@
 import { auth } from './firebase';
-import { getPersonalKey, identifyDirect, researchDirect, keyReady } from './direct-ai';
+import { getPersonalKey, identifyDirect, inspectFunkoStickersDirect, researchDirect, keyReady } from './direct-ai';
+import { detectAllFunkoStickers, FUNKO_STICKERS } from './funko-stickers';
 import type { AiIdentification, InventoryDraft, ResearchResult } from '../types';
 export type ApiStatus={deepseek:boolean;model:string;webSearch:boolean;publicSearch:boolean;mode:string;session?:string};
 const base=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');
@@ -26,58 +27,45 @@ function hobbyDbSourceUrl(research?:ResearchResult){
  return '';
 }
 
-type KnownFunkoVariant='Chase'|'Flocked'|'Glow in the Dark'|'Metallic'|'Diamond Collection'|'Black Light'|'Chrome';
-const funkoVariantRules:{label:KnownFunkoVariant;re:RegExp}[]=[
- {label:'Chase',re:/\bchase\b/i},
- {label:'Flocked',re:/\bflocked\b/i},
- {label:'Glow in the Dark',re:/\bglow in the dark\b|\bgitd\b/i},
- {label:'Metallic',re:/\bmetallic\b/i},
- {label:'Diamond Collection',re:/\bdiamond(?: collection)?\b/i},
- {label:'Black Light',re:/\bblack light\b/i},
- {label:'Chrome',re:/\bchrome\b/i}
-];
-function canonicalFunkoVariant(value:string):KnownFunkoVariant|''{
- const raw=String(value||'').trim();
- return funkoVariantRules.find(rule=>rule.re.test(raw))?.label||'';
+function cleanKnownStickerWords(value:string){
+ let clean=String(value||'');
+ for(const sticker of FUNKO_STICKERS){
+  for(const token of [...sticker.exactTexts,...sticker.aliases]){
+   const escaped=token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+   clean=clean.replace(new RegExp(`\\b${escaped.replace(/\\ /g,'\\s+')}\\b`,'gi'),' ');
+  }
+ }
+ return clean.replace(/\s+/g,' ').trim();
 }
-function negativeVariantEvidence(text:string,rule:RegExp){
- const source=rule.source.replace(/^\\b|\\b$/g,'');
- return new RegExp(`(?:\\bno\\b|\\bnot\\b|\\bwithout\\b|\\bsin\\b|\\bno se ve\\b|\\bno visible\\b).{0,36}(?:${source})`,'i').test(text);
+function cleanFunkoTitle(title:string,variant:string){
+ const clean=cleanKnownStickerWords(title);
+ return variant?`${clean} ${variant}`.replace(/\s+/g,' ').trim():clean;
 }
-function stickerVariantEvidence(text:string,rule:RegExp){
- const cue='(?:sticker|pegatina|sello|etiqueta)';
- const source=rule.source.replace(/^\\b|\\b$/g,'');
- return new RegExp(`${cue}.{0,42}(?:${source})|(?:${source}).{0,42}${cue}`,'i').test(text)&&!negativeVariantEvidence(text,rule);
-}
-function cleanFunkoTitle(title:string,variant:KnownFunkoVariant|''){
- let clean=String(title||'').replace(/\bchase\b|\bflocked\b|\bglow in the dark\b|\bgitd\b|\bmetallic\b|\bdiamond(?: collection)?\b|\bblack light\b|\bchrome\b/gi,' ').replace(/\s+/g,' ').trim();
- if(variant)clean=`${clean} ${variant}`.trim();
- return clean;
-}
-function cleanFunkoIdentification(row:AiIdentification):AiIdentification{
+function cleanFunkoIdentification(row:AiIdentification,audit?:{performed:boolean;stickerTexts:string[];confidence:number}):AiIdentification{
  if(row.type!=='funko')return row;
 
- // No usamos el título generado como prueba de variante: el propio modelo puede haberla inventado ahí.
- // Solo aceptamos una variante especial si existe evidencia textual positiva en lo observado/descrito.
- const evidence=`${row.edition||''} ${(row.tags||[]).join(' ')} ${row.explanation||''}`.trim();
- const claimed=canonicalFunkoVariant(String(row.funkoVariant||''));
+ // Si la segunda pasada especializada se ejecutó, SOLO su transcripción literal decide stickers.
+ // Si no pudo leerlos, no se conserva una variante inventada por el primer análisis.
+ const fallbackEvidence=`${row.edition||''} ${(row.tags||[]).join(' ')} ${row.explanation||''}`.trim();
+ const evidence=audit?.performed?(audit.stickerTexts||[]).join(' | '):fallbackEvidence;
+ const hits=detectAllFunkoStickers(evidence);
+ const variantHits=hits.filter(hit=>hit.definition.kind==='variant');
+ const primaryVariant=variantHits.find(hit=>hit.definition.id==='chase')||variantHits[0]||null;
+ const finalVariant=primaryVariant?.definition.variant||'';
 
- // Una pegatina cuyo texto se ha leído explícitamente manda sobre cualquier inferencia previa.
- // Chase tiene prioridad porque puede coexistir con acabados/ediciones y es la distinción comercial clave.
- const stickerHits=funkoVariantRules.filter(rule=>stickerVariantEvidence(evidence,rule.re));
- const sticker=stickerHits.find(rule=>rule.label==='Chase')||stickerHits[0];
+ const identityStickers=hits.filter(hit=>hit.definition.kind!=='variant').map(hit=>hit.definition.label);
+ const variantLabels=variantHits.map(hit=>hit.definition.label);
+ const stickerLabels=[...new Set([...variantLabels,...identityStickers])];
 
- // Si no hay lectura explícita de pegatina, exigimos al menos que el nombre de la variante aparezca
- // positivamente en edición/tags/explicación. Ver "una pegatina" por sí solo NO basta.
- const positiveHits=funkoVariantRules.filter(rule=>rule.re.test(evidence)&&!negativeVariantEvidence(evidence,rule.re));
- const positive=positiveHits.find(rule=>rule.label==='Chase')||positiveHits[0];
- const resolved=sticker?.label||positive?.label||'';
-
- // Si el modelo afirmó Diamond/Chase/etc. sin evidencia literal, se elimina en vez de adivinar.
- // Si afirmó una variante distinta a la que realmente leyó en la pegatina, se corrige.
- const finalVariant=resolved||(claimed?'':'');
+ // Quitamos de título/edición las variantes que el primer análisis pudo inventar y reconstruimos
+ // únicamente a partir de stickers realmente leídos. Los stickers de tienda/convenio se guardan
+ // como edición/tags, pero NO se convierten en variante.
  const title=cleanFunkoTitle(String(row.title||''),finalVariant);
- return {...row,title,funkoVariant:finalVariant};
+ const baseEdition=cleanKnownStickerWords(String(row.edition||''));
+ const edition=[baseEdition,...identityStickers].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' · ');
+ const tags=[...new Set([...(row.tags||[]).filter(tag=>!FUNKO_STICKERS.some(s=>[...s.exactTexts,...s.aliases].some(x=>tag.toLowerCase().includes(x.toLowerCase())))),...stickerLabels])];
+
+ return {...row,title,funkoVariant:finalVariant,edition,tags};
 }
 async function readHobbyDbValue(item:Partial<InventoryDraft>,research?:ResearchResult){
  if(!hobbyDbValueUrl||item.type!=='funko'||!item.character||!item.popNumber)return null;
@@ -100,8 +88,11 @@ function applyHobbyDbValue(research:ResearchResult,guide:{amount:number;currency
 }
 export async function identifyPhoto(images:string[]):Promise<AiIdentification>{
  await keyReady.catch(()=>{});
- const result=getPersonalKey()?await identifyDirect(images):await post<AiIdentification>('identify',{images});
- return cleanFunkoIdentification(result);
+ const direct=Boolean(getPersonalKey());
+ const result=direct?await identifyDirect(images):await post<AiIdentification>('identify',{images});
+ let audit:{performed:boolean;stickerTexts:string[];confidence:number}|undefined;
+ if(result.type==='funko'&&direct) audit=await inspectFunkoStickersDirect(images);
+ return cleanFunkoIdentification(result,audit);
 }
 export async function investigate(item:Partial<InventoryDraft>):Promise<ResearchResult>{
  await keyReady.catch(()=>{});
