@@ -82,7 +82,7 @@ async function readHobbyDbValue(item:Partial<InventoryDraft>,research?:ResearchR
  const isFunko=item.type==='funko';
  const name=String(item.character||item.title||'').trim();
  if(!name&&!item.sku&&!item.barcode)return null;
- const common={hobbydbUrl:hobbyDbSourceUrl(research)||undefined};
+ const common=isFunko?{hobbydbUrl:hobbyDbSourceUrl(research)||undefined}:{};
  const identity=isFunko?{
   ...common,
   type:'funko',

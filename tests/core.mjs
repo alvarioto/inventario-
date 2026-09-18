@@ -150,6 +150,12 @@ const weaponXFigure={
  type:'figure',manufacturer:'Hasbro',line:'Marvel Legends',character:'Wolverine',sku:'G0644'
 };
 assert.equal(buildResearchIdentity(weaponXFigure),'Hasbro Marvel Legends X-Men Weapon X Wolverine (Weapon X) G0644');
+// La referencia G0644 y 'Weapon X' son identidad fuerte: nunca aceptar otro Wolverine genérico.
+const backendText=readFileSync(new URL('../api/hobbydb-value.mjs',import.meta.url),'utf8');
+assert.match(backendText,/ids\.length&&!strongIdEvidence/);
+assert.match(backendText,/distinctiveTokens/);
+assert.doesNotMatch(backendText,/x\.score\+=180/);
+
 
 // Las tiendas regionales ajenas (p.ej. Amazon Brasil) no pueden contaminar la tasación.
 const genericCurrencyFetch=async(url,init)=>{

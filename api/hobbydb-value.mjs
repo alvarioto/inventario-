@@ -17,49 +17,62 @@ function urlHint(item){try{const u=new URL(item.hobbydbUrl||'');if(!['hobbydb.co
 async function resolveFunkoItem(item,cookie){const wanted=requestedVariant(item);const hint=urlHint(item);const category=categorySearchTerm(item.funkoCategory);const special=wanted==='classic'?'':item.funkoVariant;const queries=[hint.q,[item.character,item.popNumber,category,special].filter(Boolean).join(' '),[item.character,category,special].filter(Boolean).join(' '),[item.character,item.sku,category].filter(Boolean).join(' '),[item.character,item.popNumber].filter(Boolean).join(' '),[item.character,category].filter(Boolean).join(' '),[item.character,special].filter(Boolean).join(' '),String(item.character||'').trim(),String(item.sku||'').trim(),String(item.popNumber||'').trim()].map(x=>String(x||'').trim()).filter(Boolean);const unique=[...new Set(queries)];const seen=new Map();for(const query of unique){let rows=[];try{rows=await searchCatalog(query,cookie);}catch(error){if(error?.code==='SESSION_EXPIRED')throw error;continue;}for(const row of rows){if(row?.id&&!seen.has(String(row.id)))seen.set(String(row.id),row);}const exact=[...seen.values()].map(row=>exactRow(item,row)).filter(Boolean);if(exact.length){exact.forEach(x=>{if(hint.slug&&rowUrl(x.row).includes(`/catalog_items/${hint.slug}`))x.score+=150;});exact.sort((a,b)=>b.score-a.score);const best=exact[0];const a=best.row.attributes||{};return{id:String(best.row.id||a.id),url:rowUrl(best.row),title:a.name||item.character,variant:best.variant,searchEstimatedValue:Number(a.estimated_value)||null};}}
  throw new Error('No se encontró una ficha de hobbyDB que coincida exactamente con personaje, línea y variante.');}
 
-function genericExactRow(item,row){
+function genericExactRow(item,row,{strongQuery=false}={}){
  const a=row?.attributes||{};
  const related=(a.related_subjects||[]).map(x=>x?.name);
  const series=(a.series||[]).map?.(x=>x?.name)||[];
  const brands=(a.brand||[]).map(x=>normalize(x?.name));
  const hay=normalize([a.name,a.aka,a.ref_number,a.variant_group_name,a.variant_details_summary,...related,...series,...brands,...(Array.isArray(a.production_status)?a.production_status:[])].flat().filter(Boolean).join(' '));
- const wantedName=normalize(item.character||item.title||'');
- const stop=new Set(['the','and','with','from','marvel','comics','comic','figure','figura','series']);
- const nameTokens=tokens(wantedName).filter(x=>x.length>=3&&!stop.has(x));
- const nameHits=nameTokens.filter(x=>hay.includes(x)).length;
- const minNameHits=nameTokens.length<=1?1:Math.max(2,Math.ceil(nameTokens.length*.45));
+ const stop=new Set(['the','and','with','from','marvel','comics','comic','figure','figura','series','action','collectible','retro']);
+ const titleTokens=tokens(item.title||'').filter(x=>x.length>=3&&!stop.has(x));
+ const characterTokens=tokens(item.character||'').filter(x=>x.length>=3&&!stop.has(x));
+ const manufacturerTokens=tokens(item.manufacturer).filter(x=>x.length>=3);
+ const lineTokens=tokens(item.line).filter(x=>x.length>=3&&!['series'].includes(x));
+ const genericIdentity=new Set([...characterTokens,...manufacturerTokens,...lineTokens]);
+ const distinctiveTokens=titleTokens.filter(x=>!genericIdentity.has(x)&&!['men','toys','toy'].includes(x));
+ const identityTokens=[...new Set([...characterTokens,...titleTokens])];
+ const identityHits=identityTokens.filter(x=>hay.includes(x)).length;
+ const minIdentityHits=identityTokens.length<=1?1:Math.max(2,Math.ceil(identityTokens.length*.55));
+ const distinctiveHits=distinctiveTokens.filter(x=>hay.includes(x)).length;
  const sku=normalize(item.sku),barcode=normalize(item.barcode);
  const ids=[sku,barcode].filter(Boolean);
  const idHit=ids.find(id=>hay.includes(id))||'';
- const manufacturerTokens=tokens(item.manufacturer).filter(x=>x.length>=3);
+ const strongIdEvidence=Boolean(idHit||(strongQuery&&ids.length));
  const manufacturerHit=!manufacturerTokens.length||manufacturerTokens.some(x=>hay.includes(x));
- const lineTokens=tokens(item.line).filter(x=>x.length>=3&&!['series'].includes(x));
  const lineHits=lineTokens.filter(x=>hay.includes(x)).length;
  const lineHit=!lineTokens.length||lineHits>=Math.max(1,Math.ceil(lineTokens.length*.5));
  if(brands.length&&manufacturerTokens.length&&!manufacturerHit)return null;
- if(series.length&&lineTokens.length&&!lineHit&&!idHit)return null;
- if(!idHit&&nameTokens.length&&nameHits<minNameHits)return null;
- if(!idHit&&!nameTokens.length)return null;
+ if(series.length&&lineTokens.length&&!lineHit&&!strongIdEvidence)return null;
+ if(ids.length&&!strongIdEvidence)return null;
+ if(identityTokens.length&&identityHits<minIdentityHits)return null;
+ if(distinctiveTokens.length&&distinctiveHits<Math.ceil(distinctiveTokens.length*.8))return null;
+ if(!ids.length&&!identityTokens.length)return null;
  let score=0;
- if(idHit)score+=220;
+ if(idHit)score+=300;else if(strongQuery&&ids.length)score+=220;
  if(manufacturerHit&&manufacturerTokens.length)score+=70;
  if(lineHit&&lineTokens.length)score+=70;
- score+=nameHits*25;
- if(normalize(a.name)===wantedName)score+=70;
+ score+=identityHits*25+distinctiveHits*60;
+ if(normalize(a.name)===normalize(item.character||item.title||''))score+=70;
  return{row,score,variant:'exact item'};
 }
 async function resolveGenericItem(item,cookie){
- const hint=urlHint(item);
- const name=String(item.character||item.title||'').trim();
- const queries=[hint.q,String(item.sku||'').trim(),String(item.barcode||'').trim(),[item.manufacturer,item.line,name,item.sku].filter(Boolean).join(' '),[item.manufacturer,item.line,name].filter(Boolean).join(' '),[item.manufacturer,name].filter(Boolean).join(' '),String(item.title||'').trim(),String(item.character||'').trim()].map(x=>String(x||'').trim()).filter(Boolean);
+ const name=String(item.title||item.character||'').trim();
+ const sku=String(item.sku||'').trim(),barcode=String(item.barcode||'').trim();
+ const queries=[sku,barcode,[item.manufacturer,item.line,name,sku].filter(Boolean).join(' '),[item.manufacturer,item.line,name].filter(Boolean).join(' '),[item.manufacturer,name].filter(Boolean).join(' '),String(item.title||'').trim(),String(item.character||'').trim()].map(x=>String(x||'').trim()).filter(Boolean);
  const unique=[...new Set(queries)],seen=new Map();
  for(const query of unique){
   let rows=[];try{rows=await searchCatalog(query,cookie);}catch(error){if(error?.code==='SESSION_EXPIRED')throw error;continue;}
-  for(const row of rows)if(row?.id&&!seen.has(String(row.id)))seen.set(String(row.id),row);
-  const exact=[...seen.values()].map(row=>genericExactRow(item,row)).filter(Boolean);
-  if(exact.length){exact.forEach(x=>{if(hint.slug&&rowUrl(x.row).includes(`/catalog_items/${hint.slug}`))x.score+=180;});exact.sort((a,b)=>b.score-a.score);const best=exact[0],a=best.row.attributes||{};return{id:String(best.row.id||a.id),url:rowUrl(best.row),title:a.name||name,variant:best.variant,searchEstimatedValue:Number(a.estimated_value)||null};}
+  const strongQuery=Boolean((sku&&normalize(query)===normalize(sku))||(barcode&&normalize(query)===normalize(barcode)));
+  for(const row of rows){
+   if(!row?.id)continue;
+   const key=String(row.id),current=seen.get(key);
+   if(!current)seen.set(key,{row,strongQuery});
+   else if(strongQuery&&!current.strongQuery)seen.set(key,{row,strongQuery:true});
+  }
+  const exact=[...seen.values()].map(entry=>genericExactRow(item,entry.row,{strongQuery:entry.strongQuery})).filter(Boolean);
+  if(exact.length){exact.sort((a,b)=>b.score-a.score);const best=exact[0],a=best.row.attributes||{};return{id:String(best.row.id||a.id),url:rowUrl(best.row),title:a.name||name,variant:best.variant,searchEstimatedValue:Number(a.estimated_value)||null};}
  }
- throw new Error('No se encontró una ficha exacta en hobbyDB para este coleccionable.');
+ throw new Error('No se encontró una ficha exacta en hobbyDB que coincida con referencia y variante/modelo.');
 }
 async function resolveItem(item,cookie){return isFunkoRequest(item)?resolveFunkoItem(item,cookie):resolveGenericItem(item,cookie);}
 async function readPriceGuide(catalogItemId,cookie){const response=await hobbydbFetch(`/api/price_guide?catalog_item_id=${encodeURIComponent(catalogItemId)}`,cookie);const payload=await response.json();const attributes=payload?.data?.[0]?.attributes;const amount=Number(attributes?.estimated_value);if(!Number.isFinite(amount)||amount<=0)return null;return{amount,currency:'USD',timestamp:attributes?.timestamp||null,calculatedFor:attributes?.calculated_for||null};}
