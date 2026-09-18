@@ -15,9 +15,8 @@ if old_direct not in text:
     raise SystemExit('Could not locate direct-ai legacy guard')
 text = text.replace(old_direct, new_direct, 1)
 
-# The generic engine deliberately changed the summary wording; update the old regression accordingly.
 needle = "tests.write_text(q,encoding='utf-8')"
-replacement = """q=q.replace(\"assert.match(fallbackResearch.summary,/Valoración calculada localmente|única identidad/i);\",\"assert.match(fallbackResearch.summary,/Valoración calculada (?:localmente|a partir de precios públicos)|única identidad/i);\")\ntests.write_text(q,encoding='utf-8')"""
+replacement = """q=q.replace(\"assert.match(fallbackResearch.summary,/Valoración calculada localmente|única identidad/i);\",\"assert.match(fallbackResearch.summary,/Valoración calculada (?:localmente|a partir de precios públicos)|única identidad/i);\")\nq=q.replace(\"assert.ok(hobbyPrompts[0].includes('hobbyDB/Pop Price Guide'));\",\"assert.match(hobbyPrompts[0],/hobbyDB\\/(?:Pop Price Guide|PPG)/i);\")\ntests.write_text(q,encoding='utf-8')"""
 if needle not in text:
     raise SystemExit('Could not locate test write step')
 text = text.replace(needle, replacement, 1)
