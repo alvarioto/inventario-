@@ -790,8 +790,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
             <Field label="Línea / colección"><input value={draft.line || ''} onChange={(e)=>set('line',e.target.value)} placeholder="S.H.Figuarts, Marvel Legends…"/></Field>
             {draft.type === 'funko' && <>
               <Field label="Número Pop"><input inputMode="numeric" value={draft.popNumber || ''} onChange={(e)=>set('popNumber',e.target.value.replace(/\D/g,'').slice(0,5))} placeholder="1982"/></Field>
-              <Field label="Categoría Funko"><input value={draft.funkoCategory || ''} onChange={(e)=>set('funkoCategory',e.target.value)} placeholder="Movies, Television, Games…"/></Field>
-              <Field label="Variante / especial"><input value={draft.funkoVariant || ''} onChange={(e)=>set('funkoVariant',e.target.value)} placeholder="Chase, Flocked, Glow in the Dark…"/></Field>
+              <Field label="Formato / línea Funko"><input value={draft.funkoCategory || ''} onChange={(e)=>set('funkoCategory',e.target.value)} placeholder="Kinder / Promotional, Bitty Pop!, Regular, Soda…"/></Field>
+              <Field label="Variante / acabado"><input value={draft.funkoVariant || ''} onChange={(e)=>set('funkoVariant',e.target.value)} placeholder="Chase, Upside Down, Flocked, Glow, Diamond…"/></Field>
             </>}
           </div>
 

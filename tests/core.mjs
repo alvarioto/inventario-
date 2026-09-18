@@ -138,7 +138,7 @@ assert.equal(unifiedImages,3);
 assert.equal(mergedIdentification.title,'Funko Pop! Éomer #1982');
 assert.equal(mergedIdentification.sku,'90310');
 assert.equal(mergedIdentification.popNumber,'1982');
-assert.equal(mergedIdentification.funkoCategory,'Movies');
+assert.equal(mergedIdentification.funkoCategory,'Pop! Regular');
 
 // Si la visión describe la pegatina CHASE pero omite el campo, se recupera sin
 // permitir que la búsqueda de precios caiga en la variante Classic.
@@ -148,6 +148,12 @@ const chaseVisionFetch=async()=>new Response(JSON.stringify({choices:[{message:{
 const chaseIdentification=await identify('data:image/jpeg;base64,CHASEPHOTO',{key:'test',fetcher:chaseVisionFetch});
 assert.equal(chaseIdentification.funkoVariant,'Chase');
 assert.equal(buildResearchIdentity(chaseIdentification),'Cruella De Vil 1663 Chase');
+
+// Formato/línea y variante son dimensiones distintas. Kinder NO es una variante.
+const kinderMax={title:'Max Mayfield',type:'funko',character:'Max Mayfield',manufacturer:'Funko',line:'Stranger Things',funkoCategory:'Kinder / Promotional',funkoVariant:'',popNumber:'',sku:'VC265'};
+assert.equal(buildResearchIdentity(kinderMax),'Max Mayfield Kinder');
+assert.equal(buildResearchIdentity({...kinderMax,funkoVariant:'Upside Down'}),'Max Mayfield Kinder Upside Down');
+
 
 const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});
 assert.equal(noSources.sources.length,0);
@@ -255,8 +261,8 @@ assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(fi
 assert.match(appSource,/Escanear código/);
 assert.match(appSource,/Mejorar con IA/);
 assert.match(appSource,/Número Pop/);
-assert.match(appSource,/Categoría Funko/);
-assert.ok(appSource.includes('Variante / especial'));
+assert.match(appSource,/Formato \/ línea Funko/);
+assert.ok(appSource.includes('Variante / acabado'));
 assert.match(appSource,/prepared\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/imageUrls: \[\.\.\.\(current\.imageUrls \|\| \[\]\), \.\.\.urls\]\.slice\(0, limit\)/);
 assert.doesNotMatch(appSource,/const \[photos, setPhotos\]/);
