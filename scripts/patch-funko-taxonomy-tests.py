@@ -19,5 +19,17 @@ assert.equal(buildResearchIdentity({...kinderMax,funkoVariant:'Upside Down'}),'M
 if anchor not in text:
     raise SystemExit('Chase anchor not found')
 text = text.replace(anchor, anchor + extra, 1)
+
+old = "assert.match(appSource,/Categoría Funko/);"
+new = "assert.match(appSource,/Formato \/ línea Funko/);"
+if old not in text:
+    raise SystemExit('Old Funko category UI assertion not found')
+text = text.replace(old, new, 1)
+old = "assert.ok(appSource.includes('Variante / especial'));"
+new = "assert.ok(appSource.includes('Variante / acabado'));"
+if old not in text:
+    raise SystemExit('Old Funko variant UI assertion not found')
+text = text.replace(old, new, 1)
+
 path.write_text(text, encoding='utf-8')
 print('Funko taxonomy tests updated')
