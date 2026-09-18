@@ -174,6 +174,15 @@ const kinderMax={title:'Max Mayfield',type:'funko',character:'Max Mayfield',manu
 assert.equal(buildResearchIdentity(kinderMax),'Max Mayfield Kinder');
 assert.equal(buildResearchIdentity({...kinderMax,funkoVariant:'Upside Down'}),'Max Mayfield Kinder Upside Down');
 
+// Figuras físicas: la búsqueda debe usar fabricante/línea/SKU y no dejar que
+// el arte "MARVEL COMICS" arrastre los resultados hacia publicaciones.
+const weaponXFigure={
+ title:'Marvel Comics X-Men Weapon X Wolverine (Weapon X)',
+ type:'figure',manufacturer:'Hasbro',line:'Marvel Legends',character:'Wolverine',sku:'G0644'
+};
+assert.equal(buildResearchIdentity(weaponXFigure),'Hasbro Marvel Legends X-Men Weapon X Wolverine (Weapon X) G0644');
+
+
 
 const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});
 assert.equal(noSources.sources.length,0);
