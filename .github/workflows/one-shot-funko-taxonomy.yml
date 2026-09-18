@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - scripts/patch-funko-taxonomy.py
+      - scripts/patch-funko-taxonomy-tests.py
       - .github/workflows/one-shot-funko-taxonomy.yml
 
 permissions:
@@ -22,6 +23,8 @@ jobs:
           node-version: 22
       - name: Apply taxonomy patch
         run: python scripts/patch-funko-taxonomy.py
+      - name: Update taxonomy tests
+        run: python scripts/patch-funko-taxonomy-tests.py
       - name: Install
         run: npm ci
       - name: Test
@@ -32,6 +35,6 @@ jobs:
         run: |
           git config user.name 'alvarioto'
           git config user.email 'aldipo7292@gmail.com'
-          git add src/lib/ai-core.mjs src/App.tsx
+          git add src/lib/ai-core.mjs src/App.tsx tests/core.mjs
           git commit -m 'Model Funko formats separately from variants'
           git push origin main
