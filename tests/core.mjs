@@ -154,6 +154,8 @@ assert.equal(buildResearchIdentity(weaponXFigure),'Hasbro Marvel Legends X-Men W
 const backendText=readFileSync(new URL('../api/hobbydb-value.mjs',import.meta.url),'utf8');
 assert.match(backendText,/ids\.length&&!strongIdEvidence/);
 assert.match(backendText,/distinctiveTokens/);
+assert.match(backendText,/structuredExact/);
+assert.match(backendText,/coreNameExact/);
 assert.doesNotMatch(backendText,/x\.score\+=180/);
 
 

@@ -41,14 +41,21 @@ function genericExactRow(item,row,{strongQuery=false}={}){
  const manufacturerHit=!manufacturerTokens.length||manufacturerTokens.some(x=>hay.includes(x));
  const lineHits=lineTokens.filter(x=>hay.includes(x)).length;
  const lineHit=!lineTokens.length||lineHits>=Math.max(1,Math.ceil(lineTokens.length*.5));
+ // hobbyDB a veces no almacena el SKU comercial (ej. Hasbro G0644). En ese caso
+ // solo aceptamos una coincidencia estructural muy fuerte: marca + linea y TODOS
+ // los rasgos distintivos en el nombre canonico de la ficha, no solo Related Subjects.
+ const coreName=normalize([a.name,a.variant_group_name].filter(Boolean).join(' '));
+ const requiredCore=[...new Set([...characterTokens,...distinctiveTokens])].filter(x=>x.length>=3);
+ const coreNameExact=requiredCore.length>=2&&requiredCore.every(x=>coreName.includes(x));
+ const structuredExact=manufacturerHit&&lineHit&&coreNameExact;
  if(brands.length&&manufacturerTokens.length&&!manufacturerHit)return null;
  if(series.length&&lineTokens.length&&!lineHit&&!strongIdEvidence)return null;
- if(ids.length&&!strongIdEvidence)return null;
+ if(ids.length&&!strongIdEvidence&&!structuredExact)return null;
  if(identityTokens.length&&identityHits<minIdentityHits)return null;
  if(distinctiveTokens.length&&distinctiveHits<Math.ceil(distinctiveTokens.length*.8))return null;
  if(!ids.length&&!identityTokens.length)return null;
  let score=0;
- if(idHit)score+=300;else if(strongQuery&&ids.length)score+=220;
+ if(idHit)score+=300;else if(strongQuery&&ids.length)score+=220;else if(structuredExact)score+=210;
  if(manufacturerHit&&manufacturerTokens.length)score+=70;
  if(lineHit&&lineTokens.length)score+=70;
  score+=identityHits*25+distinctiveHits*60;
