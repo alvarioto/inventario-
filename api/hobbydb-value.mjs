@@ -4,6 +4,8 @@ function json(res,status,body){res.statusCode=status;res.setHeader('Content-Type
 function normalize(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
 function numberToken(value){return String(value||'').match(/\d{1,5}/)?.[0]||'';}
 function tokens(value){return normalize(value).split(' ').filter(x=>x.length>=2);}
+function regexEscape(value){return String(value||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+function stripKnownIds(value,item){let clean=String(value||'');for(const raw of [item?.sku,item?.barcode].filter(Boolean)){const token=String(raw||'').trim();if(!token)continue;clean=clean.replace(new RegExp(`\\b${regexEscape(token)}\\b`,'ig'),' ');}return clean.replace(/\s+/g,' ').trim();}
 function categorySearchTerm(value){const raw=normalize(value);if(!raw)return'';if(raw.includes('kinder')||raw.includes('promotional'))return'Kinder';if(raw.includes('bitty'))return'Bitty';if(raw.includes('pocket'))return'Pocket';if(raw.includes('mystery mini'))return'Mystery Minis';if(raw.includes('soda'))return'Funko Soda';if(raw.includes('rides'))return'Rides';if(raw.includes('town'))return'Town';if(raw.includes('moment'))return'Moments';if(raw.includes('cover'))return'Covers';if(raw.includes('pack'))return'Pack';if(raw.includes('super'))return'Super';if(raw.includes('jumbo'))return'Jumbo';if(raw.includes('mega'))return'Mega';return String(value||'').trim();}
 function isFunkoRequest(item){return item?.type==='funko'||normalize(item?.manufacturer)==='funko'||Boolean(String(item?.popNumber||'').trim()||String(item?.funkoCategory||'').trim()||String(item?.funkoVariant||'').trim());}
 function requestedVariant(item){const raw=normalize(item.funkoVariant||'');if(!raw||['classic','standard','regular','normal','base'].includes(raw))return'classic';if(raw.includes('upside down'))return'upside down';if(raw.includes('chase'))return'chase';if(raw.includes('flocked'))return'flocked';if(raw.includes('glow')||raw.includes('gitd'))return'glow';if(raw.includes('metallic'))return'metallic';if(raw.includes('diamond'))return'diamond';if(raw.includes('black light'))return'black light';if(raw.includes('chrome'))return'chrome';if(raw.includes('clear')||raw.includes('translucent'))return'clear';if(raw.includes('scented'))return'scented';if(raw.includes('patina'))return'patina';if(raw.includes('wood'))return'wood deco';if(raw==='diy'||raw.includes('do it yourself'))return'diy';if(raw.includes('art series'))return'art series';return raw;}
@@ -24,7 +26,8 @@ function genericExactRow(item,row,{strongQuery=false}={}){
  const brands=(a.brand||[]).map(x=>normalize(x?.name));
  const hay=normalize([a.name,a.aka,a.ref_number,a.variant_group_name,a.variant_details_summary,...related,...series,...brands,...(Array.isArray(a.production_status)?a.production_status:[])].flat().filter(Boolean).join(' '));
  const stop=new Set(['the','and','with','from','marvel','comics','comic','figure','figura','series','action','collectible','retro']);
- const titleTokens=tokens(item.title||'').filter(x=>x.length>=3&&!stop.has(x));
+ const semanticTitle=stripKnownIds(item.title||'',item);
+ const titleTokens=tokens(semanticTitle).filter(x=>x.length>=3&&!stop.has(x));
  const characterTokens=tokens(item.character||'').filter(x=>x.length>=3&&!stop.has(x));
  const manufacturerTokens=tokens(item.manufacturer).filter(x=>x.length>=3);
  const lineTokens=tokens(item.line).filter(x=>x.length>=3&&!['series'].includes(x));
@@ -37,35 +40,36 @@ function genericExactRow(item,row,{strongQuery=false}={}){
  const sku=normalize(item.sku),barcode=normalize(item.barcode);
  const ids=[sku,barcode].filter(Boolean);
  const idHit=ids.find(id=>hay.includes(id))||'';
- const strongIdEvidence=Boolean(idHit||(strongQuery&&ids.length));
  const manufacturerHit=!manufacturerTokens.length||manufacturerTokens.some(x=>hay.includes(x));
  const lineHits=lineTokens.filter(x=>hay.includes(x)).length;
  const lineHit=!lineTokens.length||lineHits>=Math.max(1,Math.ceil(lineTokens.length*.5));
- // hobbyDB a veces no almacena el SKU comercial (ej. Hasbro G0644). En ese caso
- // solo aceptamos una coincidencia estructural muy fuerte: marca + linea y TODOS
- // los rasgos distintivos en el nombre canonico de la ficha, no solo Related Subjects.
+ // hobbyDB a veces no almacena el SKU comercial (p. ej. Hasbro G0644). Si la IA
+ // lee mal ese SKU, no debe contaminar el nombre. Solo se acepta el fallback cuando
+ // marca + linea + identidad canonica coinciden de forma fuerte.
  const coreName=normalize([a.name,a.variant_group_name].filter(Boolean).join(' '));
  const requiredCore=[...new Set([...characterTokens,...distinctiveTokens])].filter(x=>x.length>=3);
  const coreNameExact=requiredCore.length>=2&&requiredCore.every(x=>coreName.includes(x));
  const structuredExact=manufacturerHit&&lineHit&&coreNameExact;
  if(brands.length&&manufacturerTokens.length&&!manufacturerHit)return null;
- if(series.length&&lineTokens.length&&!lineHit&&!strongIdEvidence)return null;
- if(ids.length&&!strongIdEvidence&&!structuredExact)return null;
+ if(series.length&&lineTokens.length&&!lineHit&&!idHit)return null;
+ if(ids.length&&!idHit&&!structuredExact)return null;
  if(identityTokens.length&&identityHits<minIdentityHits)return null;
  if(distinctiveTokens.length&&distinctiveHits<Math.ceil(distinctiveTokens.length*.8))return null;
  if(!ids.length&&!identityTokens.length)return null;
  let score=0;
- if(idHit)score+=300;else if(strongQuery&&ids.length)score+=220;else if(structuredExact)score+=210;
+ if(idHit)score+=300;else if(structuredExact)score+=210;
+ if(strongQuery&&idHit)score+=30;
  if(manufacturerHit&&manufacturerTokens.length)score+=70;
  if(lineHit&&lineTokens.length)score+=70;
  score+=identityHits*25+distinctiveHits*60;
- if(normalize(a.name)===normalize(item.character||item.title||''))score+=70;
+ if(normalize(a.name)===normalize(item.character||semanticTitle||''))score+=70;
  return{row,score,variant:'exact item'};
 }
 async function resolveGenericItem(item,cookie){
- const name=String(item.title||item.character||'').trim();
  const sku=String(item.sku||'').trim(),barcode=String(item.barcode||'').trim();
- const queries=[sku,barcode,[item.manufacturer,item.line,name,sku].filter(Boolean).join(' '),[item.manufacturer,item.line,name].filter(Boolean).join(' '),[item.manufacturer,name].filter(Boolean).join(' '),String(item.title||'').trim(),String(item.character||'').trim()].map(x=>String(x||'').trim()).filter(Boolean);
+ const cleanTitle=stripKnownIds(item.title||'',item);
+ const name=String(cleanTitle||item.character||'').trim();
+ const queries=[sku,barcode,[item.manufacturer,item.line,name,sku].filter(Boolean).join(' '),[item.manufacturer,item.line,name].filter(Boolean).join(' '),[item.manufacturer,name].filter(Boolean).join(' '),cleanTitle,String(item.character||'').trim()].map(x=>String(x||'').trim()).filter(Boolean);
  const unique=[...new Set(queries)],seen=new Map();
  for(const query of unique){
   let rows=[];try{rows=await searchCatalog(query,cookie);}catch(error){if(error?.code==='SESSION_EXPIRED')throw error;continue;}
