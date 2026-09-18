@@ -9,9 +9,8 @@ if old not in text:
     raise SystemExit('Could not locate legacy-provider guard in v2 migration')
 text = text.replace(old, new, 1)
 
-# Preserve the strict Funko flow that was already proven in production.
 old_funko = "funko:'FUNKO: hobbyDB/PPG principal; personaje+número+variante exactos; eBay/StockX solo contraste.'"
-new_funko = "funko:'FUNKO: hobbyDB/PPG principal. Busca la ficha exacta y exige Brand: Funko; para Pop numerados exige Series Pop! y Reference # igual al número solicitado. Si hay variante, debe coincidir exactamente; una petición Chase debe descartar Classic/Regular/Standard. En los resultados abre la tarjeta exacta con See Value y, dentro de Price Guide, usa Click to See Estimated Value and Historical Price Points. NO confundas ese valor con un anuncio de la sección \"For Sale or Trade\". Para Kinder/Promotional, Bitty, Mystery Minis, Soda u otras líneas no numeradas no exijas Reference #, pero sí nombre, línea y variante compatibles. eBay/StockX son solo contraste.'"
+new_funko = "funko:'FUNKO: hobbyDB/Pop Price Guide (PPG) principal. Busca la ficha exacta y exige Brand: Funko; para Pop numerados exige Series Pop! y Reference # igual al número solicitado. Si hay variante, debe coincidir exactamente; una petición Chase debe descartar Classic/Regular/Standard. En los resultados abre la tarjeta exacta con See Value y, dentro de Price Guide, usa Click to See Estimated Value and Historical Price Points. NO confundas ese valor con un anuncio de la sección \"For Sale or Trade\". Para Kinder/Promotional, Bitty, Mystery Minis, Soda u otras líneas no numeradas no exijas Reference #, pero sí nombre, línea y variante compatibles. eBay/StockX son solo contraste.'"
 if old_funko not in text:
     raise SystemExit('Could not locate simplified Funko instruction')
 text = text.replace(old_funko, new_funko, 1)
