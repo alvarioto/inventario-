@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - scripts/patch-general-engine-no-pricecharting.py
+      - scripts/patch-general-engine-v2.py
       - .github/workflows/one-shot-general-engine-no-pricecharting.yml
 
 permissions:
@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: 22
       - name: Apply migration
-        run: python scripts/patch-general-engine-no-pricecharting.py
+        run: python scripts/patch-general-engine-v2.py
       - name: Install
         run: npm ci
       - name: Test
