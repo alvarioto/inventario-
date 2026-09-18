@@ -75,7 +75,7 @@ if (auth && db) {
         const key = saved.data()?.key;
         if (typeof key === 'string' && /^sk-[A-Za-z0-9_-]{16,}$/.test(key)) savePersonalKey(key);
       }
-      const priceSaved = await getDoc(doc(db, 'users', auth.currentUser.uid, 'settings', 'pricecharting'));
+      const priceSaved = await getDoc(doc(db, 'users', user.uid, 'settings', 'pricecharting'));
       const priceToken = priceSaved.data()?.token;
       if (typeof priceToken === 'string' && /^[A-Za-z0-9]{40}$/.test(priceToken)) savePriceChartingToken(priceToken);
       window.dispatchEvent(new Event('frikivault-ai-ready'));
@@ -124,7 +124,7 @@ export async function inspectFunkoStickersDirect(images: string[]): Promise<{per
   }];
   for (const image of images) content.push({type:'image_url',image_url:{url:image}});
   try {
-    const result = await deepseek([{role:'user',content}], {...config(), maxTokens:350, timeoutMs:45000, retries:1});
+    const result:any = await (deepseek as any)([{role:'user',content}], {...config(), maxTokens:350, timeoutMs:45000, retries:1});
     const stickerTexts = Array.isArray(result?.stickerTexts)
       ? result.stickerTexts.map((x:unknown)=>String(x||'').trim()).filter(Boolean).slice(0,6)
       : [];
