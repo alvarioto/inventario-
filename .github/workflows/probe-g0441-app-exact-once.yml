@@ -9,15 +9,23 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Query production with screenshot payload
+      - name: Query production as Firebase browser
         shell: bash
         run: |
           set -euo pipefail
+          URL='https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value'
+          ORIGIN='https://frikivault-alvarioto-2026.web.app'
           BODY='{"item":{"type":"figure","title":"Hasbro Marvel Legends X-Men Weapon X Wolverine (Weapon X) G0441","character":"Wolverine (Weapon X)","manufacturer":"Hasbro","line":"Marvel Legends X-Men","sku":"G0441"}}'
-          HTTP=$(curl -sS -o response.json -w '%{http_code}' -X POST 'https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value' -H 'Content-Type: application/json' --data "$BODY")
+
+          OPT=$(curl -sS -o /dev/null -w '%{http_code}' -X OPTIONS "$URL" -H "Origin: $ORIGIN" -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type')
+          echo "OPTIONS=$OPT"
+          test "$OPT" = "204"
+
+          HTTP=$(curl -sS -D headers.txt -o response.json -w '%{http_code}' -X POST "$URL" -H "Origin: $ORIGIN" -H 'Content-Type: application/json' --data "$BODY")
           echo "HTTP=$HTTP"
           cat response.json
           test "$HTTP" = "200"
+          grep -qi '^access-control-allow-origin: https://frikivault-alvarioto-2026.web.app' headers.txt
           node - <<'NODE'
           const fs=require('fs');
           const data=JSON.parse(fs.readFileSync('response.json','utf8'));
@@ -26,5 +34,5 @@ jobs:
           if(Number(data.value?.amount)!==34) throw new Error('Wrong amount: '+data.value?.amount);
           if(data.value?.currency!=='USD') throw new Error('Wrong currency: '+data.value?.currency);
           if(!/Wolverine.*Weapon X/i.test(data.value?.title||'')) throw new Error('Wrong title: '+data.value?.title);
-          console.log('APP_G0441_PAYLOAD_OK');
+          console.log('BROWSER_ORIGIN_G0441_OK');
           NODE
