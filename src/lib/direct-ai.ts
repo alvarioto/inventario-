@@ -6,9 +6,7 @@ import { FUNKO_STICKERS } from './funko-stickers';
 import type { InventoryDraft } from '../types';
 
 const storageKey = 'frikivault.deepseek.personal.v1';
-const priceChartingStorageKey = 'frikivault.pricecharting.personal.v1';
 function scopedKey() { return storageKey + ':' + (auth?.currentUser?.uid || 'local'); }
-function scopedPriceChartingKey() { return priceChartingStorageKey + ':' + (auth?.currentUser?.uid || 'local'); }
 export function getPersonalKey(): string {
   return sessionStorage.getItem(scopedKey()) || localStorage.getItem(scopedKey()) || '';
 }
@@ -23,28 +21,6 @@ export async function removePersonalKey() {
   if (auth?.currentUser && db) await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'settings', 'deepseek'));
   sessionStorage.removeItem(scopedKey());
   localStorage.removeItem(scopedKey());
-}
-
-export function getPriceChartingToken(): string {
-  return sessionStorage.getItem(scopedPriceChartingKey()) || localStorage.getItem(scopedPriceChartingKey()) || '';
-}
-export function savePriceChartingToken(value: string, remember = false) {
-  const token = value.trim();
-  if (!/^[A-Za-z0-9]{40}$/.test(token)) throw new Error('El token de PriceCharting debe tener exactamente 40 caracteres.');
-  sessionStorage.removeItem(scopedPriceChartingKey());
-  localStorage.removeItem(scopedPriceChartingKey());
-  (remember ? localStorage : sessionStorage).setItem(scopedPriceChartingKey(), token);
-}
-export async function syncPriceChartingToken() {
-  if (!auth?.currentUser || !db) throw new Error('Inicia sesión con Google para sincronizar el token de PriceCharting.');
-  const token = getPriceChartingToken();
-  if (!token) throw new Error('Añade primero el token de PriceCharting.');
-  await setDoc(doc(db, 'users', auth.currentUser.uid, 'settings', 'pricecharting'), {token});
-}
-export async function removePriceChartingToken() {
-  if (auth?.currentUser && db) await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'settings', 'pricecharting'));
-  sessionStorage.removeItem(scopedPriceChartingKey());
-  localStorage.removeItem(scopedPriceChartingKey());
 }
 
 // One-time private activation. Fragments are not sent to Hosting.
@@ -75,32 +51,17 @@ if (auth && db) {
         const key = saved.data()?.key;
         if (typeof key === 'string' && /^sk-[A-Za-z0-9_-]{16,}$/.test(key)) savePersonalKey(key);
       }
-      const priceSaved = await getDoc(doc(db, 'users', user.uid, 'settings', 'pricecharting'));
-      const priceToken = priceSaved.data()?.token;
-      if (typeof priceToken === 'string' && /^[A-Za-z0-9]{40}$/.test(priceToken)) savePriceChartingToken(priceToken);
       window.dispatchEvent(new Event('frikivault-ai-ready'));
     })();
     keyReady.catch(() => { window.dispatchEvent(new Event('frikivault-ai-ready')); });
   });
 }
 
-const directFetch: typeof fetch = async (input, init) => {
-  try { return await fetch(input, init); }
-  catch (error) {
-    const target = String(input);
-    const isPriceCharting = target.includes('pricecharting.com');
-    if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
-      throw new Error(isPriceCharting ? 'PriceCharting ha tardado demasiado. Vuelve a intentarlo.' : 'DeepSeek ha tardado demasiado. Vuelve a intentarlo.');
-    }
-    throw new Error(isPriceCharting ? 'No se pudo conectar con PriceCharting.' : 'No se pudo conectar directamente con DeepSeek. Comprueba la conexión; si persiste, el proveedor puede estar bloqueando las peticiones del navegador.');
-  }
-};
+const directFetch: typeof fetch = async (input, init) => { try { return await fetch(input, init); } catch (error) { if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) throw new Error('DeepSeek ha tardado demasiado. Vuelve a intentarlo.'); throw new Error('No se pudo conectar directamente con DeepSeek.'); } };
 function config() {
   const key = getPersonalKey();
   if (!key) throw new Error('Activa tu clave de DeepSeek en Ajustes → IA directa.');
-  // PriceCharting documenta CORS para peticiones desde navegador, así que usamos
-  // el token privado que ya guarda FrikiVault en este dispositivo/cuenta.
-  return { key, model: 'deepseek-flash', fetcher: directFetch, priceChartingToken: getPriceChartingToken(),
+  return { key, model: 'deepseek-flash', fetcher: directFetch,
     ...(import.meta.env.VITE_HOBBYDB_BROWSER_ENABLED === 'true' ? { hobbyDbReader: async (item: Partial<InventoryDraft>) => {
       const token = await auth?.currentUser?.getIdToken();
       if (!token) throw new Error('Inicia sesión para consultar hobbyDB.');

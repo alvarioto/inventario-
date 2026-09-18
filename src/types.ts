@@ -147,5 +147,5 @@ export interface ResearchResult {
  sources:ResearchSource[];listings:MarketListing[];comparables:MarketListing[];
  asking:{kind:string;currency:string;count:number;min:number|null;max:number|null;median:number|null;label:string;originalCurrency?:string|null;originalMedian?:number|null};
  exchangeRates?:Record<string,number>;
- sold:{available:boolean;reason:string;count?:number;median?:number|null};warnings:string[];links:{ebay:string;sold:string;web:string;ppg?:string;priceCharting?:string;stockx?:string};
+ sold:{available:boolean;reason:string;count?:number;median?:number|null};warnings:string[];links:{ebay:string;sold:string;web:string;ppg?:string;stockx?:string};
 }

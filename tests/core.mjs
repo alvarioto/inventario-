@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, fetchPriceChartingGuide, research, identify, isGenericProductTitle, buildResearchIdentity } from '../server/core.mjs';
+import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify, isGenericProductTitle, buildResearchIdentity } from '../server/core.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
@@ -69,24 +69,6 @@ const publicListings=parsePublicListings(webSources);
 assert.equal(publicListings[0].price,24.99);
 assert.equal(publicListings[1].price,30);
 
-// PriceCharting realista: el resultado web puede traer URL/título sin precio y dejar
-// el importe únicamente en el texto final del modelo. Ese precio no puede perderse.
-let pcPrompt='';
-const pcTextOnlyFetch=async(_url,init)=>{
- pcPrompt=String(JSON.parse(init.body).messages?.[0]?.content||'');
- return new Response(JSON.stringify({content:[
-  {type:'web_search_tool_result',content:[{type:'web_search_result',title:'Eomer #1982 Prices | Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982'}]},
-  {type:'text',text:'PriceCharting · Eomer #1982 · Out of Box $11.05 · In Box $16.00 · New $18.75',citations:[]}
- ]}),{status:200,headers:{'content-type':'application/json'}});
-};
-const pcTextOnlySources=await deepseekWebSearch('Eomer 1982',{key:'test',fetcher:pcTextOnlyFetch,searchMode:'pricecharting'});
-assert.equal(pcTextOnlySources.length,1);
-assert.match(pcTextOnlySources[0].description,/\$16\.00/);
-assert.match(pcPrompt,/Busca EXCLUSIVAMENTE en PriceCharting/);
-assert.match(pcPrompt,/Eomer 1982/);
-const pcTextOnlyListings=parsePublicListings(pcTextOnlySources.map(source=>({...source,snippet:source.description||''})),{USD_EUR:.9});
-assert.equal(pcTextOnlyListings.length,3);
-assert.equal(pcTextOnlyListings[1].price,14.4);
 
 // También aprovechamos precios públicos de tiendas que no son marketplaces conocidos.
 const shopListings=parsePublicListings([{id:'shop-1',kind:'web',title:'Funko Pop Éomer #1982 - 29,95 €',url:'https://tienda-ejemplo.es/product/eomer-1982',snippet:'En stock · precio 29,95 €'}]);
@@ -94,31 +76,6 @@ assert.equal(shopListings.length,1);
 assert.equal(shopListings[0].price,29.95);
 assert.match(shopListings[0].condition,/Precio de tienda/i);
 
-// PriceCharting/hobbyDB pueden publicar USD: se convierten a EUR solo con una tasa explícita.
-const guideListings=parsePublicListings([{id:'guide-1',kind:'funko-specialist',title:'Éomer #1982 Funko POP Movies $20.00',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982',snippet:'CIB Price $20.00'}],{USD_EUR:0.85});
-assert.equal(guideListings.length,1);
-assert.equal(guideListings[0].price,17);
-assert.equal(guideListings[0].currency,'EUR');
-assert.equal(guideListings[0].sourceType,'guide');
-assert.match(guideListings[0].condition,/Guía de valoración/i);
-
-
-// API oficial PriceCharting: una coincidencia exacta con caja devuelve la guía CIB,
-// convierte centavos USD a EUR y nunca expone el token en la URL pública guardada.
-const pcToken='a'.repeat(40);
-const pcFetch=async(input)=>{
-  const url=new URL(String(input));
-  assert.equal(url.hostname,'www.pricecharting.com');
-  assert.equal(url.pathname,'/api/product');
-  assert.equal(url.searchParams.get('t'),pcToken);
-  return new Response(JSON.stringify({status:'success',id:'12345','product-name':'Eomer #1982','console-name':'Funko Pop Movies','loose-price':1399,'cib-price':2599,'new-price':3299}),{status:200,headers:{'content-type':'application/json'}});
-};
-const pcResult=await fetchPriceChartingGuide({title:'Funko Pop! Eomer #1982',type:'funko',line:'Pop! Movies',sku:'1982',hasBox:true},pcToken,pcFetch,.9);
-assert.equal(pcResult.listings.length,1);
-assert.equal(pcResult.listings[0].price,23.39);
-assert.equal(pcResult.listings[0].currency,'EUR');
-assert.equal(pcResult.listings[0].sourceType,'guide');
-assert.doesNotMatch(pcResult.sources[0].url,/t=/);
 
 // Con varias fotos: UNA sola llamada multimodal. La primera foto es principal y las demás complementarias.
 let unifiedIdentifyCalls=0;
@@ -158,6 +115,18 @@ const weaponXIdentification=await identify('data:image/jpeg;base64,WEAPONX',{key
 assert.equal(weaponXIdentification.type,'figure');
 assert.equal(weaponXIdentification.manufacturer,'Hasbro');
 assert.equal(weaponXIdentification.sku,'G0644');
+
+// La naturaleza física manda para todas las familias.
+const physicalCases=[
+ {input:{title:'Charizard promo art',type:'comic',manufacturer:'The Pokémon Company',setName:'Scarlet & Violet',cardNumber:'199/165',explanation:'Trading card inside a PSA slab',graded:true},expected:'card'},
+ {input:{title:'Batman artwork',type:'comic',manufacturer:'McFarlane Toys',line:'DC Multiverse',explanation:'Articulated action figure in blister packaging'},expected:'figure'},
+ {input:{title:'The Last of Us cover art',type:'comic',platform:'PlayStation 5',explanation:'PS5 video game disc in plastic case'},expected:'game'},
+ {input:{title:'Grogu',type:'figure',manufacturer:'LEGO',sku:'75318',explanation:'LEGO brick construction set'},expected:'lego'},
+ {input:{title:'Pikachu',type:'figure',explanation:'Soft stuffed plush toy made of fabric'},expected:'plush'},
+ {input:{title:'Iron Man helmet',type:'figure',explanation:'1:1 scale wearable prop replica helmet'},expected:'replica'}
+];
+for(const row of physicalCases){const fetcher=async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({...row.input,confidence:.95})}}]}),{status:200,headers:{'content-type':'application/json'}});const identified=await identify('data:image/jpeg;base64,PHYSICAL',{key:'test',fetcher});assert.equal(identified.type,row.expected);}
+
 
 
 // Si la visión describe la pegatina CHASE pero omite el campo, se recupera sin
@@ -206,7 +175,7 @@ const fallbackResearch=await research({confirmed:true,item:{title:'Batman #125',
 assert.equal(fallbackChatCalls,0);
 assert.equal(fallbackResearch.listings.length,1);
 assert.equal(fallbackResearch.asking.count,1);
-assert.match(fallbackResearch.summary,/Valoración calculada localmente|única identidad/i);
+assert.match(fallbackResearch.summary,/Valoración calculada (?:localmente|a partir de precios públicos)|única identidad/i);
 
 // Funko: hobbyDB aporta el único valor principal; eBay/StockX son orientación.
 let hobbyPrompts=[];
@@ -224,10 +193,10 @@ const hobbyMarketFetch=async(url,init)=>{
  }
  return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
 };
-const hobbyResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',hasBox:true}},{key:'test',fetcher:hobbyMarketFetch,priceChartingToken:'a'.repeat(40)});
+const hobbyResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',hasBox:true}},{key:'test',fetcher:hobbyMarketFetch});
 assert.equal(hobbyPrompts.length,1);
 assert.equal(hobbyResearch.searchIdentity,'Éomer 1982');
-assert.ok(hobbyPrompts[0].includes('hobbyDB/Pop Price Guide'));
+assert.match(hobbyPrompts[0],/hobbyDB\/(?:Pop Price Guide|PPG)/i);
 assert.match(hobbyPrompts[0],/Eomer 1982/);
 assert.ok(hobbyResearch.asking.median>0);
 assert.equal(hobbyResearch.asking.median,33.3);
@@ -310,15 +279,14 @@ assert.match(appSource,/Otras referencias orientativas/);
 assert.match(appSource,/Analizar artículo/);
 assert.doesNotMatch(appSource,/Confirmar e investigar|Actualizar investigación/);
 const directAiSource=readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8');
-assert.match(directAiSource,/priceChartingToken/);
-assert.match(directAiSource,/settings', 'pricecharting'/);
 const coreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
-assert.match(coreSource,/PriceCharting/);
+assert.doesNotMatch(directAiSource,/pricecharting/i);
+assert.doesNotMatch(coreSource,/pricecharting/i);
 assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 
 
 
-// Regresión: PriceCharting es prioritario y los botones del formulario conservan su estilo original.
+// Regresión: las fuentes de mercado y los botones conservan su estilo original.
 const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
 assert.ok(currentCoreSource.includes('hobbyDB/Pop Price Guide'));
@@ -352,3 +320,7 @@ const guaranteedFunko=await research({confirmed:true,item:{title:'Funko Pop! Mov
 assert.equal(guaranteedFunko.asking.median,null);
 
 console.log('core tests ok');
+
+assert.doesNotMatch(readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8'),/pricecharting/i);
+assert.doesNotMatch(readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8'),/pricecharting/i);
+assert.doesNotMatch(readFileSync(new URL('../src/components/DirectAiSettings.tsx',import.meta.url),'utf8'),/pricecharting/i);
