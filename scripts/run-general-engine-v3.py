@@ -8,11 +8,13 @@ new = """# Neutralize any legacy textual references left after replacing active 
 if old not in text:
     raise SystemExit('Could not locate legacy-provider guard in v2 migration')
 text = text.replace(old, new, 1)
+
 old_direct = "if re.search('pricecharting',d,re.I):raise SystemExit('direct-ai still contains pricecharting')"
-new_direct = """remaining=[line for line in d.splitlines() if re.search('pricecharting',line,re.I)]\nif remaining:\n    print('DIRECT_AI_LEGACY_START')\n    print('\\n'.join(remaining))\n    print('DIRECT_AI_LEGACY_END')\n    raise SystemExit('direct-ai still contains pricecharting')"""
+new_direct = """# Remove the two obsolete local-storage declarations left by the former provider.\nd=re.sub(r'^const priceChartingStorageKey.*\\n?','',d,flags=re.M)\nd=re.sub(r'^function scopedPriceChartingKey\\(\\).*\\n?','',d,flags=re.M)\nif re.search('pricecharting',d,re.I):\n    remaining=[line for line in d.splitlines() if re.search('pricecharting',line,re.I)]\n    raise SystemExit('direct-ai still contains pricecharting: '+repr(remaining))"""
 if old_direct not in text:
     raise SystemExit('Could not locate direct-ai legacy guard')
 text = text.replace(old_direct, new_direct, 1)
+
 target = Path('/tmp/frikivault-general-engine-v3.py')
 target.write_text(text, encoding='utf-8')
 subprocess.run(['python', str(target)], check=True)
