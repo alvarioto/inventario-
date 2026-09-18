@@ -30,3 +30,14 @@ text = text.replace(needle, replacement, 1)
 target = Path('/tmp/frikivault-general-engine-v3.py')
 target.write_text(text, encoding='utf-8')
 subprocess.run(['python', str(target)], check=True)
+
+# Remove the last obsolete PriceCharting link from the article UI.
+app = Path('src/App.tsx')
+a = app.read_text(encoding='utf-8')
+legacy_link = "{research.links.priceCharting && <a href={research.links.priceCharting} target=\"_blank\" rel=\"noreferrer\">PriceCharting</a>}"
+if legacy_link not in a:
+    raise SystemExit('Could not locate final PriceCharting UI link')
+a = a.replace(legacy_link, '', 1)
+if 'priceCharting' in a or 'PriceCharting' in a:
+    raise SystemExit('App.tsx still contains PriceCharting')
+app.write_text(a, encoding='utf-8')
