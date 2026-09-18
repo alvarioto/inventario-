@@ -140,6 +140,26 @@ assert.equal(mergedIdentification.sku,'90310');
 assert.equal(mergedIdentification.popNumber,'1982');
 assert.equal(mergedIdentification.funkoCategory,'Pop! Regular');
 
+// Regresión: el arte "MARVEL COMICS / X-MEN" del cartón no puede convertir
+// una figura Hasbro/Marvel Legends en un cómic.
+const weaponXVisionFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
+ title:'Marvel Legends X-Men Wolverine (Weapon X)',
+ type:'comic',
+ franchise:'Marvel / X-Men',
+ character:'Wolverine',
+ manufacturer:'Hasbro',
+ line:'Marvel Legends',
+ sku:'G0644',
+ confidence:.96,
+ explanation:'Figura articulada de Wolverine dentro de un blister con manos, cabeza y accesorios intercambiables; el cartón lleva el logo MARVEL COMICS.',
+ tags:['action figure','blister card']
+})}}]}),{status:200,headers:{'content-type':'application/json'}});
+const weaponXIdentification=await identify('data:image/jpeg;base64,WEAPONX',{key:'test',fetcher:weaponXVisionFetch});
+assert.equal(weaponXIdentification.type,'figure');
+assert.equal(weaponXIdentification.manufacturer,'Hasbro');
+assert.equal(weaponXIdentification.sku,'G0644');
+
+
 // Si la visión describe la pegatina CHASE pero omite el campo, se recupera sin
 // permitir que la búsqueda de precios caiga en la variante Classic.
 const chaseVisionFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
