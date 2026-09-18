@@ -151,6 +151,21 @@ const weaponXFigure={
 };
 assert.equal(buildResearchIdentity(weaponXFigure),'Hasbro Marvel Legends X-Men Weapon X Wolverine (Weapon X) G0644');
 
+// Las tiendas regionales ajenas (p.ej. Amazon Brasil) no pueden contaminar la tasación.
+const genericCurrencyFetch=async(url,init)=>{
+ if(String(url).includes('frankfurter.app'))return new Response(JSON.stringify({rates:{EUR:.9,GBP:.8}}),{status:200,headers:{'content-type':'application/json'}});
+ if(String(url).includes('/anthropic/v1/messages'))return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
+  {type:'web_search_result',title:'Hasbro Marvel Legends Wolverine Weapon X G0644 49,90 EUR',url:'https://www.amazon.com.br/dp/WRONGREGION',cited_text:'G0644 49,90 EUR'},
+  {type:'web_search_result',title:'Hasbro Marvel Legends Wolverine Weapon X G0644 39,90 EUR',url:'https://www.ebay.es/itm/G0644',cited_text:'Hasbro Marvel Legends G0644 39,90 EUR'}
+ ]}]}),{status:200,headers:{'content-type':'application/json'}});
+ return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
+};
+const genericCurrencyResearch=await research({confirmed:true,item:{...weaponXFigure,franchise:'Marvel',edition:'',issueNumber:'',volume:'',setName:'',cardNumber:'',rarity:'',platform:'',language:'',country:'',gradingCompany:'',grade:'',isbn:'',barcode:'',popNumber:'',funkoCategory:'',funkoVariant:''}},{key:'test',fetcher:genericCurrencyFetch});
+assert.ok(!genericCurrencyResearch.sources.some(x=>x.url.includes('amazon.com.br')));
+assert.equal(genericCurrencyResearch.exchangeRates.USD,1);
+assert.equal(genericCurrencyResearch.exchangeRates.EUR,.9);
+
+
 
 
 const noSources=await research({confirmed:true,item:{title:'Batman #125',type:'comic'}},{key:'test',fetcher:fakeFetch});

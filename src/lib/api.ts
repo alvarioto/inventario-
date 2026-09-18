@@ -78,14 +78,33 @@ function cleanFunkoIdentification(row:AiIdentification,audit?:{performed:boolean
  return {...row,title,funkoVariant:finalVariant,edition,tags};
 }
 async function readHobbyDbValue(item:Partial<InventoryDraft>,research?:ResearchResult){
- if(!hobbyDbValueUrl||item.type!=='funko'||!item.character)return null;
- const identity={
-  character:item.character,
+ if(!hobbyDbValueUrl)return null;
+ const isFunko=item.type==='funko';
+ const name=String(item.character||item.title||'').trim();
+ if(!name&&!item.sku&&!item.barcode)return null;
+ const common={hobbydbUrl:hobbyDbSourceUrl(research)||undefined};
+ const identity=isFunko?{
+  ...common,
+  type:'funko',
+  title:item.title||'',
+  character:item.character||name,
+  manufacturer:item.manufacturer||'Funko',
+  line:item.line||'',
   popNumber:item.popNumber||'',
   funkoCategory:item.funkoCategory||item.line||'',
   funkoVariant:item.funkoVariant||'Classic',
   sku:item.sku||'',
-  hobbydbUrl:hobbyDbSourceUrl(research)||undefined
+  barcode:item.barcode||''
+ }:{
+  ...common,
+  type:item.type||'other',
+  title:item.title||'',
+  character:item.character||'',
+  manufacturer:item.manufacturer||'',
+  line:item.line||'',
+  edition:item.edition||'',
+  sku:item.sku||'',
+  barcode:item.barcode||''
  };
  const result=await hobbyDbPost({item:identity});
  if(result.status==='completed'&&result.value)return result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string};

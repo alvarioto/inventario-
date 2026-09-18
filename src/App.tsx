@@ -103,7 +103,17 @@ function displayedResearchValue(research: ResearchResult, currency: string) {
     const rate = currency === 'USD' ? 1 : research.exchangeRates?.[currency];
     if (rate) return original * rate;
   }
-  return currency === research.asking.currency ? research.asking.median : null;
+  const base = research.asking.median;
+  const baseCurrency = research.asking.currency;
+  if (base == null) return null;
+  if (currency === baseCurrency) return base;
+  if (baseCurrency === 'EUR' && research.exchangeRates?.EUR) {
+    const usd = base / research.exchangeRates.EUR;
+    if (currency === 'USD') return usd;
+    const rate = research.exchangeRates?.[currency];
+    if (rate) return usd * rate;
+  }
+  return null;
 }
 
 function normalizeText(value: unknown) {
@@ -640,9 +650,10 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [researchBusy, setResearchBusy] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   useEffect(() => {
-    if (!research?.asking.originalCurrency) return;
-    setDisplayCurrency(research.exchangeRates?.EUR ? 'EUR' : research.asking.originalCurrency);
-  }, [research?.asking.originalCurrency, research?.asking.originalMedian, research?.exchangeRates?.EUR]);
+    const preferred = research?.asking.originalCurrency || research?.asking.currency;
+    if (!preferred) return;
+    setDisplayCurrency(preferred);
+  }, [research?.asking.originalCurrency, research?.asking.currency]);
   useEffect(() => {
     if (!initialPhotos.length || initialPhotosHandled.current) return;
     initialPhotosHandled.current = true;
