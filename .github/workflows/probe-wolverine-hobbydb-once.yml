@@ -1,0 +1,29 @@
+name: Probe Wolverine hobbyDB production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/probe-wolverine-hobbydb-once.yml
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query exact Wolverine figure
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY='{"item":{"type":"figure","title":"Marvel Legends X-Men Wolverine (Weapon X)","character":"Wolverine","manufacturer":"Hasbro","line":"Marvel Legends","sku":"G0644"}}'
+          HTTP=$(curl -sS -o response.json -w '%{http_code}' -X POST 'https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value' -H 'Content-Type: application/json' --data "$BODY")
+          echo "HTTP=$HTTP"
+          cat response.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const data=JSON.parse(fs.readFileSync('response.json','utf8'));
+          if (data.status!=='completed') throw new Error('hobbyDB did not complete: '+JSON.stringify(data));
+          if (data.value?.currency!=='USD') throw new Error('Expected USD');
+          if (!/hobbydb\.com\/marketplaces\/hobbydb\/catalog_items\//i.test(data.value?.url||'')) throw new Error('Expected exact hobbyDB catalog item URL');
+          if (!/wolverine|weapon x/i.test(`${data.value?.title||''} ${data.value?.url||''}`)) throw new Error('Wrong item returned');
+          console.log('PROBE_OK');
+          NODE
