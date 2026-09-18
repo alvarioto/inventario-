@@ -1,0 +1,27 @@
+name: Probe Max Kinder production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/probe-max-kinder.yml
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify normal Max Kinder selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          body='{"item":{"character":"Max Mayfield","popNumber":"","funkoCategory":"Kinder / Promotional","funkoVariant":"Classic","sku":"VC265"}}'
+          response=$(curl -sS -w '\n%{http_code}' -X POST 'https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value' -H 'Content-Type: application/json' --data "$body")
+          code=$(printf '%s' "$response" | tail -n1)
+          json=$(printf '%s' "$response" | sed '$d')
+          echo "HTTP $code"
+          echo "$json" | jq '{status, value: {amount: .value.amount, currency: .value.currency, title: .value.title, variant: .value.variant, catalogItemId: .value.catalogItemId, url: .value.url}}'
+          test "$code" = "200"
+          echo "$json" | jq -e '.status == "completed"' >/dev/null
+          echo "$json" | jq -e '.value.amount > 0 and .value.currency == "USD"' >/dev/null
+          echo "$json" | jq -e '(.value.variant | ascii_downcase) == "classic"' >/dev/null
+          echo "$json" | jq -e '(.value.title | ascii_downcase | contains("upside down") | not)' >/dev/null
