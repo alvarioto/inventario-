@@ -25,18 +25,59 @@ function hobbyDbSourceUrl(research?:ResearchResult){
  }
  return '';
 }
+
+type KnownFunkoVariant='Chase'|'Flocked'|'Glow in the Dark'|'Metallic'|'Diamond Collection'|'Black Light'|'Chrome';
+const funkoVariantRules:{label:KnownFunkoVariant;re:RegExp}[]=[
+ {label:'Chase',re:/\bchase\b/i},
+ {label:'Flocked',re:/\bflocked\b/i},
+ {label:'Glow in the Dark',re:/\bglow in the dark\b|\bgitd\b/i},
+ {label:'Metallic',re:/\bmetallic\b/i},
+ {label:'Diamond Collection',re:/\bdiamond(?: collection)?\b/i},
+ {label:'Black Light',re:/\bblack light\b/i},
+ {label:'Chrome',re:/\bchrome\b/i}
+];
+function canonicalFunkoVariant(value:string):KnownFunkoVariant|''{
+ const raw=String(value||'').trim();
+ return funkoVariantRules.find(rule=>rule.re.test(raw))?.label||'';
+}
+function negativeVariantEvidence(text:string,rule:RegExp){
+ const source=rule.source.replace(/^\\b|\\b$/g,'');
+ return new RegExp(`(?:\\bno\\b|\\bnot\\b|\\bwithout\\b|\\bsin\\b|\\bno se ve\\b|\\bno visible\\b).{0,36}(?:${source})`,'i').test(text);
+}
+function stickerVariantEvidence(text:string,rule:RegExp){
+ const cue='(?:sticker|pegatina|sello|etiqueta)';
+ const source=rule.source.replace(/^\\b|\\b$/g,'');
+ return new RegExp(`${cue}.{0,42}(?:${source})|(?:${source}).{0,42}${cue}`,'i').test(text)&&!negativeVariantEvidence(text,rule);
+}
+function cleanFunkoTitle(title:string,variant:KnownFunkoVariant|''){
+ let clean=String(title||'').replace(/\bchase\b|\bflocked\b|\bglow in the dark\b|\bgitd\b|\bmetallic\b|\bdiamond(?: collection)?\b|\bblack light\b|\bchrome\b/gi,' ').replace(/\s+/g,' ').trim();
+ if(variant)clean=`${clean} ${variant}`.trim();
+ return clean;
+}
 function cleanFunkoIdentification(row:AiIdentification):AiIdentification{
  if(row.type!=='funko')return row;
- const variant=String(row.funkoVariant||'').trim();
- if(!variant)return row;
- const explicit=`${row.title||''} ${row.edition||''} ${(row.tags||[]).join(' ')}`;
- const explanation=String(row.explanation||'');
- const negativeChase=/(?:\bno\b|\bnot\b|\bwithout\b|\bsin\b).{0,28}\bchase\b/i.test(`${explicit} ${explanation}`);
- if(/^chase$/i.test(variant)&&(!/\bchase\b/i.test(explicit)||negativeChase))return {...row,funkoVariant:''};
- const specials=[['Flocked',/\bflocked\b/i],['Glow in the Dark',/glow in the dark|\bgitd\b/i],['Metallic',/\bmetallic\b/i],['Diamond',/\bdiamond(?: collection)?\b/i],['Black Light',/black light/i],['Chrome',/\bchrome\b/i]] as const;
- const known=specials.find(([name])=>name.toLowerCase()===variant.toLowerCase());
- if(known&&!known[1].test(explicit))return {...row,funkoVariant:''};
- return row;
+
+ // No usamos el título generado como prueba de variante: el propio modelo puede haberla inventado ahí.
+ // Solo aceptamos una variante especial si existe evidencia textual positiva en lo observado/descrito.
+ const evidence=`${row.edition||''} ${(row.tags||[]).join(' ')} ${row.explanation||''}`.trim();
+ const claimed=canonicalFunkoVariant(String(row.funkoVariant||''));
+
+ // Una pegatina cuyo texto se ha leído explícitamente manda sobre cualquier inferencia previa.
+ // Chase tiene prioridad porque puede coexistir con acabados/ediciones y es la distinción comercial clave.
+ const stickerHits=funkoVariantRules.filter(rule=>stickerVariantEvidence(evidence,rule.re));
+ const sticker=stickerHits.find(rule=>rule.label==='Chase')||stickerHits[0];
+
+ // Si no hay lectura explícita de pegatina, exigimos al menos que el nombre de la variante aparezca
+ // positivamente en edición/tags/explicación. Ver "una pegatina" por sí solo NO basta.
+ const positiveHits=funkoVariantRules.filter(rule=>rule.re.test(evidence)&&!negativeVariantEvidence(evidence,rule.re));
+ const positive=positiveHits.find(rule=>rule.label==='Chase')||positiveHits[0];
+ const resolved=sticker?.label||positive?.label||'';
+
+ // Si el modelo afirmó Diamond/Chase/etc. sin evidencia literal, se elimina en vez de adivinar.
+ // Si afirmó una variante distinta a la que realmente leyó en la pegatina, se corrige.
+ const finalVariant=resolved||(claimed?'':'');
+ const title=cleanFunkoTitle(String(row.title||''),finalVariant);
+ return {...row,title,funkoVariant:finalVariant};
 }
 async function readHobbyDbValue(item:Partial<InventoryDraft>,research?:ResearchResult){
  if(!hobbyDbValueUrl||item.type!=='funko'||!item.character||!item.popNumber)return null;
