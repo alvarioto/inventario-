@@ -1,5 +1,5 @@
 import { auth } from './firebase';
-import { getPersonalKey, identifyDirect, inspectFunkoStickersDirect, researchDirect, keyReady } from './direct-ai';
+import { getPersonalKey, identifyDirect, inspectFunkoStickersDirect, keyReady } from './direct-ai';
 import { detectAllFunkoStickers, FUNKO_STICKERS } from './funko-stickers';
 import type { AiIdentification, InventoryDraft, ResearchResult } from '../types';
 export type ApiStatus={deepseek:boolean;model:string;webSearch:boolean;publicSearch:boolean;mode:string;session?:string};
@@ -104,9 +104,33 @@ export async function identifyPhoto(images:string[]):Promise<AiIdentification>{
  if(result.type==='funko'&&direct) audit=await inspectFunkoStickersDirect(images);
  return cleanFunkoIdentification(result,audit);
 }
+function freeResearchShell(item:Partial<InventoryDraft>):ResearchResult{
+ const identity=[item.character||item.title,item.popNumber,item.funkoVariant].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()||String(item.title||'').trim();
+ return {
+  checkedAt:new Date().toISOString(),
+  searchIdentity:identity,
+  summary:'Consulta gratuita de PriceCharting preparada para este artículo.',
+  facts:[],sources:[],listings:[],comparables:[],
+  asking:{kind:'guide',currency:'USD',count:0,min:null,max:null,median:null,label:'PriceCharting',originalCurrency:null,originalMedian:null},
+  exchangeRates:{USD:1},
+  sold:{available:false,count:0,median:null,reason:'No se han añadido ventas cerradas separadas.'},
+  warnings:[],
+  links:{
+   ebay:'https://www.ebay.es/sch/i.html?_nkw='+encodeURIComponent(identity),
+   sold:'https://www.ebay.es/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw='+encodeURIComponent(identity),
+   priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity),
+   web:'https://www.google.com/search?q='+encodeURIComponent(identity+' precio'),
+   ...(item.type==='funko'?{stockx:'https://stockx.com/search?s='+encodeURIComponent(identity)}:{})
+  }
+ };
+}
 export async function investigate(item:Partial<InventoryDraft>):Promise<ResearchResult>{
- await keyReady.catch(()=>{});
- const research=await (getPersonalKey()?researchDirect(item):post<ResearchResult>('research',{confirmed:true,item}));
- try{const guide=await readPriceChartingValue(item);if(!guide)return research;const withRates=await ensureUsdDisplayRates(research);return applyPriceChartingValue(withRates,guide);}
- catch(error){return {...research,warnings:[`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`,...research.warnings]};}
+ const baseResearch=freeResearchShell(item);
+ try{
+  const guide=await readPriceChartingValue(item);
+  const withRates=await ensureUsdDisplayRates(baseResearch);
+  return applyPriceChartingValue(withRates,guide);
+ }catch(error){
+  return {...baseResearch,warnings:[`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`]};
+ }
 }
