@@ -6,7 +6,6 @@ import { randomBytes } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { identify,research } from './core.mjs';
-import { readHobbyDb } from './hobbydb.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 dotenv.config({path:process.env.FRIKIVAULT_SECRET_FILE||resolve(root,'.env.server'),quiet:true});
 const env=process.env,host=env.HOST||'127.0.0.1',port=Number(env.PORT||4173);
@@ -15,7 +14,6 @@ if(!local&&(!env.FIREBASE_PROJECT_ID||!env.OWNER_UID||!env.APP_ORIGIN)){console.
 if(!local&&!env.APP_ORIGIN?.startsWith('https://')){console.error('APP_ORIGIN debe usar HTTPS en producción.');process.exit(1)}
 if(!local)initializeApp({projectId:env.FIREBASE_PROJECT_ID});
 const config={key:env.DEEPSEEK_API_KEY,model:env.DEEPSEEK_MODEL||'deepseek-flash',braveKey:env.BRAVE_SEARCH_API_KEY};
-if(env.HOBBYDB_BROWSER_ENABLED==='true'&&env.TINYFISH_API_KEY)config.hobbyDbReader=item=>readHobbyDb(item,{key:env.TINYFISH_API_KEY});
 const app=express();app.disable('x-powered-by');
 app.use((req,res,next)=>{res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');next()});
 const session=randomBytes(32).toString('hex');
@@ -37,10 +35,6 @@ app.use('/api',async(req,res,next)=>{
 });
 const calls=new Map();app.use('/api',(req,res,next)=>{const now=Date.now(),bucket=calls.get(req.owner)||{since:now,n:0};if(now-bucket.since>3600000){bucket.since=now;bucket.n=0}if(++bucket.n>30)return res.status(429).json({error:'Límite de 30 consultas por hora. Prueba más tarde.'});calls.set(req.owner,bucket);next()});
 app.use('/api',express.json({limit:'15mb'}));
-app.post('/api/hobbydb',async(req,res,next)=>{try{
- if(!config.hobbyDbReader)return res.status(503).json({error:'La navegación de hobbyDB aún no está activada.'});
- res.json(await config.hobbyDbReader(req.body?.item||{}));
-}catch(error){next(error)}});
 app.post('/api/identify',async(req,res,next)=>{try{const raw=Array.isArray(req.body?.images)?req.body.images:(req.body?.image?[req.body.image]:[]);const images=raw.slice(0,5);if(!images.length||images.some(image=>typeof image!=='string'||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)))return res.status(400).json({error:'Usa entre 1 y 5 fotos JPEG, PNG o WebP válidas.'});res.json(await identify(images,config))}catch(e){next(e)}});
 app.post('/api/research',async(req,res,next)=>{try{res.json(await research(req.body,config))}catch(e){next(e)}});
 app.use('/api',(req,res)=>res.status(404).json({error:'Ruta no encontrada.'}));

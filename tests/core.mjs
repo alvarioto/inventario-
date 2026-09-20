@@ -158,14 +158,6 @@ const weaponXFigure={
  type:'figure',manufacturer:'Hasbro',line:'Marvel Legends',character:'Wolverine',sku:'G0644'
 };
 assert.equal(buildResearchIdentity(weaponXFigure),'Hasbro Marvel Legends X-Men Weapon X Wolverine (Weapon X) G0644');
-// La referencia G0644 y 'Weapon X' son identidad fuerte: nunca aceptar otro Wolverine genérico.
-const backendText=readFileSync(new URL('../api/hobbydb-value.mjs',import.meta.url),'utf8');
-assert.match(backendText,/ids\.length&&!idHit&&!structuredExact/);
-assert.match(backendText,/distinctiveTokens/);
-assert.match(backendText,/structuredExact/);
-assert.match(backendText,/coreNameExact/);
-assert.doesNotMatch(backendText,/x\.score\+=180/);
-
 
 // Las tiendas regionales ajenas (p.ej. Amazon Brasil) no pueden contaminar la tasación.
 const genericCurrencyFetch=async(url,init)=>{
@@ -208,62 +200,55 @@ assert.equal(fallbackResearch.listings.length,1);
 assert.equal(fallbackResearch.asking.count,1);
 assert.match(fallbackResearch.summary,/Referencia orientativa calculada|única identidad/i);
 
-// Funko: hobbyDB aporta el único valor principal; eBay/StockX son orientación.
-let hobbyPrompts=[];
-const hobbyMarketFetch=async(url,init)=>{
+// Funko: PriceCharting es la referencia principal; eBay/StockX son orientación.
+let pricePrompts=[];
+const priceMarketFetch=async(url,init)=>{
  if(String(url).includes('frankfurter.dev'))return new Response(JSON.stringify({rate:.9}),{status:200,headers:{'content-type':'application/json'}});
  if(String(url).includes('/anthropic/v1/messages')){
   const prompt=String(JSON.parse(init.body).messages?.[0]?.content||'');
-  hobbyPrompts.push(prompt);
+  pricePrompts.push(prompt);
   return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
-   {type:'web_search_result',title:'Éomer | Statues & Busts | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-bust',cited_text:'Type: Statues & Busts Brand: Weta Workshop Reference #: 1982 Éomer'},
-   {type:'web_search_result',title:'Éomer | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/eomer-art-toys',cited_text:'Type: Art Toys Brand: Funko Series: Pop! Movies Reference #: 1982 Related Subjects: The Lord of the Rings Éomer Estimated Value $37'},
+   {type:'web_search_result',title:'Eomer #1982 Prices | Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982',cited_text:'Full Price Guide: Eomer #1982. Out of Box $15.00. In Box $22.00. New $25.00.'},
    {type:'web_search_result',title:'Funko Pop Éomer #1982 - 29,95 EUR',url:'https://www.ebay.es/itm/eomer1982',cited_text:'Éomer #1982 · 29,95 EUR'},
    {type:'web_search_result',title:'Funko Pop Eomer 1982',url:'https://stockx.com/funko-pop-eomer-1982',cited_text:'Eomer #1982'}
   ]}]}),{status:200,headers:{'content-type':'application/json'}});
  }
+ if(String(url).includes('frankfurter.app'))return new Response(JSON.stringify({rates:{EUR:.9,GBP:.8}}),{status:200,headers:{'content-type':'application/json'}});
  return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
 };
-const hobbyResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',hasBox:true}},{key:'test',fetcher:hobbyMarketFetch});
-assert.equal(hobbyPrompts.length,1);
-assert.equal(hobbyResearch.searchIdentity,'Éomer 1982');
-assert.match(hobbyPrompts[0],/hobbyDB\/(?:Pop Price Guide|PPG)/i);
-assert.match(hobbyPrompts[0],/Eomer 1982/);
-assert.ok(hobbyResearch.asking.median>0);
-assert.equal(hobbyResearch.asking.median,33.3);
-assert.equal(hobbyResearch.asking.originalMedian,37);
-assert.equal(hobbyResearch.asking.originalCurrency,'USD');
-assert.ok(hobbyResearch.sources.some(source=>source.url.includes('hobbydb.com')));
-assert.equal(hobbyResearch.sources.filter(source=>source.url.includes('hobbydb.com')).length,1);
-assert.ok(hobbyResearch.sources.some(source=>source.url.includes('eomer-art-toys')));
-assert.ok(!hobbyResearch.sources.some(source=>source.url.includes('eomer-bust')));
-assert.match(hobbyPrompts[0],/Brand: Funko/);
-assert.match(hobbyPrompts[0],/Reference #/);
-assert.ok(hobbyResearch.comparables.some(row=>row.url.includes('ebay.es')));
-assert.match(hobbyResearch.links.ppg,/hobbydb\.com/);
-assert.match(hobbyResearch.links.ppg,/\?q=/);
-assert.match(hobbyResearch.links.priceCharting,/pricecharting\.com\/search-products/);
-assert.match(hobbyResearch.links.priceCharting,/type=prices/);
+const priceResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',hasBox:true}},{key:'test',fetcher:priceMarketFetch});
+assert.equal(pricePrompts.length,1);
+assert.equal(priceResearch.searchIdentity,'Éomer 1982');
+assert.match(pricePrompts[0],/PriceCharting/i);
+assert.match(pricePrompts[0],/Out of Box/i);
+assert.match(pricePrompts[0],/In Box/i);
+assert.match(pricePrompts[0],/New/i);
+assert.equal(priceResearch.asking.kind,'guide');
+assert.ok(priceResearch.asking.median>0);
+assert.ok(priceResearch.sources.some(source=>source.url.includes('pricecharting.com/game/')));
+assert.ok(priceResearch.comparables.some(row=>row.url.includes('pricecharting.com/game/')));
+assert.match(priceResearch.links.priceCharting,/pricecharting\.com\/search-products/);
+assert.match(priceResearch.links.priceCharting,/type=prices/);
 
 // Dos tarjetas con el mismo personaje/número: la variante de la foto manda.
 const chaseFetch=async(url,init)=>{
  if(String(url).includes('/anthropic/v1/messages')){
   const prompt=String(JSON.parse(init.body).messages?.[0]?.content||'');
-  assert.match(prompt,/See Value/);
-  assert.match(prompt,/descartar Classic\/Regular\/Standard/);
-  assert.match(prompt,/Click to See Estimated Value and Historical Price Points/);
-  assert.match(prompt,/NO confundas ese valor con un anuncio de la sección "For Sale or Trade"/);
+  assert.match(prompt,/PriceCharting/i);
+  assert.match(prompt,/descarta Classic\/Regular\/Standard/i);
   return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
-   {type:'web_search_result',title:'Cruella De Vil Chase | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/cruella-de-vil-chase',cited_text:'Type: Art Toys Brand: Funko Series: Pop! Disney Reference #: 1663 Variant: Chase Cruella De Vil'},
-   {type:'web_search_result',title:'Cruella De Vil Classic | Art Toys | hobbyDB',url:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items/cruella-de-vil-classic',cited_text:'Type: Art Toys Brand: Funko Series: Pop! Disney Reference #: 1663 Variant: Classic Cruella De Vil'}
+   {type:'web_search_result',title:'Cruella De Vil [Chase] #1663 Prices | Funko POP Disney',url:'https://www.pricecharting.com/game/funko-pop-disney/cruella-de-vil-chase-1663',cited_text:'Cruella De Vil [Chase] #1663 Out of Box $9.04 In Box $12.00 New $15.06'},
+   {type:'web_search_result',title:'Cruella De Vil #1663 Prices | Funko POP Disney',url:'https://www.pricecharting.com/game/funko-pop-disney/cruella-de-vil-1663',cited_text:'Cruella De Vil #1663 Out of Box $5.00 In Box $7.00 New $9.00'}
   ]}]}),{status:200,headers:{'content-type':'application/json'}});
  }
+ if(String(url).includes('frankfurter'))return new Response(JSON.stringify(String(url).includes('latest')?{rates:{EUR:.9}}:{rate:.9}),{status:200,headers:{'content-type':'application/json'}});
  return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
 };
 const chaseResearch=await research({confirmed:true,item:{title:'Funko Pop! Disney Cruella De Vil #1663 Chase',type:'funko',manufacturer:'Funko',character:'Cruella De Vil',line:'Pop! Disney',popNumber:'1663',funkoVariant:'Chase',hasBox:true}},{key:'test',fetcher:chaseFetch});
 assert.equal(chaseResearch.searchIdentity,'Cruella De Vil 1663 Chase');
-assert.ok(chaseResearch.sources.some(source=>source.url.endsWith('cruella-de-vil-chase')));
-assert.ok(!chaseResearch.sources.some(source=>source.url.endsWith('cruella-de-vil-classic')));
+assert.ok(chaseResearch.sources.some(source=>source.url.includes('cruella-de-vil-chase-1663')));
+assert.ok(!chaseResearch.sources.some(source=>source.url.endsWith('cruella-de-vil-1663')));
+
 
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
 
@@ -276,8 +261,8 @@ const funkoPriceFetch=async(url)=>{
 };
 const funkoResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',sku:'90310'}},{key:'test',fetcher:funkoPriceFetch});
 assert.equal(funkoResearch.searchIdentity,'Éomer 1982');
-assert.equal(funkoResearch.asking.count,0);
-assert.equal(funkoResearch.asking.median,null);
+assert.equal(funkoResearch.asking.count,1);
+assert.ok(funkoResearch.asking.median>0);
 assert.ok(funkoResearch.comparables.some(row=>row.url.includes('ebay.es')));
 
 
@@ -286,7 +271,7 @@ const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta.url),'utf8');
 const aiCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 assert.doesNotMatch(aiCoreSource,/eBay vendidos\/completados y tiendas públicas/);
-assert.ok(aiCoreSource.includes('hobbyDB/Pop Price Guide'));
+assert.match(aiCoreSource,/PriceCharting es la referencia principal/);
 assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/Escanear código/);
 assert.match(appSource,/Mejorar con IA/);
@@ -306,9 +291,9 @@ assert.match(appSource,/País \/ mercado de la edición/);
 assert.match(appSource,/Idioma de la edición/);
 assert.match(appSource,/setTab\('home'\)/);
 assert.match(appSource,/valuation-highlight/);
-assert.match(appSource,/Referencia principal · hobbyDB Price Guide/);
+assert.match(appSource,/Referencia principal · PriceCharting/);
 assert.match(appSource,/Otras referencias orientativas/);
-assert.match(appSource,/PriceCharting \(consulta pública\)/);
+assert.match(appSource,/>PriceCharting<\/a>/);
 assert.match(appSource,/Analizar artículo/);
 assert.doesNotMatch(appSource,/Confirmar e investigar|Actualizar investigación/);
 const directAiSource=readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8');
@@ -322,16 +307,16 @@ assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 // Regresión: las fuentes de mercado y los botones conservan su estilo original.
 const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
-assert.ok(currentCoreSource.includes('hobbyDB/Pop Price Guide'));
+assert.match(currentCoreSource,/PriceCharting es la referencia principal/);
 
 assert.doesNotMatch(currentCoreSource,/reasoning:\{effort:'none'\}/);
 assert.match(currentCoreSource,/limitPricingSources/);
 assert.match(currentCoreSource,/thinking:\{type:'disabled'\}/);
 assert.match(currentCoreSource,/sourceLooksBroken/);
-assert.ok(currentCoreSource.includes("ppg:'https://www.hobbydb.com"));
+assert.doesNotMatch(currentCoreSource,/hobbydb|\bppg\b/i);
 assert.doesNotMatch(currentStylesSource,/\.sheet-foot \.primary,.sheet-foot \.secondary,.sheet-foot \.danger\{min-height:54px/);
 
-// Sin un “Estimated Value” explícito de hobbyDB no se inventa un valor principal.
+// Sin un precio público exacto no se inventa un valor principal.
 let orientativeAiCalls=0;
 const noPriceFunkoFetch=async(url,init)=>{
  if(String(url).includes('/anthropic/v1/messages'))return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[]}]}),{status:200,headers:{'content-type':'application/json'}});
@@ -341,7 +326,7 @@ const noPriceFunkoFetch=async(url,init)=>{
 const orientativeFunko=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',hasBox:true}},{key:'test',fetcher:noPriceFunkoFetch});
 assert.equal(orientativeAiCalls,0);
 assert.equal(orientativeFunko.asking.median,null);
-assert.match(orientativeFunko.warnings.join(' '),/Estimated Value/);
+assert.match(orientativeFunko.warnings.join(' '),/No se encontró un precio visible/i);
 
 // Incluso si también falla la estimación IA, la ficha conserva un valor base orientativo.
 const totalFailureFetch=async(url)=>{

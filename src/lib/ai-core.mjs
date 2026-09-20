@@ -201,7 +201,7 @@ function marketplaceName(url){
 function sourceTypeFor(source){
  const host=hostOf(source?.url),searchable=`${source?.title||''} ${source?.snippet||''}`.toLowerCase();
  if((host.startsWith('ebay.')||host.includes('.ebay.'))&&(/\bsold\b|vendid[oa]s?|completed|final price|precio final/.test(searchable)||String(source?.kind||'').includes('sold')))return 'sold';
- if(host==='hobbydb.com'||host.endsWith('.hobbydb.com'))return 'guide';
+ if(host==='pricecharting.com'||host.endsWith('.pricecharting.com'))return 'guide';
  if(host.includes('stockx.com')||host.includes('cardmarket.com')||host.includes('bricklink.com'))return 'market';
  return marketplaceName(source?.url)?'market':'shop';
 }
@@ -305,7 +305,7 @@ function allowedPricingSource(source){const host=hostOf(source?.url);if(!host)re
 function pricingSourceScore(item,source){
  const host=hostOf(source?.url),raw=`${source?.title||''} ${source?.snippet||''}`,hay=normalizeComparableText(raw);let score=extractMoneyPrices(raw).length?100:0;
  const ids=[item?.sku,item?.barcode,item?.isbn,item?.cardNumber,item?.issueNumber].filter(Boolean).map(x=>normalizeComparableText(x));if(ids.some(id=>id&&hay.includes(id)))score+=90;if(item?.type==='funko'&&funkoTextMatches(item,raw))score+=80;
- let path='';try{path=new URL(source.url).pathname.toLowerCase()}catch{}if(host.includes('hobbydb.com')&&/\/catalog_items\/[^/?]+/.test(path))score+=50;if(host.includes('ebay.')&&/\/itm\//.test(path))score+=25;if(/idealo|cardmarket|bricklink|todocoleccion|catawiki|cex|webuy/.test(host))score+=20;return score;
+ let path='';try{path=new URL(source.url).pathname.toLowerCase()}catch{}if(host.includes('pricecharting.com')&&/\/game\/[^/?]+\/[^/?]+/.test(path))score+=60;if(host.includes('ebay.')&&/\/itm\//.test(path))score+=25;if(/idealo|cardmarket|bricklink|todocoleccion|catawiki|cex|webuy/.test(host))score+=20;return score;
 }
 
 function prioritizePricingSources(item,rows){
@@ -356,7 +356,7 @@ function webSearchSources(response,{attachAllText=false}={}){
 
 export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetcher=fetch,searchMode='general'}){
  if(!key)throw new Error('Falta configurar DEEPSEEK_API_KEY en el servidor.');const exact=String(query||'').replace(/\s+/g,' ').trim();
- const instruction={identity:'Localiza el PRODUCTO EXACTO por SKU/EAN/UPC/ISBN, fabricante y nombre. No tasar todavía.',funko:'FUNKO: hobbyDB/Pop Price Guide (PPG) principal. Busca la ficha exacta y exige Brand: Funko; para Pop numerados exige Series Pop! y Reference # igual al número solicitado. Si hay variante, debe coincidir exactamente; una petición Chase debe descartar Classic/Regular/Standard. En los resultados abre la tarjeta exacta con See Value y, dentro de Price Guide, usa Click to See Estimated Value and Historical Price Points. NO confundas ese valor con un anuncio de la sección "For Sale or Trade". Para Kinder/Promotional, Bitty, Mystery Minis, Soda u otras líneas no numeradas no exijas Reference #, pero sí nombre, línea y variante compatibles. eBay/StockX son solo contraste.',figure:'FIGURA/ESTATUA: SKU/EAN + fabricante + línea + personaje. Prioriza eBay, Idealo y tiendas exactas. Descarta cómics/libros/accesorios.',card:'CARTA: set+número+rareza+grading. Prioriza Cardmarket y eBay.',comic:'CÓMIC: título+issue+edición/ISBN. Prioriza eBay, TodoColeccion y Catawiki.',manga:'MANGA: título+tomo+edición/ISBN. Prioriza eBay, TodoColeccion y librerías con esa edición.',game:'VIDEOJUEGO: título+plataforma+edición+SKU/EAN. Prioriza eBay, CeX y tiendas exactas.',lego:'LEGO: número de set/SKU primero. Prioriza BrickLink y eBay.',plush:'PELUCHE: fabricante+personaje+línea+SKU/EAN. Prioriza eBay/Idealo.',replica:'RÉPLICA: fabricante+objeto+escala/edición+SKU/EAN. Prioriza eBay/Idealo.',movie:'AUDIOVISUAL: título+formato+edición+EAN. Prioriza eBay y tiendas exactas.',merch:'MERCH: fabricante+producto+franquicia+SKU/EAN. Prioriza eBay/Idealo.',general:'COLECCIONABLE: usa naturaleza física, códigos, fabricante y línea; no mezcles tipos de objeto.'}[searchMode]||'Busca el producto físico exacto.';
+ const instruction={identity:'Localiza el PRODUCTO EXACTO por SKU/EAN/UPC/ISBN, fabricante y nombre. No tasar todavía.',funko:'FUNKO: PriceCharting es la referencia principal. Busca la ficha pública EXACTA por personaje, número Pop y variante. Exige que una petición Chase, Flocked, Glow, Diamond u otra variante coincida exactamente y descarta Classic/Regular/Standard incompatibles. Lee los precios públicos Out of Box, In Box y New de PriceCharting. No inventes importes ni uses una ficha de otro número. eBay/StockX son solo contraste.',figure:'FIGURA/ESTATUA: SKU/EAN + fabricante + línea + personaje. Prioriza eBay, Idealo y tiendas exactas. Descarta cómics/libros/accesorios.',card:'CARTA: set+número+rareza+grading. Prioriza Cardmarket y eBay.',comic:'CÓMIC: título+issue+edición/ISBN. Prioriza eBay, TodoColeccion y Catawiki.',manga:'MANGA: título+tomo+edición/ISBN. Prioriza eBay, TodoColeccion y librerías con esa edición.',game:'VIDEOJUEGO: título+plataforma+edición+SKU/EAN. Prioriza eBay, CeX y tiendas exactas.',lego:'LEGO: número de set/SKU primero. Prioriza BrickLink y eBay.',plush:'PELUCHE: fabricante+personaje+línea+SKU/EAN. Prioriza eBay/Idealo.',replica:'RÉPLICA: fabricante+objeto+escala/edición+SKU/EAN. Prioriza eBay/Idealo.',movie:'AUDIOVISUAL: título+formato+edición+EAN. Prioriza eBay y tiendas exactas.',merch:'MERCH: fabricante+producto+franquicia+SKU/EAN. Prioriza eBay/Idealo.',general:'COLECCIONABLE: usa naturaleza física, códigos, fabricante y línea; no mezcles tipos de objeto.'}[searchMode]||'Busca el producto físico exacto.';
  const request=`${instruction}\n\nProducto: ${exact}. Usa máximo 4 búsquedas. Devuelve solo el mismo objeto físico, con importe, moneda, título y URL. Los identificadores fuertes deben coincidir. No inventes precios.`;
  const response=await fetcher('https://api.deepseek.com/anthropic/v1/messages',{method:'POST',headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:1400,messages:[{role:'user',content:request}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:4,user_location:{type:'approximate',country:'ES',timezone:'Europe/Madrid'}}],tool_choice:{type:'auto'},stream:false}),signal:AbortSignal.timeout(28000)});
  if(!response.ok){const body=await response.text().catch(()=> '');throw new Error(`Búsqueda pública HTTP ${response.status}${body?`: ${body.slice(0,220)}`:''}`);}return webSearchSources(await response.json());
@@ -490,28 +490,6 @@ function funkoTextMatches(item,raw){
  return Boolean(nameTokens.length||popNumber);
 }
 
-function hobbyDbTextMatches(item,raw){
- if(!funkoTextMatches(item,raw))return false;
- const text=String(raw||'').replace(/\s+/g,' ').trim();
- const popNumber=normalizeFunkoNumber(deriveFunkoFields({...item,type:'funko'}).popNumber)||funkoNumberFromTitle(item?.title);
- const brand=text.match(/\bBrand\s*:\s*([^|·]{1,100})/i);
- if(brand&&!/\bFunko\b/i.test(brand[1]))return false;
- const series=text.match(/\bSeries\s*:\s*([^|·]{1,140})/i);
- if(series&&!/\bPop!?\b/i.test(series[1]))return false;
- const type=text.match(/\bType\s*:\s*([^|·]{1,100})/i);
- if(type&&!/\bArt Toys?\b/i.test(type[1]))return false;
- const refs=[...text.matchAll(/\b(?:Reference|Ref(?:erence)?)\s*(?:#|No\.?)?\s*:?\s*#?\s*(\d{1,5})\b/gi)].map(match=>match[1]);
- if(popNumber&&refs.length&&!refs.includes(popNumber))return false;
- // Una ficha detallada de hobbyDB que expone sus metadatos debe confirmar marca + serie + referencia.
- const detailed=/\b(?:Brand|Series|Reference)\s*:/i.test(text);
- if(detailed){
-  if(!/\bBrand\s*:\s*Funko\b/i.test(text))return false;
-  if(!/\bSeries\s*:[^|·]{0,140}\bPop!?\b/i.test(text))return false;
-  if(popNumber&&!new RegExp('\\b(?:Reference|Ref(?:erence)?)\\s*(?:#|No\\.?)?\\s*:?\\s*#?\\s*'+popNumber+'\\b','i').test(text))return false;
- }
- return true;
-}
-
 export function buildResearchIdentity(item){
  const title=!isGenericProductTitle(item?.title)?String(item.title).trim():'';
  const isFunko=item?.type==='funko'||/\bfunko\b|\bpop!?\b/i.test(`${title} ${item?.manufacturer||''} ${item?.line||''}`);
@@ -589,7 +567,7 @@ async function resolveCanonicalResearchIdentity(item,config){
   const evidence=normalizeSources(await deepseekWebSearch(lookup||base,{...config,searchMode:'identity'}),'identity-resolution');
   if(!evidence.length)return {item,searchIdentity:base||String(item?.title||'').trim(),sources:[],resolvedIdentity:null};
   const raw=await deepseek([
-   {role:'system',content:'Resuelve la identidad comercial EXACTA de un objeto usando SOLO las evidencias web adjuntas y los códigos de la ficha. Devuelve JSON: {"canonicalTitle":"","manufacturer":"","line":"","character":"","franchise":"","sku":"","barcode":"","confidence":0}. canonicalTitle debe ser el nombre real del producto que una persona buscaría en LegacyGuide/eBay/StockX. NUNCA describas la fotografía, el dorso, la caja, la etiqueta ni el código de barras como título. Para Funko, Item No. pertenece a sku/referencia, no al título; conserva el número Pop # solo si está respaldado por la evidencia. Si no puedes resolverlo con seguridad, canonicalTitle vacío.'},
+   {role:'system',content:'Resuelve la identidad comercial EXACTA de un objeto usando SOLO las evidencias web adjuntas y los códigos de la ficha. Devuelve JSON: {"canonicalTitle":"","manufacturer":"","line":"","character":"","franchise":"","sku":"","barcode":"","confidence":0}. canonicalTitle debe ser el nombre real del producto que una persona buscaría en PriceCharting/eBay/StockX. NUNCA describas la fotografía, el dorso, la caja, la etiqueta ni el código de barras como título. Para Funko, Item No. pertenece a sku/referencia, no al título; conserva el número Pop # solo si está respaldado por la evidencia. Si no puedes resolverlo con seguridad, canonicalTitle vacío.'},
    {role:'user',content:JSON.stringify({current:item,evidence:evidence.slice(0,10).map(x=>({title:x.title,url:x.url,snippet:x.snippet}))})}
   ],{...config,maxTokens:700,timeoutMs:25000,retries:1});
   const resolved=z.object({
@@ -618,12 +596,7 @@ async function resolveCanonicalResearchIdentity(item,config){
 
 function relevantSourcesForItem(item,rows){
  const isFunko=item?.type==='funko'||/\bfunko\b|\bpop!?\b/i.test(`${item?.title||''} ${item?.manufacturer||''} ${item?.line||''}`);
- if(isFunko)return rows.filter(source=>{
-  const raw=`${source.title||''} ${source.snippet||''}`;
-  return hostOf(source.url).includes('hobbydb.com')
-   ?hobbyDbTextMatches({...item,type:'funko'},raw)
-   :funkoTextMatches({...item,type:'funko'},raw);
- }).slice(0,6);
+ if(isFunko)return rows.filter(source=>funkoTextMatches({...item,type:'funko'},`${source.title||''} ${source.snippet||''}`)).slice(0,6);
  const stop=new Set(['the','and','for','with','from','funko','pop','movies','movie','figure','figura','edition','edicion','price','prices','buy','shop']);
  const titleTokens=normalizeComparableText(!isGenericProductTitle(item?.title)?item.title:`${item?.manufacturer||''} ${item?.line||''} ${item?.character||''}`).split(' ').filter(x=>x.length>=3&&!stop.has(x)&&!/^\d+$/.test(x));
  const ids=[item?.sku,item?.barcode,item?.isbn,item?.cardNumber,item?.issueNumber,...(String(item?.title||'').match(/\d{2,}/g)||[])].filter(Boolean).map(normalizeComparableText);
@@ -639,7 +612,7 @@ function canonicalTitleFromSources(item,sources){
  if(!isGenericProductTitle(item?.title))return String(item.title).trim();
  const ids=[item?.sku,item?.barcode,item?.isbn].filter(Boolean).map(normalizeComparableText);
  const candidates=sources.map(source=>{
-  const title=String(source.title||'').replace(/\s*[|–—-]\s*(hobbyDB|eBay|StockX|Amazon|Wallapop|Cardmarket|BrickLink|Idealo).*$/i,'').replace(/\s+/g,' ').trim();
+  const title=String(source.title||'').replace(/\s*[|–—-]\s*(PriceCharting|eBay|StockX|Amazon|Wallapop|Cardmarket|BrickLink|Idealo).*$/i,'').replace(/\s+/g,' ').trim();
   const hay=normalizeComparableText(`${source.title||''} ${source.snippet||''}`);
   let score=specificTitleScore(title);
   if(ids.some(id=>id&&hay.includes(id)))score+=12;
@@ -772,14 +745,70 @@ export async function identify(input,config){
 }
 
 export async function research(input,config){
- let {item}=researchSchema.parse(input);const isFunko=item.type==='funko'||/\bfunko\b|\bpop!?\b/i.test(`${item.title||''} ${item.manufacturer||''} ${item.line||''}`);if(isFunko)item=deriveFunkoFields({...item,type:'funko'});
- let identity=buildResearchIdentity(item)||String(item.title||'').trim();const fetcher=config.fetcher||fetch,warnings=[];let webSources=[],usdEurRate=null;
- if(config.key){try{const query=(isFunko?identity.normalize('NFD').replace(/[\u0300-\u036f]/g,''):identity).trim(),mode=isFunko?'funko':(['figure','card','comic','manga','game','lego','plush','replica','movie','merch'].includes(item.type)?item.type:'general');const found=normalizeSources(await deepseekWebSearch(query,{...config,searchMode:mode}),'price-search');webSources=limitPricingSources(uniqueSources(prioritizePricingSources(item,relevantSourcesForItem(item,keepUsableSources(found).filter(allowedPricingSource)))),item);}catch(error){warnings.push(error instanceof Error?`Búsqueda de precios: ${error.message}`:'No se pudo completar la búsqueda de precios.');}}else warnings.push('No hay proveedor de búsqueda pública configurado.');
- if(isFunko&&config.hobbyDbReader){webSources=webSources.filter(source=>!['hobbydb.com','www.hobbydb.com'].includes(hostOf(source.url)));try{webSources.unshift(...normalizeSources([await config.hobbyDbReader(item)],'hobbydb-browser'));}catch(error){warnings.push(error instanceof Error?error.message:'No se pudo abrir Price Guide en hobbyDB.');}}
- const canonical=canonicalTitleFromSources(item,webSources);let resolvedIdentity;if(canonical&&canonical!==item.title){item={...item,title:canonical};identity=buildResearchIdentity(item)||canonical;resolvedIdentity={title:canonical,manufacturer:item.manufacturer||'',line:item.line||'',character:item.character||'',franchise:item.franchise||'',sku:item.sku||'',barcode:item.barcode||''};}
- let fallback=false;if(webSources.some(source=>/\$|\bUSD\b/i.test(`${source.title} ${source.snippet}`))){usdEurRate=await fetchUsdEurRate(fetcher);if(usdEurRate==null){usdEurRate=.87;fallback=true;warnings.push('No se pudo obtener el cambio USD/EUR en directo; se usa una conversión orientativa.');}}
- const listings=parsePublicListings(webSources,{USD_EUR:usdEurRate}),comparables=conservativeFallbackComparables(item,listings,webSources).slice(0,8),hobbyDbEstimated=isFunko?comparables.filter(row=>{const source=webSources.find(x=>x.url===row.url||x.id===row.id),raw=`${source?.title||''} ${source?.snippet||''} ${row.title||''} ${row.condition||''}`;return hostOf(row.url).includes('hobbydb.com')&&/\bestimated\s+value\b/i.test(raw);}):[],asking=summarizeListings(isFunko?hobbyDbEstimated:comparables),sources=limitPricingSources(uniqueSources(webSources),item),exchangeRates=await fetchDisplayCurrencyRates(fetcher,usdEurRate);
- if(isFunko&&!asking.count)warnings.push('hobbyDB no devolvió un “Estimated Value” verificable. El resto de precios es orientativo.');if(!listings.length)warnings.push('No se encontró un precio visible para el producto exacto.');else if(!comparables.length)warnings.push('Se detectaron precios, pero ninguno coincide con suficiente precisión.');
- let summary,facts=[];if(asking.count){const range=asking.min===asking.max?euro(asking.min):`${euro(asking.min)} – ${euro(asking.max)}`,baremo=`${range}; mediana ${euro(asking.median)} con ${asking.count} comparable${asking.count===1?'':'s'} exacto${asking.count===1?'':'s'}.`;summary=isFunko?`Valor principal tomado del “Estimated Value” de hobbyDB Price Guide.${fallback?' Conversión USD/EUR orientativa.':''}`:asking.kind==='sold'?`Valor de mercado calculado con ventas cerradas comparables verificadas.${fallback?' Conversión USD/EUR orientativa.':''} ${baremo}`:`Referencia orientativa calculada a partir de precios públicos del producto físico exacto; no se presenta como una venta cerrada.${fallback?' Conversión USD/EUR orientativa.':''} ${baremo}`;facts=[{label:isFunko?'hobbyDB Estimated Value':asking.kind==='sold'?'Ventas cerradas verificadas':'Referencia de mercado',value:baremo,sourceId:sources[0]?.id||comparables[0].id},...comparables.map(row=>({label:row.sourceType==='guide'?'Valor principal':row.sourceType==='sold'?'Venta cerrada':'Referencia orientativa',value:`${euro(row.price)} · ${row.condition}`,sourceId:sources[0]?.id||row.id}))];}else summary=`Se buscaron precios usando una única identidad: “${identity}”. ${sources.length} página${sources.length===1?'':'s'} útil${sources.length===1?'':'es'} y ${listings.length} precio${listings.length===1?'':'s'} detectado${listings.length===1?'':'s'}; ninguno permite todavía un baremo suficientemente exacto.`;
- const soldRows=comparables.filter(x=>x.sourceType==='sold'&&x.currency==='EUR'),sold=summarizeListings(soldRows);return {checkedAt:new Date().toISOString(),searchIdentity:identity,resolvedIdentity,summary,facts,sources,listings,comparables,asking,exchangeRates,sold:{available:soldRows.length>0,count:soldRows.length,median:sold.median,reason:soldRows.length?'Ventas cerradas detectadas entre los comparables exactos.':'No se detectó una venta cerrada verificable entre los comparables exactos.'},warnings,links:{ebay:'https://www.ebay.es/sch/i.html?_nkw='+encodeURIComponent(identity),sold:'https://www.ebay.es/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw='+encodeURIComponent(identity),priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity),web:'https://www.google.com/search?q='+encodeURIComponent(identity+' precio'),...(isFunko?{ppg:'https://www.hobbydb.com/marketplaces/hobbydb/catalog_items?q='+encodeURIComponent(identity),stockx:'https://stockx.com/search?s='+encodeURIComponent(identity)}:{})}};
+ let {item}=researchSchema.parse(input);
+ const isFunko=item.type==='funko'||/\bfunko\b|\bpop!?\b/i.test(`${item.title||''} ${item.manufacturer||''} ${item.line||''}`);
+ if(isFunko)item=deriveFunkoFields({...item,type:'funko'});
+ let identity=buildResearchIdentity(item)||String(item.title||'').trim();
+ const fetcher=config.fetcher||fetch,warnings=[];
+ let webSources=[],usdEurRate=null;
+ if(config.key){
+  try{
+   const query=(isFunko?identity.normalize('NFD').replace(/[\u0300-\u036f]/g,''):identity).trim();
+   const mode=isFunko?'funko':(['figure','card','comic','manga','game','lego','plush','replica','movie','merch'].includes(item.type)?item.type:'general');
+   const found=normalizeSources(await deepseekWebSearch(query,{...config,searchMode:mode}),'price-search');
+   webSources=limitPricingSources(uniqueSources(prioritizePricingSources(item,relevantSourcesForItem(item,keepUsableSources(found).filter(allowedPricingSource)))),item);
+  }catch(error){
+   warnings.push(error instanceof Error?`Búsqueda de precios: ${error.message}`:'No se pudo completar la búsqueda de precios.');
+  }
+ }else warnings.push('No hay proveedor de búsqueda pública configurado.');
+ const canonical=canonicalTitleFromSources(item,webSources);
+ let resolvedIdentity;
+ if(canonical&&canonical!==item.title){
+  item={...item,title:canonical};
+  identity=buildResearchIdentity(item)||canonical;
+  resolvedIdentity={title:canonical,manufacturer:item.manufacturer||'',line:item.line||'',character:item.character||'',franchise:item.franchise||'',sku:item.sku||'',barcode:item.barcode||''};
+ }
+ let fallback=false;
+ if(webSources.some(source=>/\$|\bUSD\b/i.test(`${source.title} ${source.snippet}`))){
+  usdEurRate=await fetchUsdEurRate(fetcher);
+  if(usdEurRate==null){
+   usdEurRate=.87;fallback=true;
+   warnings.push('No se pudo obtener el cambio USD/EUR en directo; se usa una conversión orientativa.');
+  }
+ }
+ const listings=parsePublicListings(webSources,{USD_EUR:usdEurRate});
+ const comparables=conservativeFallbackComparables(item,listings,webSources).slice(0,8);
+ const asking=summarizeListings(comparables);
+ const sources=limitPricingSources(uniqueSources(webSources),item);
+ const exchangeRates=await fetchDisplayCurrencyRates(fetcher,usdEurRate);
+ if(!listings.length)warnings.push('No se encontró un precio visible para el producto exacto.');
+ else if(!comparables.length)warnings.push('Se detectaron precios, pero ninguno coincide con suficiente precisión.');
+ let summary,facts=[];
+ if(asking.count){
+  const range=asking.min===asking.max?euro(asking.min):`${euro(asking.min)} – ${euro(asking.max)}`;
+  const baremo=`${range}; mediana ${euro(asking.median)} con ${asking.count} comparable${asking.count===1?'':'s'} exacto${asking.count===1?'':'s'}.`;
+  summary=asking.kind==='guide'
+   ?`Referencia principal encontrada en PriceCharting.${fallback?' Conversión USD/EUR orientativa.':''} ${baremo}`
+   :asking.kind==='sold'
+    ?`Valor de mercado calculado con ventas cerradas comparables verificadas.${fallback?' Conversión USD/EUR orientativa.':''} ${baremo}`
+    :`Referencia orientativa calculada a partir de precios públicos del producto físico exacto; no se presenta como una venta cerrada.${fallback?' Conversión USD/EUR orientativa.':''} ${baremo}`;
+  facts=[
+   {label:asking.kind==='guide'?'PriceCharting':asking.kind==='sold'?'Ventas cerradas verificadas':'Referencia de mercado',value:baremo,sourceId:sources[0]?.id||comparables[0].id},
+   ...comparables.map(row=>({label:row.sourceType==='guide'?'Valor principal':row.sourceType==='sold'?'Venta cerrada':'Referencia orientativa',value:`${euro(row.price)} · ${row.condition}`,sourceId:sources[0]?.id||row.id}))
+  ];
+ }else summary=`Se buscaron precios usando una única identidad: “${identity}”. ${sources.length} página${sources.length===1?'':'s'} útil${sources.length===1?'':'es'} y ${listings.length} precio${listings.length===1?'':'s'} detectado${listings.length===1?'':'s'}; ninguno permite todavía un baremo suficientemente exacto.`;
+ const soldRows=comparables.filter(x=>x.sourceType==='sold'&&x.currency==='EUR');
+ const sold=summarizeListings(soldRows);
+ return {
+  checkedAt:new Date().toISOString(),searchIdentity:identity,resolvedIdentity,summary,facts,sources,listings,comparables,asking,exchangeRates,
+  sold:{available:soldRows.length>0,count:soldRows.length,median:sold.median,reason:soldRows.length?'Ventas cerradas detectadas entre los comparables exactos.':'No se detectó una venta cerrada verificable entre los comparables exactos.'},
+  warnings,
+  links:{
+   ebay:'https://www.ebay.es/sch/i.html?_nkw='+encodeURIComponent(identity),
+   sold:'https://www.ebay.es/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw='+encodeURIComponent(identity),
+   priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity),
+   web:'https://www.google.com/search?q='+encodeURIComponent(identity+' precio'),
+   ...(isFunko?{stockx:'https://stockx.com/search?s='+encodeURIComponent(identity)}:{})
+  }
+ };
 }
