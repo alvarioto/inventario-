@@ -4,29 +4,17 @@ import { detectAllFunkoStickers, FUNKO_STICKERS } from './funko-stickers';
 import type { AiIdentification, InventoryDraft, ResearchResult } from '../types';
 export type ApiStatus={deepseek:boolean;model:string;webSearch:boolean;publicSearch:boolean;mode:string;session?:string};
 const base=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');
-const hobbyDbValueUrl=(import.meta.env.VITE_HOBBYDB_VALUE_URL||'https://frikivault-hobbydb-api-aldipo7292-6258.vercel.app/api/hobbydb-value').replace(/\/$/,'');
+const priceChartingValueUrl=(import.meta.env.VITE_PRICECHARTING_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/pricecharting-value').replace(/\/$/,'');
 export async function getApiStatus():Promise<ApiStatus>{await keyReady.catch(()=>{});if(getPersonalKey())return {deepseek:true,model:'deepseek-flash',webSearch:true,publicSearch:true,mode:'direct'};const r=await fetch(base+'/api/status');if(!r.ok||!r.headers.get('content-type')?.includes('application/json'))throw new Error('Configura IA directa en Ajustes para analizar fotos con tu clave de DeepSeek.');return r.json()}
 async function post<T>(route:string,payload:unknown):Promise<T>{
  const status=await getApiStatus();const token=await auth?.currentUser?.getIdToken();
  const r=await fetch(base+'/api/'+route,{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...(status.session?{'X-FrikiVault-Session':status.session}:{})},body:JSON.stringify(payload),signal:AbortSignal.timeout(120000)});
  const result=await r.json();if(!r.ok)throw new Error(result.error||`Error HTTP ${r.status}`);return result;
 }
-async function hobbyDbPost(payload:unknown){
- const r=await fetch(hobbyDbValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(60000)});
- const result=await r.json();if(!r.ok)throw new Error(result.error||`hobbyDB HTTP ${r.status}`);return result;
+async function priceChartingPost(payload:unknown){
+ const r=await fetch(priceChartingValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
+ const result=await r.json();if(!r.ok)throw new Error(result.error||`PriceCharting HTTP ${r.status}`);return result;
 }
-function hobbyDbSourceUrl(research?:ResearchResult){
- const candidates=[research?.links?.ppg,...(research?.sources||[]).map(source=>source.url)].filter(Boolean) as string[];
- for(const raw of candidates){
-  try{
-   const url=new URL(raw);
-   const host=url.hostname.toLowerCase().replace(/^www\./,'');
-   if(host==='hobbydb.com'&&/\/marketplaces\/hobbydb\/catalog_items(?:\/|$)/i.test(url.pathname))return url.href;
-  }catch{}
- }
- return '';
-}
-
 function cleanKnownStickerWords(value:string){
  let clean=String(value||'');
  for(const sticker of FUNKO_STICKERS){
@@ -77,38 +65,14 @@ function cleanFunkoIdentification(row:AiIdentification,audit?:{performed:boolean
 
  return {...row,title,funkoVariant:finalVariant,edition,tags};
 }
-async function readHobbyDbValue(item:Partial<InventoryDraft>,research?:ResearchResult){
- if(!hobbyDbValueUrl)return null;
- const isFunko=item.type==='funko';
+async function readPriceChartingValue(item:Partial<InventoryDraft>){
+ if(!priceChartingValueUrl)return null;
  const name=String(item.character||item.title||'').trim();
  if(!name&&!item.sku&&!item.barcode)return null;
- const common=isFunko?{hobbydbUrl:hobbyDbSourceUrl(research)||undefined}:{};
- const identity=isFunko?{
-  ...common,
-  type:'funko',
-  title:item.title||'',
-  character:item.character||name,
-  manufacturer:item.manufacturer||'Funko',
-  line:item.line||'',
-  popNumber:item.popNumber||'',
-  funkoCategory:item.funkoCategory||item.line||'',
-  funkoVariant:item.funkoVariant||'Classic',
-  sku:item.sku||'',
-  barcode:item.barcode||''
- }:{
-  ...common,
-  type:item.type||'other',
-  title:item.title||'',
-  character:item.character||'',
-  manufacturer:item.manufacturer||'',
-  line:item.line||'',
-  edition:item.edition||'',
-  sku:item.sku||'',
-  barcode:item.barcode||''
- };
- const result=await hobbyDbPost({item:identity});
- if(result.status==='completed'&&result.value)return result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string};
- throw new Error('hobbyDB no devolvió un Estimated Value verificable.');
+ const identity={type:item.type||'other',title:item.title||'',character:item.character||name,manufacturer:item.manufacturer||'',line:item.line||'',edition:item.edition||'',popNumber:item.popNumber||'',funkoCategory:item.funkoCategory||item.line||'',funkoVariant:item.funkoVariant||'',sku:item.sku||'',barcode:item.barcode||'',hasBox:item.hasBox,sealed:item.sealed};
+ const result=await priceChartingPost({item:identity});
+ if(result.status==='completed'&&result.value)return result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string;title:string;condition:string;prices?:{outOfBox:number|null;inBox:number|null;new:number|null}};
+ throw new Error('PriceCharting no devolvió un precio público verificable para el artículo exacto.');
 }
 async function ensureUsdDisplayRates(research:ResearchResult):Promise<ResearchResult>{
  if(research.exchangeRates?.EUR)return research;
@@ -124,17 +88,13 @@ async function ensureUsdDisplayRates(research:ResearchResult):Promise<ResearchRe
   return {...research,exchangeRates:rates};
  }catch{return research;}
 }
-function applyHobbyDbValue(research:ResearchResult,guide:{amount:number;currency:'USD';url:string;evidence:string;variant:string}):ResearchResult{
- const sourceId='hobbydb-estimated-value';
- const source={id:sourceId,kind:'price-guide',title:'hobbyDB Estimated Value',url:guide.url,snippet:guide.evidence};
- const comparable={id:sourceId,title:`hobbyDB · ${guide.variant}`,url:guide.url,price:guide.amount,currency:'USD',shipping:null,condition:'Price Guide',sourceType:'guide' as const,originalPrice:guide.amount,originalCurrency:'USD'};
- return {...research,
-  summary:`hobbyDB publica un Estimated Value de $${guide.amount.toFixed(2)} USD. El resto de precios se mantiene como referencia orientativa de mercado.`,
-  sources:[source,...research.sources.filter(x=>x.id!==sourceId)],
-  comparables:[comparable,...research.comparables.filter(x=>x.id!==sourceId)],
-  asking:{kind:'guide',currency:'USD',count:1,min:guide.amount,max:guide.amount,median:guide.amount,label:'Valor hobbyDB',originalCurrency:'USD',originalMedian:guide.amount},
-  links:{...research.links,ppg:guide.url}
- };
+function applyPriceChartingValue(research:ResearchResult,guide:{amount:number;currency:'USD';url:string;evidence:string;variant:string;title:string;condition:string;prices?:{outOfBox:number|null;inBox:number|null;new:number|null}}):ResearchResult{
+ const sourceId='pricecharting-public-value';
+ const source={id:sourceId,kind:'price-guide',title:'PriceCharting',url:guide.url,snippet:guide.evidence};
+ const condition=guide.condition||'Price Guide';
+ const comparable={id:sourceId,title:`PriceCharting · ${guide.title||guide.variant||'artículo exacto'}`,url:guide.url,price:guide.amount,currency:'USD',shipping:null,condition,sourceType:'guide' as const,originalPrice:guide.amount,originalCurrency:'USD'};
+ const detail=guide.prices?[`Out of Box ${guide.prices.outOfBox==null?'—':`${guide.prices.outOfBox.toFixed(2)}`}`,`In Box ${guide.prices.inBox==null?'—':`${guide.prices.inBox.toFixed(2)}`}`,`New ${guide.prices.new==null?'—':`${guide.prices.new.toFixed(2)}`}`].join(' · '):guide.evidence;
+ return {...research,summary:`PriceCharting publica ${detail}. Para esta unidad se usa ${condition}: ${guide.amount.toFixed(2)} USD. El resto de precios se mantiene como referencia orientativa.`,sources:[source,...research.sources.filter(x=>x.id!==sourceId&&!(x.url||'').includes('pricecharting.com'))],comparables:[comparable,...research.comparables.filter(x=>x.id!==sourceId&&!(x.url||'').includes('pricecharting.com'))],asking:{kind:'guide',currency:'USD',count:1,min:guide.amount,max:guide.amount,median:guide.amount,label:`Valor PriceCharting · ${condition}`,originalCurrency:'USD',originalMedian:guide.amount},links:{...research.links,priceCharting:guide.url}};
 }
 export async function identifyPhoto(images:string[]):Promise<AiIdentification>{
  await keyReady.catch(()=>{});
@@ -147,6 +107,6 @@ export async function identifyPhoto(images:string[]):Promise<AiIdentification>{
 export async function investigate(item:Partial<InventoryDraft>):Promise<ResearchResult>{
  await keyReady.catch(()=>{});
  const research=await (getPersonalKey()?researchDirect(item):post<ResearchResult>('research',{confirmed:true,item}));
- try{const guide=await readHobbyDbValue(item,research);if(!guide)return research;const withRates=await ensureUsdDisplayRates(research);return applyHobbyDbValue(withRates,guide);}
- catch(error){return {...research,warnings:[`hobbyDB: ${error instanceof Error?error.message:'no se pudo leer el Estimated Value.'}`,...research.warnings]};}
+ try{const guide=await readPriceChartingValue(item);if(!guide)return research;const withRates=await ensureUsdDisplayRates(research);return applyPriceChartingValue(withRates,guide);}
+ catch(error){return {...research,warnings:[`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`,...research.warnings]};}
 }
