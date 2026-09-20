@@ -39,6 +39,14 @@ assert.equal(guidePriority.median,31.82);
 assert.equal(guidePriority.originalMedian,37);
 assert.equal(guidePriority.originalCurrency,'USD');
 
+const soldPriority=summarizeListings([
+  {price:31.82,currency:'EUR',sourceType:'guide',originalPrice:37,originalCurrency:'USD'},
+  {price:25,currency:'EUR',sourceType:'sold'},
+  {price:27,currency:'EUR',sourceType:'sold'}
+]);
+assert.equal(soldPriority.kind,'sold');
+assert.equal(soldPriority.median,26);
+
 const fakeFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"summary":"Ficha contrastada","facts":[],"comparableIds":[]}'}}]}),{status:200,headers:{'content-type':'application/json'}});
 assert.equal((await deepseek([{role:'user',content:'test'}],{key:'test',fetcher:fakeFetch})).summary,'Ficha contrastada');
 
@@ -198,7 +206,7 @@ const fallbackResearch=await research({confirmed:true,item:{title:'Batman #125',
 assert.equal(fallbackChatCalls,0);
 assert.equal(fallbackResearch.listings.length,1);
 assert.equal(fallbackResearch.asking.count,1);
-assert.match(fallbackResearch.summary,/Valoración calculada (?:localmente|a partir de precios públicos)|única identidad/i);
+assert.match(fallbackResearch.summary,/Referencia orientativa calculada|única identidad/i);
 
 // Funko: hobbyDB aporta el único valor principal; eBay/StockX son orientación.
 let hobbyPrompts=[];
@@ -234,7 +242,8 @@ assert.match(hobbyPrompts[0],/Reference #/);
 assert.ok(hobbyResearch.comparables.some(row=>row.url.includes('ebay.es')));
 assert.match(hobbyResearch.links.ppg,/hobbydb\.com/);
 assert.match(hobbyResearch.links.ppg,/\?q=/);
-assert.equal(hobbyResearch.links.priceCharting,undefined);
+assert.match(hobbyResearch.links.priceCharting,/pricecharting\.com\/search-products/);
+assert.match(hobbyResearch.links.priceCharting,/type=prices/);
 
 // Dos tarjetas con el mismo personaje/número: la variante de la foto manda.
 const chaseFetch=async(url,init)=>{
@@ -299,12 +308,13 @@ assert.match(appSource,/setTab\('home'\)/);
 assert.match(appSource,/valuation-highlight/);
 assert.match(appSource,/Referencia principal · hobbyDB Price Guide/);
 assert.match(appSource,/Otras referencias orientativas/);
+assert.match(appSource,/PriceCharting \(consulta pública\)/);
 assert.match(appSource,/Analizar artículo/);
 assert.doesNotMatch(appSource,/Confirmar e investigar|Actualizar investigación/);
 const directAiSource=readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8');
 const coreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 assert.doesNotMatch(directAiSource,/pricecharting/i);
-assert.doesNotMatch(coreSource,/pricecharting/i);
+assert.match(coreSource,/pricecharting\.com\/search-products/);
 assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 
 
