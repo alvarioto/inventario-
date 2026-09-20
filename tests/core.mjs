@@ -160,7 +160,7 @@ const weaponXFigure={
 assert.equal(buildResearchIdentity(weaponXFigure),'Hasbro Marvel Legends X-Men Weapon X Wolverine (Weapon X) G0644');
 // La referencia G0644 y 'Weapon X' son identidad fuerte: nunca aceptar otro Wolverine genérico.
 const backendText=readFileSync(new URL('../api/hobbydb-value.mjs',import.meta.url),'utf8');
-assert.match(backendText,/ids\.length&&!strongIdEvidence/);
+assert.match(backendText,/ids\.length&&!idHit&&!structuredExact/);
 assert.match(backendText,/distinctiveTokens/);
 assert.match(backendText,/structuredExact/);
 assert.match(backendText,/coreNameExact/);
@@ -354,6 +354,6 @@ assert.equal(guaranteedFunko.asking.median,null);
 
 console.log('core tests ok');
 
-assert.doesNotMatch(readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8'),/pricecharting/i);
+assert.match(readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8'),/pricecharting\.com\/search-products/);
 assert.doesNotMatch(readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8'),/pricecharting/i);
 assert.doesNotMatch(readFileSync(new URL('../src/components/DirectAiSettings.tsx',import.meta.url),'utf8'),/pricecharting/i);
