@@ -140,18 +140,18 @@ function exactScore(item,row){
  if(strongIds.some(id=>hay.includes(id)))return 1000;
  const name=String(item?.character||item?.title||'').trim();
  const stop=new Set(['funko','pop','figure','figura','vinyl','movies','movie','television','animation','games','game','disney','marvel','heroes','the','and','with']);
- const nameTokens=words(name).filter(x=>x.length>=2&&!stop.has(x)&&!/^\\d+$/.test(x));
+ const nameTokens=words(name).filter(x=>x.length>=2&&!stop.has(x)&&!/^\d+$/.test(x));
  const hits=nameTokens.filter(x=>hay.includes(x)).length;
  const ratio=nameTokens.length?hits/nameTokens.length:0;
  if(nameTokens.length&&hits<Math.max(1,Math.ceil(nameTokens.length*.55)))return -1;
  let score=hits*25+ratio*100;
  if(isFunko){
-  if(!/funko\\s+pop/i.test(row.console+' '+row.title))score-=40;
+  if(!/funko\s+pop/i.test(row.console+' '+row.title))score-=40;
   const wantedNumber=numberToken(item?.popNumber);
   if(wantedNumber){
-   const explicit=[...String(row.title).matchAll(/#\\s*(\\d{1,5})\\b/g)].map(x=>x[1]);
+   const explicit=[...String(row.title).matchAll(/#\s*(\d{1,5})\b/g)].map(x=>x[1]);
    if(explicit.length&&!explicit.includes(wantedNumber))return -1;
-   if(!explicit.includes(wantedNumber)&&!new RegExp('(?:^|\\\\D)'+wantedNumber+'(?:\\\\D|$)').test(row.title))return -1;
+   if(!explicit.includes(wantedNumber)&&!new RegExp('(?:^|\\D)'+wantedNumber+'(?:\\D|$)').test(row.title))return -1;
    score+=180;
   }
   const wantedVariant=requestedVariant(item),actualVariant=rowVariant(row.title);
@@ -159,7 +159,7 @@ function exactScore(item,row){
   if(!wantedVariant&&actualVariant)return -1;
   if(wantedVariant===actualVariant&&wantedVariant)score+=140;
  }else{
-  const titleTokens=words(item?.title||'').filter(x=>x.length>=3&&!stop.has(x)&&!/^\\d+$/.test(x));
+  const titleTokens=words(item?.title||'').filter(x=>x.length>=3&&!stop.has(x)&&!/^\d+$/.test(x));
   const titleHits=titleTokens.filter(x=>hay.includes(x)).length;
   if(titleTokens.length>2&&titleHits/titleTokens.length<.5)return -1;
   score+=titleHits*20;
