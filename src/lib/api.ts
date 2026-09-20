@@ -128,6 +128,7 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
  const baseResearch=freeResearchShell(item);
  try{
   const guide=await readPriceChartingValue(item);
+  if(!guide)throw new Error('PriceCharting no devolvió un precio verificable.');
   const withRates=await ensureUsdDisplayRates(baseResearch);
   return applyPriceChartingValue(withRates,guide);
  }catch(error){
