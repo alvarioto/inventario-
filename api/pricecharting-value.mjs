@@ -79,7 +79,7 @@ function buildSearchQuery(item){
 }
 function classCell(row,className){
  const escaped=className.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
- const re=new RegExp('<(?:td|cell)\\b[^>]*class=["\\'][^"\\']*\\b'+escaped+'\\b[^"\\']*["\\'][^>]*>([\\s\\S]*?)<\\/(?:td|cell)>','i');
+ const re=new RegExp("<(?:td|cell)\\b[^>]*class=[\"'][^\"']*\\b"+escaped+"\\b[^\"']*[\"'][^>]*>([\\s\\S]*?)<\\/(?:td|cell)>","i");
  return row.match(re)?.[1]||'';
 }
 function parseSearchRows(html){
@@ -110,8 +110,8 @@ function productTitleFromHtml(html){
 function priceNearId(html,key){
  const raw=String(html||'');
  const patterns=[
-  new RegExp('<[^>]+id=["\\']'+key+'["\\'][^>]*>([\\s\\S]{0,180}?)<\\/[^>]+>','i'),
-  new RegExp('<[^>]+class=["\\'][^"\\']*\\b'+key+'\\b[^"\\']*["\\'][^>]*>([\\s\\S]{0,180}?)<\\/[^>]+>','i')
+  new RegExp("<[^>]+id=[\"']"+key+"[\"'][^>]*>([\\s\\S]{0,180}?)<\\/[^>]+>","i"),
+  new RegExp("<[^>]+class=[\"'][^\"']*\\b"+key+"\\b[^\"']*[\"'][^>]*>([\\s\\S]{0,180}?)<\\/[^>]+>","i")
  ];
  for(const re of patterns){
   const hit=raw.match(re),n=parseUsd(stripTags(hit?.[1]||''));
