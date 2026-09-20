@@ -354,6 +354,6 @@ assert.equal(guaranteedFunko.asking.median,null);
 
 console.log('core tests ok');
 
-assert.doesNotMatch(readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8'),/pricecharting/i);
+assert.match(readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8'),/pricecharting\.com\/search-products/);
 assert.doesNotMatch(readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8'),/pricecharting/i);
 assert.doesNotMatch(readFileSync(new URL('../src/components/DirectAiSettings.tsx',import.meta.url),'utf8'),/pricecharting/i);
