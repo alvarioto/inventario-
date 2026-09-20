@@ -54,6 +54,6 @@ Las acciones de GitHub para `staging` y `main` necesitan, en cada entorno, `FIRE
 
 ## Límites y criterio de precios
 
-La aplicación guarda la fecha de cada consulta y las URLs de las fuentes. Distingue precio original, anuncios disponibles y ventas cerradas. Si no hay datos verificables, lo indica y ofrece enlaces para revisar eBay manualmente. El valor de tu unidad depende de edición, estado, caja, idioma y gastos de envío.
+La aplicación guarda la fecha de cada consulta y las URLs de las fuentes. Para coleccionables compatibles usa PriceCharting como referencia principal mediante su web pública normal, sin la API premium; distingue el precio según Out of Box, In Box o New y conserva eBay como contraste orientativo. Si no hay una coincidencia exacta, no inventa el precio.
 
-<!-- deploy: hobbydb-funko-pricing -->
+<!-- deploy: pricecharting-free-pricing -->
