@@ -18,25 +18,28 @@ jobs:
           curl -sS "$BASE/" -o home.html
           echo '--- SEARCH ENDPOINT CONTEXT ---'
           grep -o -E '.{0,350}search-results\.php.{0,800}' home.html | head -20 || true
-          echo '--- SCRIPT SOURCES ---'
-          grep -o -E 'src=["'\'''][^"'\''']+\.js[^"'\''']*["'\''']' home.html | head -80 || true
           python - <<'PY'
           import re, pathlib, urllib.parse, urllib.request
           html=pathlib.Path('home.html').read_text(errors='ignore')
-          srcs=re.findall(r'<script[^>]+src=["\'\']([^"\'\']+)["\'\']',html,re.I)
+          srcs=re.findall(r"<script[^>]+src=['\"]([^'\"]+)['\"]",html,re.I)
+          print('--- SCRIPT SOURCES ---')
+          for src in srcs[:80]:
+              print(src)
           seen=set()
           for src in srcs:
               url=urllib.parse.urljoin('https://www.actionfigure411.com/',src)
-              if url in seen: continue
+              if url in seen:
+                  continue
               seen.add(url)
               try:
-                  txt=urllib.request.urlopen(url,timeout=12).read().decode('utf-8','ignore')
-              except Exception as e:
+                  req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+                  txt=urllib.request.urlopen(req,timeout=12).read().decode('utf-8','ignore')
+              except Exception:
                   continue
               if 'search-results.php' in txt or 'search-results' in txt:
                   print('--- JS MATCH',url,'---')
-                  i=max(txt.find('search-results')-1200,0)
-                  print(txt[i:i+4500])
+                  i=max(txt.find('search-results')-1500,0)
+                  print(txt[i:i+6000])
           PY
 
       - name: POST real Marvel Legends lookup
@@ -53,4 +56,4 @@ jobs:
             exit 1
           fi
 
-# smoke-trigger: search-debug-2026-09-22
+# smoke-trigger: search-debug-fixed-2026-09-22
