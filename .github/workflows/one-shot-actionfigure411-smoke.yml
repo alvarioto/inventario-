@@ -10,50 +10,43 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect ActionFigure411 internal search
-        shell: bash
-        run: |
-          set -euo pipefail
-          BASE='https://www.actionfigure411.com'
-          curl -sS "$BASE/" -o home.html
-          echo '--- SEARCH ENDPOINT CONTEXT ---'
-          grep -o -E '.{0,350}search-results\.php.{0,800}' home.html | head -20 || true
-          python - <<'PY'
-          import re, pathlib, urllib.parse, urllib.request
-          html=pathlib.Path('home.html').read_text(errors='ignore')
-          srcs=re.findall(r"<script[^>]+src=['\"]([^'\"]+)['\"]",html,re.I)
-          print('--- SCRIPT SOURCES ---')
-          for src in srcs[:80]:
-              print(src)
-          seen=set()
-          for src in srcs:
-              url=urllib.parse.urljoin('https://www.actionfigure411.com/',src)
-              if url in seen:
-                  continue
-              seen.add(url)
-              try:
-                  req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
-                  txt=urllib.request.urlopen(req,timeout=12).read().decode('utf-8','ignore')
-              except Exception:
-                  continue
-              if 'search-results.php' in txt or 'search-results' in txt:
-                  print('--- JS MATCH',url,'---')
-                  i=max(txt.find('search-results')-1500,0)
-                  print(txt[i:i+6000])
-          PY
-
-      - name: POST real Marvel Legends lookup
+      - name: Verify real Marvel Legends lookup
         shell: bash
         run: |
           set -euo pipefail
           URL='https://frikivault-hobbydb-api.vercel.app/api/actionfigure411-value'
           PAYLOAD='{"item":{"type":"figure","title":"Marvel Legends Spider-Man","character":"Spider-Man","franchise":"Marvel","manufacturer":"Hasbro","line":"Marvel Legends","wave":"Spider Man: Brand New Day","year":2026,"hasBox":true}}'
-          code=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD" || true)
-          cat response.json || true
-          if [ "$code" = "200" ]; then
-            node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('response.json','utf8'));if(j.status!=='completed'||j.value?.source!=='ActionFigure411'||!(j.value?.amount>20&&j.value?.amount<100)||!String(j.value?.url||'').includes('brand-new-day-spider-man-13556.php')||!/Spider-Man/i.test(String(j.value?.title||'')))process.exit(1);console.log('SMOKE_OK',JSON.stringify(j.value));"
-          else
-            exit 1
-          fi
 
-# smoke-trigger: search-debug-fixed-2026-09-22
+          code=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD")
+          cat response.json
+
+          test "$code" = "200"
+
+          node <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync('response.json','utf8'));
+          const v=j.value||{};
+          if(j.status!=='completed') throw new Error('status no completado');
+          if(v.source!=='ActionFigure411') throw new Error('fuente incorrecta');
+          if(!(v.amount>=39 && v.amount<=42)) throw new Error('precio fuera del esperado: '+v.amount);
+          if(v.year!==2026) throw new Error('año incorrecto: '+v.year);
+          if(!/Brand New Day/i.test(String(v.group||''))) throw new Error('grupo incorrecto: '+v.group);
+          if(!/Spider-Man/i.test(String(v.title||''))) throw new Error('título incorrecto: '+v.title);
+
+          const url=String(v.url||'');
+          if(!url.startsWith('https://www.actionfigure411.com/')) throw new Error('enlace fuera de ActionFigure411: '+url);
+          if(/google\./i.test(url)) throw new Error('no se permite Google');
+          if(url.includes('marvel-legends-everything.php')) throw new Error('no se permite catálogo general');
+
+          const direct=url.includes('brand-new-day-spider-man-13556.php');
+          let internal=false;
+          if(url.includes('/search.php?')){
+            const u=new URL(url);
+            const q=(u.searchParams.get('q')||'').toLowerCase();
+            internal=q.includes('brand new day') && q.includes('spider-man');
+          }
+          if(!direct && !internal) throw new Error('enlace no resuelve la pieza exacta: '+url);
+
+          console.log('SMOKE_OK',JSON.stringify(v));
+          NODE
+# smoke-trigger: 2026-09-22-production-fix
