@@ -1,0 +1,29 @@
+name: Smoke ActionFigure411 production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-actionfigure411-smoke.yml
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST real Marvel Legends lookup
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://frikivault-hobbydb-api.vercel.app/api/actionfigure411-value'
+          PAYLOAD='{"item":{"type":"figure","title":"Marvel Legends Spider-Man","character":"Spider-Man","franchise":"Marvel","manufacturer":"Hasbro","line":"Marvel Legends","wave":"Spider Man: Brand New Day","year":2026,"hasBox":true}}'
+          for n in {1..12}; do
+            code=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD" || true)
+            cat response.json || true
+            if [ "$code" = "200" ]; then
+              node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('response.json','utf8'));if(j.status!=='completed'||j.value?.source!=='ActionFigure411'||!(j.value?.amount>0))process.exit(1);console.log('SMOKE_OK',JSON.stringify(j.value));"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Endpoint did not become healthy"
+          exit 1
