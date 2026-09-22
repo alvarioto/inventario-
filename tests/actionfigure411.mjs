@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chooseCatalog, parseMarvelRows, parseProductLinks, parseSitemapProductLinks, findBestProductLink, mergeRows, chooseBest, parseProductPage, productMatchesRow, searchQueryFor } from '../api/actionfigure411-value.mjs';
+import { chooseCatalog, parseMarvelRows, parseProductLinks, parseSitemapProductLinks, findBestProductLink, mergeRows, chooseBest, parseProductPage, productMatchesRow, searchQueryFor, internalSearchUrl } from '../api/actionfigure411-value.mjs';
 
 const marvelHtml = [
 '<table><tr><td><a href="/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php"><img alt="Spider-Man"></a></td><td><strong>Spider-Man</strong><br/>Group: Spider Man: Brand New Day<br/>Year: 2026<br/>Avg Price: $40.37</td></tr></table>',
@@ -45,6 +45,10 @@ assert.equal(sitemapLinks.length,2);
 const sitemapBest=findBestProductLink({title:'Spider-Man',group:'Spider Man: Brand New Day',year:2026},sitemapLinks);
 assert.equal(sitemapBest.url,'https://www.actionfigure411.com/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php');
 assert.equal(searchQueryFor({title:'Spider-Man',group:'Spider Man: Brand New Day',year:2026},{line:'Marvel Legends'}),'Marvel Legends Spider Man: Brand New Day Spider-Man 2026');
+assert.equal(
+  internalSearchUrl({title:'Spider-Man',group:'Spider Man: Brand New Day',year:2026},{line:'Marvel Legends'}),
+  'https://www.actionfigure411.com/search.php?q=Marvel%20Legends%20Spider%20Man%3A%20Brand%20New%20Day%20Spider-Man%202026'
+);
 
 const ambiguousLinkHtml = [
 '<a href="/marvel/marvel-legends-secret-wars-vintage-spider-man-10633.php"><img alt="Spider-Man"></a>',
