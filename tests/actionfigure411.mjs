@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chooseCatalog, parseMarvelRows, parseProductLinks, chooseBest, parseProductPage } from '../api/actionfigure411-value.mjs';
+import { chooseCatalog, parseMarvelRows, parseProductLinks, mergeRows, chooseBest, parseProductPage, productMatchesRow } from '../api/actionfigure411-value.mjs';
 
 const marvelHtml = [
 '<table><tr><td><a href="/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php"><img alt="Spider-Man"></a></td><td><strong>Spider-Man</strong><br/>Group: Spider Man: Brand New Day<br/>Year: 2026<br/>Avg Price: $40.37</td></tr></table>',
@@ -17,6 +17,15 @@ assert.match(rows[0].url,/13556\.php$/);
 
 const links=parseProductLinks(marvelHtml);
 assert.ok(links.some(x=>x.url.endsWith('13556.php')));
+
+const ambiguousLinkHtml = [
+'<a href="/marvel/marvel-legends-secret-wars-vintage-spider-man-10633.php"><img alt="Spider-Man"></a>',
+'<a href="/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php"><img alt="Spider-Man"></a>',
+'<table><tr><td></td><td><strong>Spider-Man</strong><br/>Group: Spider Man: Brand New Day<br/>Year: 2026<br/>Avg Price: $40.77</td></tr></table>'
+].join('\n');
+const mergedRows=mergeRows(ambiguousLinkHtml,{id:'marvel-legends'});
+assert.equal(mergedRows[0].url,'https://www.actionfigure411.com/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php');
+assert.equal(mergedRows[0].avg,40.77);
 
 const choice=chooseBest({
   type:'figure', title:'Marvel Legends Spider-Man', character:'Spider-Man',
@@ -48,5 +57,15 @@ assert.equal(product.activeAverage,41.78);
 assert.equal(product.activeCount,44);
 assert.equal(product.upc,'5010996404893');
 assert.equal(product.retail,27.99);
+
+const wrongProduct=parseProductPage([
+'<h1>Marvel Legends Secret Wars (Vintage) Spider-Man</h1>',
+'Year: 2026',
+'Set: Secret Wars (Vintage) Share:',
+'The average price based upon the last <strong>1</strong> sold auctions is: <strong>$229.99</strong>'
+].join('\n'),'https://www.actionfigure411.com/marvel/marvel-legends-secret-wars-vintage-spider-man-10633.php');
+assert.equal(productMatchesRow({title:'Spider-Man',group:'Spider Man: Brand New Day',year:2026},wrongProduct),false);
+assert.equal(productMatchesRow({title:'Spider-Man',group:'Spider Man: Brand New Day',year:2026},product),true);
+
 
 console.log('actionfigure411: ok');
