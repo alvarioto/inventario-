@@ -1,0 +1,29 @@
+name: Inspect LegendsVerse price guide
+on:
+  push:
+    branches: [codex/figure-router-barcode]
+    paths:
+      - .github/workflows/inspect-legendsverse.yml
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect workbook
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet openpyxl
+          curl -L --fail --retry 2 'https://legendsverse.com/storage/legendsverse-price-guide.xlsx' -o /tmp/guide.xlsx
+          python - <<'PY'
+          import openpyxl, json
+          p='/tmp/guide.xlsx'
+          wb=openpyxl.load_workbook(p,data_only=True,read_only=True)
+          print('SHEETS', wb.sheetnames)
+          for ws in wb.worksheets:
+              print('SHEET',ws.title)
+              rows=ws.iter_rows(values_only=True)
+              for i,row in enumerate(rows, start=1):
+                  print('ROW',i,json.dumps(row,default=str))
+                  if i>=8: break
+              print('---')
+          PY
