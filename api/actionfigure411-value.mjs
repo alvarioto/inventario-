@@ -273,6 +273,11 @@ function searchQueryFor(row,item={}){
   return [item.line,row.group,row.title,row.year].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
 }
 
+function internalSearchUrl(row,item={}){
+  const query=searchQueryFor(row,item);
+  return query?AF411+'/search.php?q='+encodeURIComponent(query):'';
+}
+
 async function resolveProductUrl(row,item={}){
   if(row?.url && productLinkScore(row,{url:row.url})>=0)return row.url;
   const query=searchQueryFor(row,item);
@@ -320,7 +325,7 @@ async function resolveActionFigure411(item){
   }
   const amount=(product?.soldAverage&&product.soldAverage>0)?product.soldAverage:(row.avg&&row.avg>0?row.avg:null);
   if(!amount)throw new Error('La figura existe en ActionFigure411, pero todavía no tiene ventas cerradas suficientes para valorar.');
-  const url=product?.url||row.url||catalog.url;
+  const url=product?.url||row.url||internalSearchUrl(row,item)||catalog.url;
   const group=product?.group||row.group||'';
   const evidence=[
     product?.soldCount ? String(product.soldCount)+' ventas cerradas' : 'media publicada por ActionFigure411',
@@ -345,7 +350,7 @@ async function resolveActionFigure411(item){
   return value;
 }
 
-export { CATALOGS, chooseCatalog, parseProductLinks, parseSitemapProductLinks, parseMarvelRows, productLinkScore, findBestProductLink, mergeRows, scoreRow, chooseBest, parseProductPage, productMatchesRow, searchQueryFor, resolveActionFigure411 };
+export { CATALOGS, chooseCatalog, parseProductLinks, parseSitemapProductLinks, parseMarvelRows, productLinkScore, findBestProductLink, mergeRows, scoreRow, chooseBest, parseProductPage, productMatchesRow, searchQueryFor, internalSearchUrl, resolveActionFigure411 };
 
 export default async function handler(req,res){
   if(!applyCors(req,res))return json(res,403,{error:'Origen no autorizado.'});
