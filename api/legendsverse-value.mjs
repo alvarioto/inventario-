@@ -74,7 +74,7 @@ function parseWorksheetXml(xml,sharedStrings=[]){
   const rows=[];
   for(const rm of String(xml||'').matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/gi)){
     const row=[];
-    for(const cm of rm[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/gi)){
+    for(const cm of rm[1].matchAll(/<c\b([^>]*?)(?:\/\s*>|>([\s\S]*?)<\/c>)/gi)){
       const attrs=cm[1]||'', body=cm[2]||'';
       const ref=attrs.match(/\br=["']([^"']+)["']/i)?.[1]||'A1';
       const type=attrs.match(/\bt=["']([^"']+)["']/i)?.[1]||'n';
