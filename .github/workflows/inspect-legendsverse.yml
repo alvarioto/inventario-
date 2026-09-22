@@ -31,7 +31,6 @@ jobs:
               vals=[cell.value for cell in row]
               hay=' '.join(str(v or '') for v in vals).lower()
               if any(k in hay for k in ['brand new day','black bolt','sentinel','weapon x']):
-                  links=[cell.hyperlink.target if cell.hyperlink else None for cell in row]
-                  print('MATCH',json.dumps(vals,default=str),'LINKS',json.dumps(links))
+                  print('MATCH',json.dumps(vals,default=str))
               print('---')
           PY
