@@ -25,5 +25,13 @@ jobs:
               for i,row in enumerate(rows, start=1):
                   print('ROW',i,json.dumps(row,default=str))
                   if i>=25: break
+          ws=wb['Price guide']
+          print('MATCHES')
+          for row in ws.iter_rows(min_row=11):
+              vals=[cell.value for cell in row]
+              hay=' '.join(str(v or '') for v in vals).lower()
+              if any(k in hay for k in ['brand new day','black bolt','sentinel','weapon x']):
+                  links=[cell.hyperlink.target if cell.hyperlink else None for cell in row]
+                  print('MATCH',json.dumps(vals,default=str),'LINKS',json.dumps(links))
               print('---')
           PY
