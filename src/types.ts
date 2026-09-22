@@ -24,6 +24,9 @@ export interface InventoryItem {
   character?: string;
   manufacturer?: string;
   line?: string;
+  scale?: string;
+  wave?: string;
+  exclusive?: string;
   edition?: string;
   issueNumber?: string;
   volume?: string;
@@ -82,6 +85,9 @@ export interface AiIdentification {
   character: string;
   manufacturer: string;
   line: string;
+  scale?: string;
+  wave?: string;
+  exclusive?: string;
   edition: string;
   issueNumber: string;
   volume: string;
