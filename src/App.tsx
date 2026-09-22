@@ -124,44 +124,6 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character] || character);
 }
 
-function catalogSourceLinks(item: Partial<InventoryDraft>) {
-  const identity = [
-    item.manufacturer,
-    item.line,
-    item.character || item.title,
-    item.franchise,
-    item.scale,
-    item.wave,
-    item.exclusive,
-    item.edition,
-    item.sku,
-    item.barcode
-  ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-
-  const q = identity || item.title || '';
-  const siteSearch = (domain: string) => 'https://www.google.com/search?q=' + encodeURIComponent('site:' + domain + ' ' + q);
-
-  const catalog = item.type === 'figure'
-    ? [
-        ['Figure Realm', siteSearch('figurerealm.com')],
-        ['FigureStash', siteSearch('figurestash.com')],
-        ['Coleka', siteSearch('coleka.com')],
-        ['Legendsverse', siteSearch('legendsverse.com')],
-        ['iCollect', siteSearch('icollecteverything.com')],
-        ['ActionFigure411', siteSearch('actionfigure411.com')]
-      ]
-    : [
-        ['Coleka', siteSearch('coleka.com')],
-        ['iCollect', siteSearch('icollecteverything.com')]
-      ];
-
-  return {
-    identity: q,
-    catalog,
-    ebay: 'https://www.ebay.es/sch/i.html?_nkw=' + encodeURIComponent(q)
-  };
-}
-
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(demoMode);
@@ -876,24 +838,15 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
             {research ? <div className="research-result">
               {research.searchIdentity && <p className="muted"><b>Producto buscado:</b> {research.searchIdentity}</p>}
               {research.resolvedIdentity?.title && <p className="muted"><b>Producto resuelto:</b> {research.resolvedIdentity.title}</p>}
-              {research.asking.median != null ? <div className="valuation-highlight"><div className="valuation-head"><span className="valuation-kicker">{research.asking.kind === 'sold' ? 'VALOR DE MERCADO · VENTAS CERRADAS' : research.asking.kind === 'guide' ? 'VALOR DE GUÍA' : 'REFERENCIA DE MERCADO'}</span><select aria-label="Moneda del valor estimado" value={displayCurrency} onChange={(event) => setDisplayCurrency(event.target.value)}>{DISPLAY_CURRENCIES.filter((code) => code === 'EUR' || code === research.asking.originalCurrency || code === research.asking.currency || research.exchangeRates?.[code]).map((code) => <option key={code} value={code}>{code}</option>)}</select></div><strong>{money(displayedResearchValue(research, displayCurrency) ?? research.asking.median, displayedResearchValue(research, displayCurrency) != null ? displayCurrency : research.asking.currency || 'EUR')}</strong>{research.asking.originalMedian != null && research.asking.originalCurrency && <div className="valuation-range">Valor original de PriceCharting: {money(research.asking.originalMedian, research.asking.originalCurrency)}</div>}<small>{research.asking.label}</small></div> : <div className="valuation-highlight empty"><span className="valuation-kicker">VALOR ESTIMADO</span><strong>Sin precio automático todavía</strong><small>No se encontró un precio suficientemente exacto para esta pieza.</small></div>}
+              {research.asking.median != null ? <div className="valuation-highlight"><div className="valuation-head"><span className="valuation-kicker">{research.asking.kind === 'sold' ? 'VALOR DE MERCADO · VENTAS CERRADAS' : research.asking.kind === 'guide' ? 'VALOR DE GUÍA' : 'REFERENCIA DE MERCADO'}</span><select aria-label="Moneda del valor estimado" value={displayCurrency} onChange={(event) => setDisplayCurrency(event.target.value)}>{DISPLAY_CURRENCIES.filter((code) => code === 'EUR' || code === research.asking.originalCurrency || code === research.asking.currency || research.exchangeRates?.[code]).map((code) => <option key={code} value={code}>{code}</option>)}</select></div><strong>{money(displayedResearchValue(research, displayCurrency) ?? research.asking.median, displayedResearchValue(research, displayCurrency) != null ? displayCurrency : research.asking.currency || 'EUR')}</strong>{research.asking.originalMedian != null && research.asking.originalCurrency && <div className="valuation-range">Valor original: {money(research.asking.originalMedian, research.asking.originalCurrency)}</div>}<small>{research.asking.label}</small></div> : <div className="valuation-highlight empty"><span className="valuation-kicker">VALOR ESTIMADO</span><strong>Sin precio automático todavía</strong><small>No se encontró un precio suficientemente exacto para esta pieza.</small></div>}
               <p>{research.summary}</p>
-              <div className="market-summary"><div><span>Páginas útiles</span><b>{new Set(research.sources.map((source) => source.url)).size || '—'}</b></div><div><span>Precios detectados</span><b>{research.listings.length || '—'}</b></div><div><span>Referencias orientativas</span><b>{research.comparables.filter((listing) => listing.sourceType !== 'guide').length || '—'}</b></div><div><span>Valor principal</span><b>{research.asking.median == null ? '—' : money(displayedResearchValue(research, displayCurrency) ?? research.asking.median, displayedResearchValue(research, displayCurrency) != null ? displayCurrency : research.asking.currency || 'EUR')}</b></div><div><span>Ventas cerradas</span><b>{research.sold.available ? `${research.sold.count || 1}${research.sold.median != null ? ` · ${money(research.sold.median)}` : ''}` : 'No verificadas'}</b></div></div>
-              {research.comparables.some((listing) => listing.sourceType === 'guide') && <div className="comparable-prices"><h4>Referencia principal · PriceCharting</h4>{research.comparables.filter((listing) => listing.sourceType === 'guide').slice(0,1).map((listing) => <a className="comparable-price primary-guide" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>Precio público de PriceCharting · abrir ficha</small></span><strong>{listing.originalPrice != null && listing.originalCurrency ? money(listing.originalPrice, listing.originalCurrency) : money(listing.price, listing.currency)}</strong></a>)}</div>}
-              {research.comparables.some((listing) => listing.sourceType !== 'guide') && <div className="comparable-prices"><h4>Otras referencias orientativas</h4>{research.comparables.filter((listing) => listing.sourceType !== 'guide').slice(0,8).map((listing) => <a className="comparable-price" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.condition} · abrir enlace</small></span><strong>{money(listing.price, listing.currency)}</strong></a>)}</div>}
+              <div className="market-summary"><div><span>Páginas útiles</span><b>{new Set(research.sources.map((source) => source.url)).size || '—'}</b></div><div><span>Precios detectados</span><b>{research.listings.length || '—'}</b></div><div><span>Referencias orientativas</span><b>{research.comparables.filter((listing) => listing.sourceType !== 'guide' && listing.sourceType !== 'sold').length || '—'}</b></div><div><span>Valor principal</span><b>{research.asking.median == null ? '—' : money(displayedResearchValue(research, displayCurrency) ?? research.asking.median, displayedResearchValue(research, displayCurrency) != null ? displayCurrency : research.asking.currency || 'EUR')}</b></div><div><span>Ventas cerradas</span><b>{research.sold.available ? `${research.sold.count || 1}${research.sold.median != null ? ` · ${money(research.sold.median)}` : ''}` : 'No verificadas'}</b></div></div>
+              {research.comparables.some((listing) => listing.sourceType === 'guide' || listing.sourceType === 'sold') && <div className="comparable-prices"><h4>{research.asking.kind === 'sold' ? 'Valor principal · ventas cerradas' : 'Referencia principal'}</h4>{research.comparables.filter((listing) => listing.sourceType === 'guide' || listing.sourceType === 'sold').slice(0,1).map((listing) => <a className="comparable-price primary-guide" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.sourceType === 'sold' ? 'Media de ventas cerradas · abrir fuente' : 'Precio público · abrir ficha'}</small></span><strong>{listing.originalPrice != null && listing.originalCurrency ? money(listing.originalPrice, listing.originalCurrency) : money(listing.price, listing.currency)}</strong></a>)}</div>}
+              {research.comparables.some((listing) => listing.sourceType !== 'guide' && listing.sourceType !== 'sold') && <div className="comparable-prices"><h4>Otras referencias orientativas</h4>{research.comparables.filter((listing) => listing.sourceType !== 'guide' && listing.sourceType !== 'sold').slice(0,8).map((listing) => <a className="comparable-price" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.condition} · abrir enlace</small></span><strong>{money(listing.price, listing.currency)}</strong></a>)}</div>}
               <div className="research-facts">{research.facts.slice(0, 8).map((fact) => <div key={`${fact.label}-${fact.sourceId}`}><b>{fact.label}</b><span>{fact.value}</span></div>)}</div>
-              <div className="source-list"><a href={research.links.ebay} target="_blank" rel="noreferrer">eBay</a><a href={research.links.sold} target="_blank" rel="noreferrer">eBay vendidos</a>{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.slice(0,6).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div>
+              <div className="source-list"><a href={research.links.ebay} target="_blank" rel="noreferrer">eBay · informativo</a><a href={research.links.sold} target="_blank" rel="noreferrer">eBay vendidos · comprobar</a>{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.slice(0,6).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div>
               {research.warnings.map((warning) => <small className="warning-line" key={warning}>{warning}</small>)}
             </div> : <p className="muted">Este artículo no tiene análisis unificado porque no se creó desde el escáner inteligente.</p>}
-            {(() => {
-              const sources = catalogSourceLinks(draft);
-              return <div className="catalog-source-panel">
-                <div><h4>Fuentes para identificar esta pieza</h4><p className="muted">Búsqueda preparada con fabricante, línea, personaje, escala, variante, SKU y código cuando estén disponibles.</p></div>
-                {sources.identity && <p className="catalog-identity"><b>Búsqueda:</b> {sources.identity}</p>}
-                <div className="source-list">{sources.catalog.map(([name,url]) => <a key={name} href={url} target="_blank" rel="noreferrer">{name}</a>)}</div>
-                <div className="source-list secondary-sources"><a href={sources.ebay} target="_blank" rel="noreferrer">eBay · solo informativo</a></div>
-              </div>;
-            })()}
           </section>}
 
           {item && <section className="qr-panel"><div><h3 className="form-section-title"><QrCode/> Etiqueta de la pieza</h3><p className="muted">Escanéala para abrir directamente esta ficha. La ubicación puede cambiar sin cambiar el código.</p><div className="qr-actions"><button type="button" className="secondary" onClick={downloadQr} disabled={!qrDataUrl}><Download size={17}/> Descargar QR</button><button type="button" className="secondary" onClick={printQr} disabled={!qrDataUrl}><Eye size={17}/> Imprimir etiqueta</button></div></div>{qrDataUrl ? <img className="qr-image" src={qrDataUrl} alt={`Código QR de ${item.title}`}/> : <div className="qr-placeholder"><QrCode/></div>}</section>}
