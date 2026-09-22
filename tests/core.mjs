@@ -273,7 +273,11 @@ const aiCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url
 assert.doesNotMatch(aiCoreSource,/eBay vendidos\/completados y tiendas públicas/);
 assert.match(aiCoreSource,/PriceCharting es la referencia principal/);
 assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
-assert.match(appSource,/Escanear código/);
+assert.match(appSource,/Leer código de barras/);
+assert.match(appSource,/lector es propio de FrikiVault/i);
+assert.match(appSource,/Coleka · catálogo general/);
+assert.match(appSource,/LegendsVerse · Marvel Legends/);
+assert.match(appSource,/FigureRealm · antiguas\/variantes/);
 assert.match(appSource,/Mejorar con IA/);
 assert.match(appSource,/Número Pop/);
 assert.match(appSource,/Formato \/ línea Funko/);
