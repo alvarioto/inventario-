@@ -124,6 +124,44 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character] || character);
 }
 
+function catalogSourceLinks(item: Partial<InventoryDraft>) {
+  const identity = [
+    item.manufacturer,
+    item.line,
+    item.character || item.title,
+    item.franchise,
+    item.scale,
+    item.wave,
+    item.exclusive,
+    item.edition,
+    item.sku,
+    item.barcode
+  ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+
+  const q = identity || item.title || '';
+  const siteSearch = (domain: string) => 'https://www.google.com/search?q=' + encodeURIComponent('site:' + domain + ' ' + q);
+
+  const catalog = item.type === 'figure'
+    ? [
+        ['Figure Realm', siteSearch('figurerealm.com')],
+        ['FigureStash', siteSearch('figurestash.com')],
+        ['Coleka', siteSearch('coleka.com')],
+        ['Legendsverse', siteSearch('legendsverse.com')],
+        ['iCollect', siteSearch('icollecteverything.com')],
+        ['ActionFigure411', siteSearch('actionfigure411.com')]
+      ]
+    : [
+        ['Coleka', siteSearch('coleka.com')],
+        ['iCollect', siteSearch('icollecteverything.com')]
+      ];
+
+  return {
+    identity: q,
+    catalog,
+    ebay: 'https://www.ebay.es/sch/i.html?_nkw=' + encodeURIComponent(q)
+  };
+}
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(demoMode);
@@ -812,6 +850,9 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
             {draft.type === 'card' && <><Field label="Set"><input value={draft.setName || ''} onChange={(e)=>set('setName',e.target.value)}/></Field><Field label="Número de carta"><input value={draft.cardNumber || ''} onChange={(e)=>set('cardNumber',e.target.value)}/></Field><Field label="Rareza"><input value={draft.rarity || ''} onChange={(e)=>set('rarity',e.target.value)}/></Field><Field label="Grado"><input value={draft.grade || ''} onChange={(e)=>set('grade',e.target.value)} placeholder="PSA 9…"/></Field></>}
             {draft.type === 'game' && <Field label="Plataforma"><input value={draft.platform || ''} onChange={(e)=>set('platform',e.target.value)} placeholder="PS5, Switch…"/></Field>}
             <Field label="Año"><input type="number" value={draft.year ?? ''} onChange={(e)=>set('year',e.target.value ? Number(e.target.value) : null)}/></Field>
+            {draft.type === 'figure' && <Field label="Escala / tamaño"><input value={draft.scale || ''} onChange={(e)=>set('scale',e.target.value)} placeholder="1/4, 1/6, 7 pulgadas…"/></Field>}
+            {draft.type === 'figure' && <Field label="Wave / serie"><input value={draft.wave || ''} onChange={(e)=>set('wave',e.target.value)} placeholder="Wave 3, Serie 2…"/></Field>}
+            {draft.type === 'figure' && <Field label="Exclusiva / variante"><input value={draft.exclusive || ''} onChange={(e)=>set('exclusive',e.target.value)} placeholder="SDCC, Target, Deluxe, variante…"/></Field>}
             <Field label="Código EAN / UPC"><input value={draft.barcode || ''} onChange={(e)=>set('barcode',e.target.value)}/></Field>
             <Field label="SKU / referencia"><input value={draft.sku || ''} onChange={(e)=>set('sku',e.target.value)} placeholder="Referencia del fabricante"/></Field>
             <Field label="País / mercado de la edición"><input value={draft.country || ''} onChange={(e)=>set('country',e.target.value)} placeholder="España, Japón, USA…"/></Field>
@@ -844,6 +885,15 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
               <div className="source-list"><a href={research.links.ebay} target="_blank" rel="noreferrer">eBay</a><a href={research.links.sold} target="_blank" rel="noreferrer">eBay vendidos</a>{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.slice(0,6).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div>
               {research.warnings.map((warning) => <small className="warning-line" key={warning}>{warning}</small>)}
             </div> : <p className="muted">Este artículo no tiene análisis unificado porque no se creó desde el escáner inteligente.</p>}
+            {(() => {
+              const sources = catalogSourceLinks(draft);
+              return <div className="catalog-source-panel">
+                <div><h4>Fuentes para identificar esta pieza</h4><p className="muted">Búsqueda preparada con fabricante, línea, personaje, escala, variante, SKU y código cuando estén disponibles.</p></div>
+                {sources.identity && <p className="catalog-identity"><b>Búsqueda:</b> {sources.identity}</p>}
+                <div className="source-list">{sources.catalog.map(([name,url]) => <a key={name} href={url} target="_blank" rel="noreferrer">{name}</a>)}</div>
+                <div className="source-list secondary-sources"><a href={sources.ebay} target="_blank" rel="noreferrer">eBay · solo informativo</a></div>
+              </div>;
+            })()}
           </section>}
 
           {item && <section className="qr-panel"><div><h3 className="form-section-title"><QrCode/> Etiqueta de la pieza</h3><p className="muted">Escanéala para abrir directamente esta ficha. La ubicación puede cambiar sin cambiar el código.</p><div className="qr-actions"><button type="button" className="secondary" onClick={downloadQr} disabled={!qrDataUrl}><Download size={17}/> Descargar QR</button><button type="button" className="secondary" onClick={printQr} disabled={!qrDataUrl}><Eye size={17}/> Imprimir etiqueta</button></div></div>{qrDataUrl ? <img className="qr-image" src={qrDataUrl} alt={`Código QR de ${item.title}`}/> : <div className="qr-placeholder"><QrCode/></div>}</section>}
