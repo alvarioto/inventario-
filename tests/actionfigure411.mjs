@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chooseCatalog, parseMarvelRows, parseProductLinks, mergeRows, chooseBest, parseProductPage, productMatchesRow } from '../api/actionfigure411-value.mjs';
+import { chooseCatalog, parseMarvelRows, parseProductLinks, parseSitemapProductLinks, findBestProductLink, mergeRows, chooseBest, parseProductPage, productMatchesRow, searchQueryFor } from '../api/actionfigure411-value.mjs';
 
 const marvelHtml = [
 '<table><tr><td><a href="/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php"><img alt="Spider-Man"></a></td><td><strong>Spider-Man</strong><br/>Group: Spider Man: Brand New Day<br/>Year: 2026<br/>Avg Price: $40.37</td></tr></table>',
@@ -32,6 +32,19 @@ const imageOnlyLinks=parseProductLinks([
 ].join('\n'));
 assert.equal(imageOnlyLinks.length,2);
 assert.ok(imageOnlyLinks.some(x=>x.url.endsWith('13556.php')));
+
+
+const sitemapLinks=parseSitemapProductLinks([
+  '<?xml version="1.0"?>',
+  '<urlset>',
+  '<url><loc>https://www.actionfigure411.com/marvel/marvel-legends-secret-wars-vintage-spider-man-10633.php</loc></url>',
+  '<url><loc>https://www.actionfigure411.com/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php</loc></url>',
+  '</urlset>'
+].join('\n'));
+assert.equal(sitemapLinks.length,2);
+const sitemapBest=findBestProductLink({title:'Spider-Man',group:'Spider Man: Brand New Day',year:2026},sitemapLinks);
+assert.equal(sitemapBest.url,'https://www.actionfigure411.com/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php');
+assert.equal(searchQueryFor({title:'Spider-Man',group:'Spider Man: Brand New Day',year:2026},{line:'Marvel Legends'}),'Marvel Legends Spider Man: Brand New Day Spider-Man 2026');
 
 const ambiguousLinkHtml = [
 '<a href="/marvel/marvel-legends-secret-wars-vintage-spider-man-10633.php"><img alt="Spider-Man"></a>',
