@@ -60,3 +60,15 @@ body{overscroll-behavior-x:none}
 .provider-badge{font-size:9px;text-transform:uppercase;letter-spacing:.08em;padding:4px 7px;border-radius:999px;background:rgba(80,215,242,.10);color:var(--cyan);vertical-align:middle;margin-left:6px}
 .provider-doc-link{display:inline-block;margin-top:12px;color:var(--cyan);font-size:12px;text-decoration:none}
 @media(max-width:680px){.valuation-highlight>strong{font-size:29px}.comparable-price{align-items:flex-start}.comparable-price>strong{font-size:13px}}
+
+.scan-shortcuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.scan-shortcut{display:flex;align-items:center;gap:12px;min-height:72px;padding:14px 16px;border:1px solid var(--border);border-radius:16px;background:rgba(7,11,22,.34);text-align:left;cursor:pointer}
+.scan-shortcut:hover{transform:translateY(-1px);border-color:currentColor}
+.scan-shortcut:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.scan-shortcut span{display:flex;flex-direction:column;gap:3px}
+.scan-shortcut b{font-size:15px}
+.scan-shortcut small{font-size:12px;opacity:.72}
+.barcode-shortcut{font-weight:600}
+.barcode-panel-button{margin:10px 0 12px}
+.source-routing-note{margin:12px 0 8px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;font-size:12px;line-height:1.45}
+@media(max-width:720px){.scan-shortcuts{grid-template-columns:1fr}.scan-shortcut{min-height:76px}}
