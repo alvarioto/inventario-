@@ -1,0 +1,54 @@
+name: Smoke figure sources production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-legendsverse-smoke.yml
+      - api/legendsverse-value.mjs
+      - src/lib/api.ts
+      - src/lib/ai-core.mjs
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Vercel and verify LegendsVerse
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://frikivault-hobbydb-api.vercel.app/api/legendsverse-value'
+          PAYLOAD='{"item":{"type":"figure","title":"Marvel Legends Black Bolt & Triton","character":"Black Bolt & Triton","franchise":"Marvel","manufacturer":"Hasbro","line":"Marvel Legends","year":2026,"hasBox":true}}'
+          ok=0
+          for n in $(seq 1 18); do
+            code=$(curl -sS -o legendsverse.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD" || true)
+            if [ "$code" = "200" ]; then
+              if node <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync('legendsverse.json','utf8'));
+          const v=j.value||{};
+          if(j.status!=='completed') process.exit(1);
+          if(v.source!=='LegendsVerse') process.exit(1);
+          if(!(v.amount>=73 && v.amount<=75)) process.exit(1);
+          if(v.year!==2026) process.exit(1);
+          if(!/Black Bolt/i.test(String(v.title||'')) || !/Triton/i.test(String(v.title||''))) process.exit(1);
+          console.log('LEGENDSVERSE_SMOKE_OK',JSON.stringify(v));
+          NODE
+              then ok=1; break; fi
+            fi
+            sleep 10
+          done
+          test "$ok" = "1"
+
+      - name: Verify ActionFigure411 endpoint is removed
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://frikivault-hobbydb-api.vercel.app/api/actionfigure411-value'
+          gone=0
+          for n in $(seq 1 18); do
+            code=$(curl -sS -o /tmp/af411.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data '{"item":{"type":"figure","title":"Spider-Man"}}' || true)
+            if [ "$code" = "404" ]; then gone=1; break; fi
+            sleep 10
+          done
+          test "$gone" = "1"
