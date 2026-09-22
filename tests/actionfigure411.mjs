@@ -18,6 +18,13 @@ assert.match(rows[0].url,/13556\.php$/);
 const links=parseProductLinks(marvelHtml);
 assert.ok(links.some(x=>x.url.endsWith('13556.php')));
 
+const imageOnlyLinks=parseProductLinks([
+  '<a href="/marvel/marvel-legends-secret-wars-vintage-spider-man-10633.php"><img src="/img/10633.jpg"></a>',
+  '<a href="/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php"><img src="/img/13556.jpg"></a>'
+].join('\n'));
+assert.equal(imageOnlyLinks.length,2);
+assert.ok(imageOnlyLinks.some(x=>x.url.endsWith('13556.php')));
+
 const ambiguousLinkHtml = [
 '<a href="/marvel/marvel-legends-secret-wars-vintage-spider-man-10633.php"><img alt="Spider-Man"></a>',
 '<a href="/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php"><img alt="Spider-Man"></a>',
