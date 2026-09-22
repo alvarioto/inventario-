@@ -104,24 +104,49 @@ function parseMarvelRows(html){
   }
   return rows;
 }
-function mergeRows(html,catalog){
-  const links=parseProductLinks(html);
-  if(catalog?.id!=='marvel-legends')return links;
-  const rows=parseMarvelRows(html);
-  if(!links.length)return rows;
-  for(const row of rows){
-    const n=normalize(row.title);
-    const match=links.find(x=>normalize(x.title)===n || normalize(x.url).includes(n.split(' ').slice(0,3).join('-')));
-    if(match)row.url=match.url;
-  }
-  return rows;
-}
 const STOP=new Set(['marvel','legends','hasbro','action','figure','figures','collectible','toy','toys','series','the','and','with','of','a','an','edition']);
+const GENERIC_GROUP=new Set(['misc','exclusive','deluxe','comics','inspired','wave','baf','price','guide','vintage']);
 function tokens(value){return normalize(value).split(' ').filter(x=>x.length>1&&!STOP.has(x));}
 function overlap(a,b){
   const aa=[...new Set(tokens(a))], bb=new Set(tokens(b));
   if(!aa.length)return 0;
   return aa.filter(x=>bb.has(x)).length/aa.length;
+}
+function specificGroupTokens(value){
+  return [...new Set(tokens(value).filter(x=>!GENERIC_GROUP.has(x)))];
+}
+function productLinkScore(row,link){
+  const urlText=normalize(link?.url||'');
+  const titleTokens=[...new Set(tokens(row?.title||''))];
+  if(!titleTokens.length||!urlText)return -1;
+  const titleHits=titleTokens.filter(x=>urlText.includes(x)).length;
+  const titleRatio=titleHits/titleTokens.length;
+  if(titleRatio<0.8)return -1;
+  const groupTokens=specificGroupTokens(row?.group||'');
+  let groupRatio=0;
+  if(groupTokens.length){
+    const groupHits=groupTokens.filter(x=>urlText.includes(x)).length;
+    groupRatio=groupHits/groupTokens.length;
+    if(groupTokens.length>=2&&groupRatio<0.6)return -1;
+  }
+  return titleRatio*120+groupRatio*220;
+}
+function findBestProductLink(row,links){
+  const ranked=links.map(link=>({link,score:productLinkScore(row,link)})).filter(x=>x.score>=0).sort((a,b)=>b.score-a.score);
+  if(!ranked.length)return null;
+  if(ranked[1]&&Math.abs(ranked[0].score-ranked[1].score)<1&&ranked[0].link.url!==ranked[1].link.url)return null;
+  return ranked[0].link;
+}
+function mergeRows(html,catalog){
+  const links=parseProductLinks(html);
+  if(catalog?.id!=='marvel-legends')return links;
+  const rows=parseMarvelRows(html);
+  if(!links.length)return rows.map(row=>({...row,url:''}));
+  for(const row of rows){
+    const match=findBestProductLink(row,links);
+    row.url=match?.url||'';
+  }
+  return rows;
 }
 function scoreRow(item,row){
   const it=cleanedItem(item);
@@ -173,6 +198,21 @@ function parseProductPage(html,url=''){
   const activeCount=active?Number(active[2]):null;
   const group=text.match(/\bSet:\s*(.+?)(?=\s+Share:|\s+Where to Buy:|$)/i)?.[1]?.trim()||'';
   return {title,url,year,retail,upc,asin,soldCount,soldAverage,high,low,activeAverage,activeCount,group};
+}
+function productMatchesRow(row,product){
+  if(!row||!product)return false;
+  const productIdentity=normalize([product.title,product.group,product.url].filter(Boolean).join(' '));
+  const titleTokens=[...new Set(tokens(row.title||''))];
+  if(!titleTokens.length)return false;
+  const titleRatio=titleTokens.filter(x=>productIdentity.includes(x)).length/titleTokens.length;
+  if(titleRatio<0.8)return false;
+  const groupTokens=specificGroupTokens(row.group||'');
+  if(groupTokens.length>=2){
+    const groupRatio=groupTokens.filter(x=>productIdentity.includes(x)).length/groupTokens.length;
+    if(groupRatio<0.6)return false;
+  }
+  if(row.year&&product.year&&Number(row.year)!==Number(product.year))return false;
+  return true;
 }
 function configuredOrigins(){
   const values=String(process.env.APP_ORIGIN||'').split(',').map(x=>x.trim().replace(/\/$/,'')).filter(Boolean);
@@ -228,7 +268,8 @@ async function resolveActionFigure411(item){
   if(row.url){
     try{
       const page=await fetchPublic(row.url);
-      product=parseProductPage(page.html,page.url);
+      const parsed=parseProductPage(page.html,page.url);
+      if(productMatchesRow(row,parsed))product=parsed;
     }catch{}
   }
   const amount=(product?.soldAverage&&product.soldAverage>0)?product.soldAverage:(row.avg&&row.avg>0?row.avg:null);
@@ -258,7 +299,7 @@ async function resolveActionFigure411(item){
   return value;
 }
 
-export { CATALOGS, chooseCatalog, parseProductLinks, parseMarvelRows, mergeRows, scoreRow, chooseBest, parseProductPage, resolveActionFigure411 };
+export { CATALOGS, chooseCatalog, parseProductLinks, parseMarvelRows, productLinkScore, findBestProductLink, mergeRows, scoreRow, chooseBest, parseProductPage, productMatchesRow, resolveActionFigure411 };
 
 export default async function handler(req,res){
   if(!applyCors(req,res))return json(res,403,{error:'Origen no autorizado.'});
