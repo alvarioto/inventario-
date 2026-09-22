@@ -33,3 +33,4 @@ jobs:
           done
           echo "Endpoint did not become healthy"
           exit 1
+# smoke-trigger: 2026-09-22T16:23Z
