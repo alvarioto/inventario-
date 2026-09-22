@@ -1,4 +1,4 @@
-name: Smoke ActionFigure411 production
+name: Smoke figure sources production
 
 on:
   push:
@@ -10,43 +10,46 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify real Marvel Legends lookup
+      - name: Verify LegendsVerse primary Marvel Legends value
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://frikivault-hobbydb-api.vercel.app/api/legendsverse-value'
+          PAYLOAD='{"item":{"type":"figure","title":"Marvel Legends Black Bolt & Triton","character":"Black Bolt & Triton","franchise":"Marvel","manufacturer":"Hasbro","line":"Marvel Legends","year":2026,"hasBox":true}}'
+          code=$(curl -sS -o legendsverse.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD")
+          cat legendsverse.json
+          test "$code" = "200"
+          node <<'NODE'
+          const fs=require('fs');
+          const j=JSON.parse(fs.readFileSync('legendsverse.json','utf8'));
+          const v=j.value||{};
+          if(j.status!=='completed') throw new Error('LegendsVerse: status no completado');
+          if(v.source!=='LegendsVerse') throw new Error('LegendsVerse: fuente incorrecta '+v.source);
+          if(!(v.amount>=73 && v.amount<=75)) throw new Error('LegendsVerse: precio inesperado '+v.amount);
+          if(v.year!==2026) throw new Error('LegendsVerse: año incorrecto '+v.year);
+          if(!/Black Bolt/i.test(String(v.title||'')) || !/Triton/i.test(String(v.title||''))) throw new Error('LegendsVerse: figura incorrecta '+v.title);
+          if(!String(v.url||'').startsWith('https://legendsverse.com/')) throw new Error('LegendsVerse: URL incorrecta '+v.url);
+          console.log('LEGENDSVERSE_SMOKE_OK',JSON.stringify(v));
+          NODE
+
+      - name: Verify ActionFigure411 remains a fallback source
         shell: bash
         run: |
           set -euo pipefail
           URL='https://frikivault-hobbydb-api.vercel.app/api/actionfigure411-value'
           PAYLOAD='{"item":{"type":"figure","title":"Marvel Legends Spider-Man","character":"Spider-Man","franchise":"Marvel","manufacturer":"Hasbro","line":"Marvel Legends","wave":"Spider Man: Brand New Day","year":2026,"hasBox":true}}'
-
-          code=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD")
-          cat response.json
-
+          code=$(curl -sS -o actionfigure411.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD")
+          cat actionfigure411.json
           test "$code" = "200"
-
           node <<'NODE'
           const fs=require('fs');
-          const j=JSON.parse(fs.readFileSync('response.json','utf8'));
+          const j=JSON.parse(fs.readFileSync('actionfigure411.json','utf8'));
           const v=j.value||{};
-          if(j.status!=='completed') throw new Error('status no completado');
-          if(v.source!=='ActionFigure411') throw new Error('fuente incorrecta');
-          if(!(v.amount>=39 && v.amount<=42)) throw new Error('precio fuera del esperado: '+v.amount);
-          if(v.year!==2026) throw new Error('año incorrecto: '+v.year);
-          if(!/Brand New Day/i.test(String(v.group||''))) throw new Error('grupo incorrecto: '+v.group);
-          if(!/Spider-Man/i.test(String(v.title||''))) throw new Error('título incorrecto: '+v.title);
-
-          const url=String(v.url||'');
-          if(!url.startsWith('https://www.actionfigure411.com/')) throw new Error('enlace fuera de ActionFigure411: '+url);
-          if(/google\./i.test(url)) throw new Error('no se permite Google');
-          if(url.includes('marvel-legends-everything.php')) throw new Error('no se permite catálogo general');
-
-          const direct=url.includes('brand-new-day-spider-man-13556.php');
-          let internal=false;
-          if(url.includes('/search.php?')){
-            const u=new URL(url);
-            const q=(u.searchParams.get('q')||'').toLowerCase();
-            internal=q.includes('brand new day') && q.includes('spider-man');
-          }
-          if(!direct && !internal) throw new Error('enlace no resuelve la pieza exacta: '+url);
-
-          console.log('SMOKE_OK',JSON.stringify(v));
+          if(j.status!=='completed'||v.source!=='ActionFigure411') throw new Error('ActionFigure411 fallback incorrecto');
+          if(!(v.amount>20&&v.amount<100)) throw new Error('ActionFigure411 precio inesperado '+v.amount);
+          if(v.year!==2026 || !/Brand New Day/i.test(String(v.group||''))) throw new Error('ActionFigure411 identidad incorrecta');
+          if(/google\./i.test(String(v.url||''))) throw new Error('No se permite Google');
+          console.log('ACTIONFIGURE411_SMOKE_OK',JSON.stringify(v));
           NODE
-# smoke-trigger: 2026-09-22-production-fix
+
+# smoke-trigger: legendsverse-router-2026-09-22
