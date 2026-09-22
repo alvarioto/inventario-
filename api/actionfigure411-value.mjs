@@ -69,29 +69,14 @@ function chooseCatalog(item){
 function parseProductLinks(html){
   const out=[];
   const seen=new Set();
-  const re=/<a\b([^>]*?)href=["']([^"']*-\d+\.php(?:#[^"']*)?)["']([^>]*)>([\s\S]*?)<\/a>/gi;
+  const re=/href=["']([^"']*-\d+\.php(?:#[^"']*)?)["']/gi;
   for(const m of String(html||'').matchAll(re)){
-    const href=absoluteUrl(m[2]);
+    const href=absoluteUrl(m[1]);
     if(!href||!href.startsWith(AF411+'/')||seen.has(href))continue;
-    const attrs=(m[1]||'')+' '+(m[3]||'');
-    const inner=m[4]||'';
-    let title=stripTags(inner);
-    if(!title){
-      title=decodeHtml(attrs.match(/\b(?:title|alt)=["']([^"']+)["']/i)?.[1]||'').trim();
-    }
-    if(!title){
-      title=decodeHtml(inner.match(/\balt=["']([^"']+)["']/i)?.[1]||'').trim();
-    }
-    if(!title){
-      const slug=decodeURIComponent(new URL(href).pathname.split('/').pop()||'')
-        .replace(/\.php(?:#.*)?$/i,'')
-        .replace(/-\d+$/,'')
-        .replace(/[-_]+/g,' ')
-        .trim();
-      title=slug||href;
-    }
+    const file=decodeURIComponent(new URL(href).pathname.split('/').pop()||'');
+    const slug=file.replace(/\.php(?:#.*)?$/i,'').replace(/-\d+$/,'').replace(/[-_]+/g,' ').trim();
     seen.add(href);
-    out.push({title,url:href,group:'',year:null,avg:null});
+    out.push({title:slug||href,url:href,group:'',year:null,avg:null});
   }
   return out;
 }

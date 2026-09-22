@@ -18,6 +18,14 @@ assert.match(rows[0].url,/13556\.php$/);
 const links=parseProductLinks(marvelHtml);
 assert.ok(links.some(x=>x.url.endsWith('13556.php')));
 
+const linkOnlyHtml = [
+'<div><a class="thumb" href="/marvel/marvel-legends-secret-wars-vintage-spider-man-10633.php"><span>ver</span></a></div>',
+'<div data-x="1"><a href="/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php"></a></div>',
+'<table><tr><td></td><td><strong>Spider-Man</strong><br/>Group: Spider Man: Brand New Day<br/>Year: 2026<br/>Avg Price: $40.77</td></tr></table>'
+].join('\n');
+const linkOnlyMerged=mergeRows(linkOnlyHtml,{id:'marvel-legends'});
+assert.equal(linkOnlyMerged[0].url,'https://www.actionfigure411.com/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php');
+
 const imageOnlyLinks=parseProductLinks([
   '<a href="/marvel/marvel-legends-secret-wars-vintage-spider-man-10633.php"><img src="/img/10633.jpg"></a>',
   '<a href="/marvel/marvel-legends-spider-man-brand-new-day-spider-man-13556.php"><img src="/img/13556.jpg"></a>'
