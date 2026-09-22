@@ -105,6 +105,29 @@ assert.equal(mergedIdentification.sku,'90310');
 assert.equal(mergedIdentification.popNumber,'1982');
 assert.equal(mergedIdentification.funkoCategory,'Pop! Regular');
 
+// Regresión: los datos que distinguen una figura concreta deben sobrevivir al análisis visual.
+const detailedFigureFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
+ title:'Marvel Legends Spider-Man',
+ type:'figure',
+ franchise:'Marvel',
+ character:'Spider-Man',
+ manufacturer:'Hasbro',
+ line:'Marvel Legends',
+ scale:'6 inch',
+ wave:'Spider Man: Brand New Day',
+ exclusive:'Fan Channel',
+ year:2026,
+ confidence:.98,
+ explanation:'Caja Marvel Legends; wave Brand New Day y sello Fan Channel visibles.'
+})}}]}),{status:200,headers:{'content-type':'application/json'}});
+const detailedFigure=await identify('data:image/jpeg;base64,DETAILEDFIGURE',{key:'test',fetcher:detailedFigureFetch});
+assert.equal(detailedFigure.type,'figure');
+assert.equal(detailedFigure.manufacturer,'Hasbro');
+assert.equal(detailedFigure.line,'Marvel Legends');
+assert.equal(detailedFigure.scale,'6 inch');
+assert.equal(detailedFigure.wave,'Spider Man: Brand New Day');
+assert.equal(detailedFigure.exclusive,'Fan Channel');
+
 // Regresión: el arte "MARVEL COMICS / X-MEN" del cartón no puede convertir
 // una figura Hasbro/Marvel Legends en un cómic.
 const weaponXVisionFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
@@ -275,9 +298,12 @@ assert.match(aiCoreSource,/PriceCharting es la referencia principal/);
 assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/Leer código de barras/);
 assert.match(appSource,/lector es propio de FrikiVault/i);
-assert.match(appSource,/Coleka · catálogo general/);
-assert.match(appSource,/LegendsVerse · Marvel Legends/);
-assert.match(appSource,/FigureRealm · antiguas\/variantes/);
+assert.match(appSource,/Fuentes reales consultadas/);
+assert.match(appSource,/LegendsVerse · ficha exacta/);
+assert.doesNotMatch(appSource,/ActionFigure411/i);
+assert.match(appSource,/scale: result\.scale/);
+assert.match(appSource,/wave: result\.wave/);
+assert.match(appSource,/exclusive: result\.exclusive/);
 assert.match(appSource,/Mejorar con IA/);
 assert.match(appSource,/Número Pop/);
 assert.match(appSource,/Formato \/ línea Funko/);
@@ -303,6 +329,15 @@ assert.match(appSource,/Otras referencias orientativas/);
 assert.match(appSource,/>PriceCharting<\/a>/);
 assert.match(appSource,/Analizar artículo/);
 assert.doesNotMatch(appSource,/Confirmar e investigar|Actualizar investigación/);
+const apiSource=readFileSync(new URL('../src/lib/api.ts',import.meta.url),'utf8');
+assert.match(apiSource,/runGeneralResearch/);
+assert.match(apiSource,/researchDirect/);
+assert.doesNotMatch(apiSource,/ActionFigure411|actionFigure411/i);
+assert.match(aiCoreSource,/Coleka/);
+assert.match(aiCoreSource,/LegendsVerse/);
+assert.match(aiCoreSource,/FigureRealm/);
+assert.match(aiCoreSource,/iCollect Everything/);
+assert.match(aiCoreSource,/FigureStash/);
 const directAiSource=readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8');
 const coreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 assert.doesNotMatch(directAiSource,/pricecharting/i);
