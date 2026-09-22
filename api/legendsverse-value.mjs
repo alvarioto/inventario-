@@ -103,8 +103,8 @@ function findGuideTable(worksheets,sharedStrings){
       return cells.includes('figure')&&cells.includes('market value')&&cells.includes('release year');
     });
     if(headerIndex<0)continue;
-    const header=rows[headerIndex].map(v=>String(v??'').trim());
-    const indexes=Object.fromEntries(header.map((v,i)=>[normalize(v),i]));
+    const header=Array.from({length:rows[headerIndex].length},(_,i)=>String(rows[headerIndex][i]??'').trim());
+    const indexes=Object.fromEntries(Array.from({length:header.length},(_,i)=>[normalize(header[i]),i]));
     const data=[];
     for(const row of rows.slice(headerIndex+1)){
       const figure=String(row[indexes['figure']]??'').trim();
