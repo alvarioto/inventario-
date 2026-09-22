@@ -17,6 +17,11 @@ jobs:
           set -euo pipefail
           URL='https://frikivault-hobbydb-api.vercel.app/api/actionfigure411-value'
           PAYLOAD='{"item":{"type":"figure","title":"Marvel Legends Spider-Man","character":"Spider-Man","franchise":"Marvel","manufacturer":"Hasbro","line":"Marvel Legends","wave":"Spider Man: Brand New Day","year":2026,"hasBox":true}}'
+          curl -sS 'https://www.actionfigure411.com/marvel/marvel-legends-everything.php' -o catalog.html
+          echo '--- RAW 13556 CONTEXT ---'
+          grep -o -E '.{0,260}13556.{0,420}' catalog.html | head -5 || true
+          echo '--- RAW BRAND NEW DAY HREFS ---'
+          grep -o -E 'href="[^"]*brand-new-day[^"]*"|href=\x27[^\x27]*brand-new-day[^\x27]*\x27' catalog.html | head -20 || true
           for n in {1..12}; do
             code=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD" || true)
             cat response.json || true
