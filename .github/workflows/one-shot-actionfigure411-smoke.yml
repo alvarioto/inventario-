@@ -6,31 +6,51 @@ on:
     paths:
       - .github/workflows/one-shot-actionfigure411-smoke.yml
 
-# exact-product-link-smoke
 jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
+      - name: Inspect ActionFigure411 internal search
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://www.actionfigure411.com'
+          curl -sS "$BASE/" -o home.html
+          echo '--- SEARCH ENDPOINT CONTEXT ---'
+          grep -o -E '.{0,350}search-results\.php.{0,800}' home.html | head -20 || true
+          echo '--- SCRIPT SOURCES ---'
+          grep -o -E 'src=["'\'''][^"'\''']+\.js[^"'\''']*["'\''']' home.html | head -80 || true
+          python - <<'PY'
+          import re, pathlib, urllib.parse, urllib.request
+          html=pathlib.Path('home.html').read_text(errors='ignore')
+          srcs=re.findall(r'<script[^>]+src=["\'\']([^"\'\']+)["\'\']',html,re.I)
+          seen=set()
+          for src in srcs:
+              url=urllib.parse.urljoin('https://www.actionfigure411.com/',src)
+              if url in seen: continue
+              seen.add(url)
+              try:
+                  txt=urllib.request.urlopen(url,timeout=12).read().decode('utf-8','ignore')
+              except Exception as e:
+                  continue
+              if 'search-results.php' in txt or 'search-results' in txt:
+                  print('--- JS MATCH',url,'---')
+                  i=max(txt.find('search-results')-1200,0)
+                  print(txt[i:i+4500])
+          PY
+
       - name: POST real Marvel Legends lookup
         shell: bash
         run: |
           set -euo pipefail
           URL='https://frikivault-hobbydb-api.vercel.app/api/actionfigure411-value'
           PAYLOAD='{"item":{"type":"figure","title":"Marvel Legends Spider-Man","character":"Spider-Man","franchise":"Marvel","manufacturer":"Hasbro","line":"Marvel Legends","wave":"Spider Man: Brand New Day","year":2026,"hasBox":true}}'
-          curl -sS 'https://www.actionfigure411.com/marvel/marvel-legends-everything.php' -o catalog.html
-          echo '--- RAW 13556 CONTEXT ---'
-          grep -o -E '.{0,260}13556.{0,420}' catalog.html | head -5 || true
-          echo '--- RAW BRAND NEW DAY HREFS ---'
-          grep -o -E 'href="[^"]*brand-new-day[^"]*"|href=\x27[^\x27]*brand-new-day[^\x27]*\x27' catalog.html | head -20 || true
-          for n in {1..12}; do
-            code=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD" || true)
-            cat response.json || true
-            if [ "$code" = "200" ]; then
-              node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('response.json','utf8'));if(j.status!=='completed'||j.value?.source!=='ActionFigure411'||!(j.value?.amount>20&&j.value?.amount<100)||!String(j.value?.url||'').includes('brand-new-day-spider-man-13556.php')||!/Spider-Man/i.test(String(j.value?.title||'')))process.exit(1);console.log('SMOKE_OK',JSON.stringify(j.value));"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Endpoint did not become healthy"
-          exit 1
-# smoke-trigger: 2026-09-22T16:23Z
+          code=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD" || true)
+          cat response.json || true
+          if [ "$code" = "200" ]; then
+            node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('response.json','utf8'));if(j.status!=='completed'||j.value?.source!=='ActionFigure411'||!(j.value?.amount>20&&j.value?.amount<100)||!String(j.value?.url||'').includes('brand-new-day-spider-man-13556.php')||!/Spider-Man/i.test(String(j.value?.title||'')))process.exit(1);console.log('SMOKE_OK',JSON.stringify(j.value));"
+          else
+            exit 1
+          fi
+
+# smoke-trigger: search-debug-2026-09-22
