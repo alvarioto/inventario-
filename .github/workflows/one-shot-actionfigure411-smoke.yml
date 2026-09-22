@@ -20,7 +20,7 @@ jobs:
             code=$(curl -sS -o response.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data "$PAYLOAD" || true)
             cat response.json || true
             if [ "$code" = "200" ]; then
-              node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('response.json','utf8'));if(j.status!=='completed'||j.value?.source!=='ActionFigure411'||!(j.value?.amount>0))process.exit(1);console.log('SMOKE_OK',JSON.stringify(j.value));"
+              node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('response.json','utf8'));if(j.status!=='completed'||j.value?.source!=='ActionFigure411'||!(j.value?.amount>20&&j.value?.amount<100)||!String(j.value?.url||'').includes('brand-new-day-spider-man-13556.php')||!/Spider-Man/i.test(String(j.value?.title||'')))process.exit(1);console.log('SMOKE_OK',JSON.stringify(j.value));"
               exit 0
             fi
             sleep 10
