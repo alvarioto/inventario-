@@ -1,6 +1,8 @@
 const AF411 = 'https://www.actionfigure411.com';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const SITEMAP_TTL_MS = 24 * 60 * 60 * 1000;
 const cache = globalThis.__frikivaultAf411Cache || (globalThis.__frikivaultAf411Cache = new Map());
+const sitemapState = globalThis.__frikivaultAf411Sitemap || (globalThis.__frikivaultAf411Sitemap = { at: 0, links: [] });
 
 const CATALOGS = [
   { id: 'marvel-legends', url: AF411 + '/marvel/marvel-legends-everything.php', test: x => /\bmarvel legends\b/.test(x.line) || (/\bmarvel\b/.test(x.franchise) && /\bhasbro\b/.test(x.manufacturer)) },
@@ -80,6 +82,21 @@ function parseProductLinks(html){
   }
   return out;
 }
+
+function parseSitemapProductLinks(xml){
+  const out=[];
+  const seen=new Set();
+  for(const m of String(xml||'').matchAll(/<loc>\s*([^<]+-\d+\.php(?:#[^<]*)?)\s*<\/loc>/gi)){
+    const href=absoluteUrl(decodeHtml(m[1]).trim());
+    if(!href||!href.startsWith(AF411+'/')||seen.has(href))continue;
+    const file=decodeURIComponent(new URL(href).pathname.split('/').pop()||'');
+    const slug=file.replace(/\.php(?:#.*)?$/i,'').replace(/-\d+$/,'').replace(/[-_]+/g,' ').trim();
+    seen.add(href);
+    out.push({title:slug||href,url:href,group:'',year:null,avg:null});
+  }
+  return out;
+}
+
 function parseMarvelRows(html){
   const rows=[];
   for(const m of String(html||'').matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)){
@@ -225,12 +242,12 @@ function antiBot(html,status){
   const text=normalize(html);
   return status===403||status===429||/captcha|verify you are human|cloudflare|access denied|too many requests/.test(text);
 }
-async function fetchPublic(url){
+async function fetchPublic(url,timeoutMs=18000){
   const response=await fetch(url,{method:'GET',headers:{
     'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language':'es-ES,es;q=0.9,en;q=0.7',
     'User-Agent':'Mozilla/5.0 (compatible; FrikiVault/1.0; personal collection lookup)'
-  },redirect:'follow',cache:'no-store',signal:AbortSignal.timeout(18000)});
+  },redirect:'follow',cache:'no-store',signal:AbortSignal.timeout(timeoutMs)});
   const html=await response.text();
   if(antiBot(html,response.status)){
     const e=new Error('ActionFigure411 ha limitado temporalmente la consulta pública.');
@@ -240,6 +257,41 @@ async function fetchPublic(url){
   if(!response.ok)throw new Error('ActionFigure411 HTTP '+response.status);
   return {html,url:response.url||url};
 }
+
+async function sitemapProductLinks(){
+  if(sitemapState.links.length && Date.now()-sitemapState.at<SITEMAP_TTL_MS)return sitemapState.links;
+  const page=await fetchPublic(AF411+'/sitemap.xml',30000);
+  const links=parseSitemapProductLinks(page.html);
+  if(links.length){
+    sitemapState.links=links;
+    sitemapState.at=Date.now();
+  }
+  return links;
+}
+
+function searchQueryFor(row,item={}){
+  return [item.line,row.group,row.title,row.year].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+}
+
+async function resolveProductUrl(row,item={}){
+  if(row?.url && productLinkScore(row,{url:row.url})>=0)return row.url;
+  const query=searchQueryFor(row,item);
+  if(query){
+    try{
+      const search=await fetchPublic(AF411+'/search.php?q='+encodeURIComponent(query),18000);
+      const links=parseProductLinks(search.html);
+      const best=findBestProductLink(row,links);
+      if(best?.url)return best.url;
+    }catch{}
+  }
+  try{
+    const links=await sitemapProductLinks();
+    const best=findBestProductLink(row,links);
+    if(best?.url)return best.url;
+  }catch{}
+  return '';
+}
+
 async function resolveActionFigure411(item){
   const catalog=chooseCatalog(item);
   if(!catalog)throw new Error('ActionFigure411 no tiene un catálogo compatible claramente identificado para esta pieza.');
@@ -255,7 +307,9 @@ async function resolveActionFigure411(item){
     const names=chosen.candidates.map(x=>[x.title,x.group,x.year].filter(Boolean).join(' · ')).join(' | ');
     throw new Error('Hay varias figuras demasiado parecidas en ActionFigure411: '+names);
   }
-  const row=chosen.row;
+  const row={...chosen.row};
+  const resolvedProductUrl=await resolveProductUrl(row,item);
+  if(resolvedProductUrl)row.url=resolvedProductUrl;
   let product=null;
   if(row.url){
     try{
@@ -291,7 +345,7 @@ async function resolveActionFigure411(item){
   return value;
 }
 
-export { CATALOGS, chooseCatalog, parseProductLinks, parseMarvelRows, productLinkScore, findBestProductLink, mergeRows, scoreRow, chooseBest, parseProductPage, productMatchesRow, resolveActionFigure411 };
+export { CATALOGS, chooseCatalog, parseProductLinks, parseSitemapProductLinks, parseMarvelRows, productLinkScore, findBestProductLink, mergeRows, scoreRow, chooseBest, parseProductPage, productMatchesRow, searchQueryFor, resolveActionFigure411 };
 
 export default async function handler(req,res){
   if(!applyCors(req,res))return json(res,403,{error:'Origen no autorizado.'});
