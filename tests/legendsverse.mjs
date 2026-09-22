@@ -8,8 +8,8 @@ assert.equal(shared[6],'Black Bolt & Triton');
 const sheet=[
 '<worksheet><sheetData>',
 '<row r="10"><c r="A10" t="s"><v>0</v></c><c r="B10" t="s"><v>1</v></c><c r="C10" t="s"><v>2</v></c><c r="D10" t="s"><v>3</v></c><c r="F10" t="s"><v>4</v></c><c r="G10" t="s"><v>5</v></c></row>',
-'<row r="11"><c r="A11" t="s"><v>6</v></c><c r="D11"><v>2026</v></c><c r="F11"><v>57.99</v></c><c r="G11"><v>73.89</v></c></row>',
-'<row r="12"><c r="A12" t="s"><v>7</v></c><c r="D12"><v>2026</v></c><c r="G12"><v>0</v></c></row>',
+'<row r="11"><c r="A11" t="s"><v>6</v></c><c r="B11"/><c r="C11"/><c r="D11"><v>2026</v></c><c r="E11"><v>0</v></c><c r="F11"><v>57.99</v></c><c r="G11"><v>73.89</v></c></row>',
+'<row r="12"><c r="A12" t="s"><v>7</v></c><c r="B12"/><c r="C12"/><c r="D12"><v>2026</v></c><c r="G12"><v>0</v></c></row>',
 '</sheetData></worksheet>'
 ].join('');
 const parsed=parseWorksheetXml(sheet,shared);
@@ -18,6 +18,10 @@ assert.equal(parsed.length,3);
 assert.equal(guide.rows.length,2);
 assert.equal(guide.rows[0].figure,'Black Bolt & Triton');
 assert.equal(guide.rows[0].market,73.89);
+assert.equal(guide.rows[0].wave,'');
+assert.equal(guide.rows[0].exclusive,'');
+assert.equal(guide.rows[0].year,2026);
+assert.equal(guide.rows[0].retail,57.99);
 assert.equal(guide.rows[1].market,0);
 
 assert.equal(isMarvelLegends({type:'figure',line:'Marvel Legends',manufacturer:'Hasbro',franchise:'Marvel'}),true);
