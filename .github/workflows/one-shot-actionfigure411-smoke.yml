@@ -52,4 +52,4 @@ jobs:
           console.log('ACTIONFIGURE411_SMOKE_OK',JSON.stringify(v));
           NODE
 
-# smoke-trigger: legendsverse-router-2026-09-22
+# smoke-trigger: legendsverse-fixed-2026-09-22-1950
