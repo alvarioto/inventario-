@@ -82,7 +82,14 @@ function parseProductLinks(html){
     if(!title){
       title=decodeHtml(inner.match(/\balt=["']([^"']+)["']/i)?.[1]||'').trim();
     }
-    if(!title)continue;
+    if(!title){
+      const slug=decodeURIComponent(new URL(href).pathname.split('/').pop()||'')
+        .replace(/\.php(?:#.*)?$/i,'')
+        .replace(/-\d+$/,'')
+        .replace(/[-_]+/g,' ')
+        .trim();
+      title=slug||href;
+    }
     seen.add(href);
     out.push({title,url:href,group:'',year:null,avg:null});
   }
