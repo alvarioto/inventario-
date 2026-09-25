@@ -3,7 +3,11 @@
   "name": "FrikiVault · ActionFigure411",
   "version": "1.0.0",
   "description": "Permite a FrikiVault consultar ActionFigure411 usando tu navegador real.",
-  "permissions": ["tabs", "scripting"],
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
     "https://www.actionfigure411.com/*",
     "https://frikivault-alvarioto-2026.web.app/*",
@@ -22,7 +26,9 @@
         "http://localhost/*",
         "http://127.0.0.1/*"
       ],
-      "js": ["content-frikivault.js"],
+      "js": [
+        "content-frikivault.js"
+      ],
       "run_at": "document_start"
     }
   ]
