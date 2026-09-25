@@ -300,7 +300,7 @@ assert.match(appSource,/Leer código de barras/);
 assert.match(appSource,/lector es propio de FrikiVault/i);
 assert.match(appSource,/Fuentes reales consultadas/);
 assert.match(appSource,/LegendsVerse · ficha exacta/);
-assert.doesNotMatch(appSource,/ActionFigure411/i);
+assert.match(appSource,/ActionFigure411 · ficha exacta/);
 assert.match(appSource,/scale: result\.scale/);
 assert.match(appSource,/wave: result\.wave/);
 assert.match(appSource,/exclusive: result\.exclusive/);
@@ -332,7 +332,7 @@ assert.doesNotMatch(appSource,/Confirmar e investigar|Actualizar investigación/
 const apiSource=readFileSync(new URL('../src/lib/api.ts',import.meta.url),'utf8');
 assert.match(apiSource,/runGeneralResearch/);
 assert.match(apiSource,/researchDirect/);
-assert.doesNotMatch(apiSource,/ActionFigure411|actionFigure411/i);
+assert.match(apiSource,/ActionFigure411|actionFigure411/i);
 assert.match(aiCoreSource,/Coleka/);
 assert.match(aiCoreSource,/LegendsVerse/);
 assert.match(aiCoreSource,/FigureRealm/);

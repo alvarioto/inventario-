@@ -4,7 +4,9 @@ import { detectAllFunkoStickers, FUNKO_STICKERS } from './funko-stickers';
 import type { AiIdentification, InventoryDraft, ResearchResult } from '../types';
 export type ApiStatus={deepseek:boolean;model:string;webSearch:boolean;publicSearch:boolean;mode:string;session?:string};
 const base=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');
-const priceChartingValueUrl=(import.meta.env.VITE_PRICECHARTING_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/pricecharting-value').replace(/\/$/,'');const legendsVerseValueUrl=(import.meta.env.VITE_LEGENDSVERSE_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/legendsverse-value').replace(/\/$/,'');
+const priceChartingValueUrl=(import.meta.env.VITE_PRICECHARTING_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/pricecharting-value').replace(/\/$/,'');
+const actionFigure411ValueUrl=(import.meta.env.VITE_ACTIONFIGURE411_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/actionfigure411-value').replace(/\/$/,'');
+const legendsVerseValueUrl=(import.meta.env.VITE_LEGENDSVERSE_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/legendsverse-value').replace(/\/$/,'');
 export async function getApiStatus():Promise<ApiStatus>{await keyReady.catch(()=>{});if(getPersonalKey())return {deepseek:true,model:'deepseek-flash',webSearch:true,publicSearch:true,mode:'direct'};const r=await fetch(base+'/api/status');if(!r.ok||!r.headers.get('content-type')?.includes('application/json'))throw new Error('Configura IA directa en Ajustes para analizar fotos con tu clave de DeepSeek.');return r.json()}
 async function post<T>(route:string,payload:unknown):Promise<T>{
  const status=await getApiStatus();const token=await auth?.currentUser?.getIdToken();
@@ -14,6 +16,9 @@ async function post<T>(route:string,payload:unknown):Promise<T>{
 async function priceChartingPost(payload:unknown){
  const r=await fetch(priceChartingValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
  const result=await r.json();if(!r.ok)throw new Error(result.error||`PriceCharting HTTP ${r.status}`);return result;
+}async function actionFigure411Post(payload:unknown){
+ const r=await fetch(actionFigure411ValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});
+ const result=await r.json();if(!r.ok)throw new Error(result.error||`ActionFigure411 HTTP ${r.status}`);return result;
 }async function legendsVersePost(payload:unknown){
  const r=await fetch(legendsVerseValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(35000)});
  const result=await r.json();if(!r.ok)throw new Error(result.error||`LegendsVerse HTTP ${r.status}`);return result;
@@ -85,6 +90,21 @@ async function readPriceChartingValue(item:Partial<InventoryDraft>){
  if(result.status==='completed'&&result.value)return result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string;title:string;condition:string;prices?:{outOfBox:number|null;inBox:number|null;new:number|null}};
  throw new Error('PriceCharting no devolvió un precio público verificable para el artículo exacto.');
 }
+async function readActionFigure411Value(item:Partial<InventoryDraft>){
+ if(!actionFigure411ValueUrl||item.type!=='figure')return null;
+ const result=await actionFigure411Post({item:{
+  type:item.type,title:item.title||'',character:item.character||'',manufacturer:item.manufacturer||'',
+  line:item.line||'',franchise:item.franchise||'',edition:item.edition||'',wave:item.wave||'',
+  exclusive:item.exclusive||'',year:item.year||null,sku:item.sku||'',barcode:item.barcode||''
+ }});
+ if(result.status==='completed'&&result.value)return result.value as {
+  source:'ActionFigure411';amount:number;currency:'USD'|'EUR'|'GBP';url:string;searchUrl:string;title:string;
+  genre:string;group:string;wave:string;year:number|null;retail:number|null;upc:string;soldCount:number;
+  soldAverage:number;soldHigh:number|null;soldLow:number|null;buyItNowAverage:number|null;
+  activeFilteredCount:number;activeTotalCount:number;evidence:string;methodology:string
+ };
+ throw new Error('ActionFigure411 no devolvió una estimación verificable para la figura exacta.');
+}
 async function readLegendsVerseValue(item:Partial<InventoryDraft>){
  if(!legendsVerseValueUrl||!isMarvelLegendsFigure(item))return null;
  const result=await legendsVersePost({item:{
@@ -118,6 +138,39 @@ function applyPriceChartingValue(research:ResearchResult,guide:{amount:number;cu
  const comparable={id:sourceId,title:`PriceCharting · ${guide.title||guide.variant||'artículo exacto'}`,url:guide.url,price:guide.amount,currency:'USD',shipping:null,condition,sourceType:'guide' as const,originalPrice:guide.amount,originalCurrency:'USD'};
  const detail=guide.prices?[`Out of Box ${guide.prices.outOfBox==null?'—':`${guide.prices.outOfBox.toFixed(2)}`}`,`In Box ${guide.prices.inBox==null?'—':`${guide.prices.inBox.toFixed(2)}`}`,`New ${guide.prices.new==null?'—':`${guide.prices.new.toFixed(2)}`}`].join(' · '):guide.evidence;
  return {...research,summary:`PriceCharting publica ${detail}. Para esta unidad se usa ${condition}: ${guide.amount.toFixed(2)} USD. El resto de precios se mantiene como referencia orientativa.`,sources:[source,...research.sources.filter(x=>x.id!==sourceId&&!(x.url||'').includes('pricecharting.com'))],comparables:[comparable,...research.comparables.filter(x=>x.id!==sourceId&&!(x.url||'').includes('pricecharting.com'))],asking:{kind:'guide',currency:'USD',count:1,min:guide.amount,max:guide.amount,median:guide.amount,label:`Valor PriceCharting · ${condition}`,originalCurrency:'USD',originalMedian:guide.amount},links:{...research.links,priceCharting:guide.url}};
+}
+function applyActionFigure411Value(research:ResearchResult,item:Partial<InventoryDraft>,guide:{
+ source:'ActionFigure411';amount:number;currency:'USD'|'EUR'|'GBP';url:string;searchUrl:string;title:string;
+ genre:string;group:string;wave:string;year:number|null;retail:number|null;upc:string;soldCount:number;
+ soldAverage:number;soldHigh:number|null;soldLow:number|null;buyItNowAverage:number|null;
+ activeFilteredCount:number;activeTotalCount:number;evidence:string;methodology:string
+}):ResearchResult{
+ const sourceId='actionfigure411-market-value';
+ const source={id:sourceId,kind:'sold-market',title:'ActionFigure411',url:guide.url,snippet:guide.evidence};
+ const comparable={id:sourceId,title:`ActionFigure411 · ${guide.title}`,url:guide.url,price:guide.soldAverage,currency:guide.currency,shipping:null,condition:'Media de ventas cerradas',sourceType:'sold' as const,originalPrice:guide.soldAverage,originalCurrency:guide.currency};
+ const facts=[
+  {label:'Ventas usadas',value:String(guide.soldCount),sourceId},
+  guide.soldLow!=null&&guide.soldHigh!=null?{label:'Rango reciente',value:`${guide.soldLow.toFixed(2)}–${guide.soldHigh.toFixed(2)} ${guide.currency}`,sourceId}:null,
+  guide.buyItNowAverage!=null?{label:'Buy It Now medio',value:`${guide.buyItNowAverage.toFixed(2)} ${guide.currency}`,sourceId}:null,
+  guide.activeTotalCount>0?{label:'Anuncios activos',value:`${guide.activeFilteredCount} filtrados de ${guide.activeTotalCount}`,sourceId}:null,
+  guide.group?{label:'Grupo',value:guide.group,sourceId}:null,
+  guide.wave?{label:'Wave',value:guide.wave,sourceId}:null,
+  guide.year?{label:'Año',value:String(guide.year),sourceId}:null,
+  guide.retail!=null?{label:'PVP original',value:`${guide.retail.toFixed(2)} ${guide.currency}`,sourceId}:null,
+  guide.upc?{label:'UPC',value:guide.upc,sourceId}:null
+ ].filter(Boolean) as Array<{label:string;value:string;sourceId:string}>;
+ const range=guide.soldLow!=null&&guide.soldHigh!=null?` El rango reciente es ${guide.soldLow.toFixed(2)}–${guide.soldHigh.toFixed(2)} ${guide.currency}.`:'';
+ const bin=guide.buyItNowAverage!=null?` Los anuncios Buy It Now activos promedian ${guide.buyItNowAverage.toFixed(2)} ${guide.currency}, como dato orientativo.`:'';
+ return {...research,
+  resolvedIdentity:{title:guide.title,manufacturer:item.manufacturer||'',line:item.line||'',character:item.character||guide.title,franchise:item.franchise||guide.genre,sku:item.sku||'',barcode:guide.upc||item.barcode||''},
+  summary:`ActionFigure411 estima ${guide.soldAverage.toFixed(2)} ${guide.currency} para ${guide.title} usando las últimas ${guide.soldCount} ventas cerradas.${range}${bin} Es una estimación de mercado, no un precio fijo ni el precio que pagaste.`,
+  facts:[...facts,...research.facts],
+  sources:[source,...research.sources.filter(x=>x.id!==sourceId)],
+  comparables:[comparable,...research.comparables.filter(x=>x.id!==sourceId)],
+  asking:{kind:'sold',currency:guide.currency,count:guide.soldCount,min:guide.soldLow,max:guide.soldHigh,median:guide.soldAverage,label:`ActionFigure411 · media de ${guide.soldCount} ventas cerradas`,originalCurrency:guide.currency,originalMedian:guide.soldAverage},
+  sold:{available:true,count:guide.soldCount,reason:guide.methodology,median:guide.soldAverage},
+  links:{...research.links,actionFigure411:guide.url}
+ };
 }
 function applyLegendsVerseValue(research:ResearchResult,item:Partial<InventoryDraft>,guide:{
  amount:number;currency:'USD';url:string;title:string;wave:string;exclusive:string;year:number|null;retail:number|null;updated:string;evidence:string;methodology:string
@@ -166,6 +219,7 @@ function freeResearchShell(item:Partial<InventoryDraft>):ResearchResult{
    sold:'https://www.ebay.es/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw='+encodeURIComponent(identity),
    priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity),
    web:'',
+   ...(item.type==='figure'?{actionFigure411:'https://www.actionfigure411.com/'}:{}),
    ...(item.type==='figure'&&isMarvelLegendsFigure(item)?{legendsVerse:'https://legendsverse.com/price-guide'}:{}),
    ...(item.type==='funko'?{stockx:'https://stockx.com/search?s='+encodeURIComponent(identity)}:{})
   }
@@ -193,8 +247,23 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
   return applyPriceChartingValue(withRates,guide);
  };
 
- // Marvel Legends: specialist first. If the exact piece is not found, continue
- // through the general public-source engine rather than dead-ending.
+ // Figuras no Funko: ActionFigure411 es la fuente principal de estimación.
+ // Solo si no identifica con seguridad la pieza o no tiene ventas cerradas,
+ // se continúa con las fuentes especializadas/generalistas de respaldo.
+ if(item.type==='figure'){
+  try{
+   const guide=await readActionFigure411Value(item);
+   if(guide){
+    const withRates=await ensureUsdDisplayRates(baseResearch);
+    return applyActionFigure411Value(withRates,item,guide);
+   }
+  }catch(error){
+   warnings.push(`ActionFigure411: ${error instanceof Error?error.message:'no se pudo consultar la guía pública.'}`);
+  }
+ }
+
+ // Marvel Legends: specialist fallback after ActionFigure411. If the exact piece
+ // is not found there either, continue through the general public-source engine.
  if(item.type==='figure'&&isMarvelLegendsFigure(item)){
   try{
    const guide=await readLegendsVerseValue(item);
