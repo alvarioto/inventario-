@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import {GENRES,inferGenres,buildSearchTerms,parseSearchResults,chooseBest,parseDetailPage} from '../api/actionfigure411-value.mjs';
+import {GENRES,inferGenres,buildSearchTerms,parseSearchResults,chooseBest,parseDetailPage,looksBlocked} from '../api/actionfigure411-value.mjs';
 
 assert.equal(GENRES.length,14);
 assert.equal(inferGenres({type:'figure',franchise:'Marvel',line:'Marvel Legends'})[0].g,2);
@@ -76,5 +77,16 @@ const noSold=parseDetailPage('<h1>No Sales</h1><p>The average Buy It Now price i
 assert.equal(noSold.soldAverage,null);
 assert.equal(noSold.soldCount,0);
 assert.equal(noSold.buyItNowAverage,18);
+
+assert.equal(looksBlocked('<h1>Verify you are human</h1>'),true);
+assert.equal(looksBlocked('<h1>Marvel Action Figure Guides</h1>'),false);
+
+const source=readFileSync(new URL('../api/actionfigure411-value.mjs',import.meta.url),'utf8');
+assert.match(source,/waitForSelector\('#queryInput'/);
+assert.match(source,/keyboard\.press\('Enter'\)/);
+assert.match(source,/puppeteer-core/);
+assert.match(source,/@sparticuz\/chromium-min/);
+assert.doesNotMatch(source,/fetchPublic\(/);
+assert.doesNotMatch(source,/ACTIONFIGURE411\+'\/common\/search-results\.php\?g='/);
 
 console.log('actionfigure411 tests ok');
