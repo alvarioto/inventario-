@@ -81,12 +81,17 @@ assert.equal(noSold.buyItNowAverage,18);
 assert.equal(looksBlocked('<h1>Verify you are human</h1>'),true);
 assert.equal(looksBlocked('<h1>Marvel Action Figure Guides</h1>'),false);
 
-const source=readFileSync(new URL('../api/actionfigure411-value.mjs',import.meta.url),'utf8');
-assert.match(source,/waitForSelector\('#queryInput'/);
-assert.match(source,/keyboard\.press\('Enter'\)/);
-assert.match(source,/puppeteer-core/);
-assert.match(source,/@sparticuz\/chromium-min/);
-assert.doesNotMatch(source,/fetchPublic\(/);
-assert.doesNotMatch(source,/ACTIONFIGURE411\+'\/common\/search-results\.php\?g='/);
+const serverSource=readFileSync(new URL('../api/actionfigure411-value.mjs',import.meta.url),'utf8');
+const extensionSource=readFileSync(new URL('../browser-extension/background.js',import.meta.url),'utf8');
+const bridgeSource=readFileSync(new URL('../src/lib/actionfigure411-browser.ts',import.meta.url),'utf8');
+assert.match(serverSource,/statusCode=410/);
+assert.doesNotMatch(serverSource,/puppeteer|chromium-min|fetch\(/i);
+assert.match(extensionSource,/#queryInput/);
+assert.match(extensionSource,/chrome\.tabs\.create/);
+assert.match(extensionSource,/common\\\/search-results/);
+assert.match(extensionSource,/average\\s\+price\\s\+based/);
+assert.doesNotMatch(extensionSource,/puppeteer|chromium-min|fetch\(/i);
+assert.match(bridgeSource,/AF411_LOOKUP/);
+assert.match(bridgeSource,/frikivault-af411-extension/);
 
 console.log('actionfigure411 tests ok');
