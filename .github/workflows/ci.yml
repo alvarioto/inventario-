@@ -18,3 +18,6 @@ jobs:
       - run: npm run build
       - run: node --check server/core.mjs
       - run: node --check server/index.mjs
+      - run: node --check browser-extension/background.js
+      - run: node --check browser-extension/content-frikivault.js
+      - run: node -e "JSON.parse(require('fs').readFileSync('browser-extension/manifest.json','utf8')); console.log('extension manifest ok')"
