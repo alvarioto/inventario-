@@ -1,11 +1,11 @@
 import { auth } from './firebase';
 import { getPersonalKey, identifyDirect, inspectFunkoStickersDirect, keyReady, researchDirect } from './direct-ai';
 import { detectAllFunkoStickers, FUNKO_STICKERS } from './funko-stickers';
+import { lookupActionFigure411InBrowser, type ActionFigure411BrowserValue } from './actionfigure411-browser';
 import type { AiIdentification, InventoryDraft, ResearchResult } from '../types';
 export type ApiStatus={deepseek:boolean;model:string;webSearch:boolean;publicSearch:boolean;mode:string;session?:string};
 const base=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');
 const priceChartingValueUrl=(import.meta.env.VITE_PRICECHARTING_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/pricecharting-value').replace(/\/$/,'');
-const actionFigure411ValueUrl=(import.meta.env.VITE_ACTIONFIGURE411_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/actionfigure411-value').replace(/\/$/,'');
 const legendsVerseValueUrl=(import.meta.env.VITE_LEGENDSVERSE_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/legendsverse-value').replace(/\/$/,'');
 export async function getApiStatus():Promise<ApiStatus>{await keyReady.catch(()=>{});if(getPersonalKey())return {deepseek:true,model:'deepseek-flash',webSearch:true,publicSearch:true,mode:'direct'};const r=await fetch(base+'/api/status');if(!r.ok||!r.headers.get('content-type')?.includes('application/json'))throw new Error('Configura IA directa en Ajustes para analizar fotos con tu clave de DeepSeek.');return r.json()}
 async function post<T>(route:string,payload:unknown):Promise<T>{
@@ -16,9 +16,6 @@ async function post<T>(route:string,payload:unknown):Promise<T>{
 async function priceChartingPost(payload:unknown){
  const r=await fetch(priceChartingValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
  const result=await r.json();if(!r.ok)throw new Error(result.error||`PriceCharting HTTP ${r.status}`);return result;
-}async function actionFigure411Post(payload:unknown){
- const r=await fetch(actionFigure411ValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(45000)});
- const result=await r.json();if(!r.ok)throw new Error(result.error||`ActionFigure411 HTTP ${r.status}`);return result;
 }async function legendsVersePost(payload:unknown){
  const r=await fetch(legendsVerseValueUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(35000)});
  const result=await r.json();if(!r.ok)throw new Error(result.error||`LegendsVerse HTTP ${r.status}`);return result;
@@ -91,19 +88,10 @@ async function readPriceChartingValue(item:Partial<InventoryDraft>){
  throw new Error('PriceCharting no devolvió un precio público verificable para el artículo exacto.');
 }
 async function readActionFigure411Value(item:Partial<InventoryDraft>){
- if(!actionFigure411ValueUrl||item.type!=='figure')return null;
- const result=await actionFigure411Post({item:{
-  type:item.type,title:item.title||'',character:item.character||'',manufacturer:item.manufacturer||'',
-  line:item.line||'',franchise:item.franchise||'',edition:item.edition||'',wave:item.wave||'',
-  exclusive:item.exclusive||'',year:item.year||null,sku:item.sku||'',barcode:item.barcode||''
- }});
- if(result.status==='completed'&&result.value)return result.value as {
-  source:'ActionFigure411';amount:number;currency:'USD'|'EUR'|'GBP';url:string;searchUrl:string;title:string;
-  genre:string;group:string;wave:string;year:number|null;retail:number|null;upc:string;soldCount:number;
-  soldAverage:number;soldHigh:number|null;soldLow:number|null;buyItNowAverage:number|null;
-  activeFilteredCount:number;activeTotalCount:number;evidence:string;methodology:string
- };
- throw new Error('ActionFigure411 no devolvió una estimación verificable para la figura exacta.');
+ if(item.type!=='figure')return null;
+ const result=await lookupActionFigure411InBrowser(item);
+ if(result.status==='completed'&&result.value)return result.value;
+ throw new Error('ActionFigure411 no devolvió una estimación verificable desde el navegador.');
 }
 async function readLegendsVerseValue(item:Partial<InventoryDraft>){
  if(!legendsVerseValueUrl||!isMarvelLegendsFigure(item))return null;
@@ -139,12 +127,7 @@ function applyPriceChartingValue(research:ResearchResult,guide:{amount:number;cu
  const detail=guide.prices?[`Out of Box ${guide.prices.outOfBox==null?'—':`${guide.prices.outOfBox.toFixed(2)}`}`,`In Box ${guide.prices.inBox==null?'—':`${guide.prices.inBox.toFixed(2)}`}`,`New ${guide.prices.new==null?'—':`${guide.prices.new.toFixed(2)}`}`].join(' · '):guide.evidence;
  return {...research,summary:`PriceCharting publica ${detail}. Para esta unidad se usa ${condition}: ${guide.amount.toFixed(2)} USD. El resto de precios se mantiene como referencia orientativa.`,sources:[source,...research.sources.filter(x=>x.id!==sourceId&&!(x.url||'').includes('pricecharting.com'))],comparables:[comparable,...research.comparables.filter(x=>x.id!==sourceId&&!(x.url||'').includes('pricecharting.com'))],asking:{kind:'guide',currency:'USD',count:1,min:guide.amount,max:guide.amount,median:guide.amount,label:`Valor PriceCharting · ${condition}`,originalCurrency:'USD',originalMedian:guide.amount},links:{...research.links,priceCharting:guide.url}};
 }
-function applyActionFigure411Value(research:ResearchResult,item:Partial<InventoryDraft>,guide:{
- source:'ActionFigure411';amount:number;currency:'USD'|'EUR'|'GBP';url:string;searchUrl:string;title:string;
- genre:string;group:string;wave:string;year:number|null;retail:number|null;upc:string;soldCount:number;
- soldAverage:number;soldHigh:number|null;soldLow:number|null;buyItNowAverage:number|null;
- activeFilteredCount:number;activeTotalCount:number;evidence:string;methodology:string
-}):ResearchResult{
+function applyActionFigure411Value(research:ResearchResult,item:Partial<InventoryDraft>,guide:ActionFigure411BrowserValue)):ResearchResult{
  const sourceId='actionfigure411-market-value';
  const source={id:sourceId,kind:'sold-market',title:'ActionFigure411',url:guide.url,snippet:guide.evidence};
  const comparable={id:sourceId,title:`ActionFigure411 · ${guide.title}`,url:guide.url,price:guide.soldAverage,currency:guide.currency,shipping:null,condition:'Media de ventas cerradas',sourceType:'sold' as const,originalPrice:guide.soldAverage,originalCurrency:guide.currency};
