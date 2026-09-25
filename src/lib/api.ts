@@ -127,7 +127,7 @@ function applyPriceChartingValue(research:ResearchResult,guide:{amount:number;cu
  const detail=guide.prices?[`Out of Box ${guide.prices.outOfBox==null?'—':`${guide.prices.outOfBox.toFixed(2)}`}`,`In Box ${guide.prices.inBox==null?'—':`${guide.prices.inBox.toFixed(2)}`}`,`New ${guide.prices.new==null?'—':`${guide.prices.new.toFixed(2)}`}`].join(' · '):guide.evidence;
  return {...research,summary:`PriceCharting publica ${detail}. Para esta unidad se usa ${condition}: ${guide.amount.toFixed(2)} USD. El resto de precios se mantiene como referencia orientativa.`,sources:[source,...research.sources.filter(x=>x.id!==sourceId&&!(x.url||'').includes('pricecharting.com'))],comparables:[comparable,...research.comparables.filter(x=>x.id!==sourceId&&!(x.url||'').includes('pricecharting.com'))],asking:{kind:'guide',currency:'USD',count:1,min:guide.amount,max:guide.amount,median:guide.amount,label:`Valor PriceCharting · ${condition}`,originalCurrency:'USD',originalMedian:guide.amount},links:{...research.links,priceCharting:guide.url}};
 }
-function applyActionFigure411Value(research:ResearchResult,item:Partial<InventoryDraft>,guide:ActionFigure411BrowserValue)):ResearchResult{
+function applyActionFigure411Value(research:ResearchResult,item:Partial<InventoryDraft>,guide:ActionFigure411BrowserValue):ResearchResult{
  const sourceId='actionfigure411-market-value';
  const source={id:sourceId,kind:'sold-market',title:'ActionFigure411',url:guide.url,snippet:guide.evidence};
  const comparable={id:sourceId,title:`ActionFigure411 · ${guide.title}`,url:guide.url,price:guide.soldAverage,currency:guide.currency,shipping:null,condition:'Media de ventas cerradas',sourceType:'sold' as const,originalPrice:guide.soldAverage,originalCurrency:guide.currency};
