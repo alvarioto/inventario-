@@ -18,6 +18,7 @@ jobs:
       FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
       FIREBASE_PROJECT_ID: frikivault-alvarioto-2026
       VITE_PRICECHARTING_VALUE_URL: https://frikivault-hobbydb-api.vercel.app/api/pricecharting-value
+      VITE_ACTIONFIGURE411_VALUE_URL: https://frikivault-hobbydb-api.vercel.app/api/actionfigure411-value
     steps:
       - name: Comprobar acceso de despliegue
         shell: bash
@@ -51,6 +52,7 @@ jobs:
             VITE_FIREBASE_MESSAGING_SENDER_ID: config.messagingSenderId || '',
             VITE_FIREBASE_APP_ID: config.appId,
             VITE_PRICECHARTING_VALUE_URL: process.env.VITE_PRICECHARTING_VALUE_URL || '',
+            VITE_ACTIONFIGURE411_VALUE_URL: process.env.VITE_ACTIONFIGURE411_VALUE_URL || '',
             VITE_DEMO_MODE: 'false'
           };
           for (const value of Object.values(entries)) {
