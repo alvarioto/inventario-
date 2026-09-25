@@ -2,20 +2,20 @@ const ACTIONFIGURE411='https://www.actionfigure411.com';
 const CACHE_MS=12*60*60*1000;
 
 const GENRES=[
-  {name:'Star Wars',slug:'star-wars',aliases:['star wars','black series','vintage collection','mandalorian','darth vader','jedi']},
-  {name:'Marvel',slug:'marvel',aliases:['marvel legends','marvel','x men','x-men','spider man','spider-man','avengers','iron man','wolverine']},
-  {name:'Transformers',slug:'transformers',aliases:['transformers','optimus prime','megatron','autobot','decepticon']},
-  {name:'G.I. Joe',slug:'gijoe',aliases:['g i joe','gi joe','g.i. joe','classified series','cobra commander']},
-  {name:'Masters of the Universe',slug:'masters-of-the-universe',aliases:['masters of the universe','motu','masterverse','he man','he-man','skeletor']},
-  {name:'Teenage Mutant Ninja Turtles',slug:'teenage-mutant-ninja-turtles',aliases:['teenage mutant ninja turtles','tmnt','ninja turtles','turtles of grayskull']},
-  {name:'Power Rangers',slug:'power-rangers',aliases:['power rangers','lightning collection']},
-  {name:'DC',slug:'dc',aliases:['dc multiverse','dc comics','mcfarlane dc','batman','superman','wonder woman','joker']},
-  {name:'Thundercats',slug:'thundercats',aliases:['thundercats','thunder cats','lion o','lion-o']},
-  {name:'Indiana Jones',slug:'indiana-jones',aliases:['indiana jones','adventure series']},
-  {name:'Dungeons & Dragons',slug:'dungeons-dragons',aliases:['dungeons dragons','dungeons & dragons','d&d','golden archive']},
-  {name:'Mythic Legions',slug:'mythic-legions',aliases:['mythic legions','four horsemen']},
-  {name:'Action Force',slug:'action-force',aliases:['action force','valaverse']},
-  {name:'Ghostbusters',slug:'ghostbusters',aliases:['ghostbusters','ghost busters','plasma series']}
+  {name:'Star Wars',g:1,slug:'star-wars',aliases:['star wars','black series','vintage collection','mandalorian','darth vader','jedi']},
+  {name:'Marvel',g:2,slug:'marvel',aliases:['marvel legends','marvel','x men','x-men','spider man','spider-man','avengers','iron man','wolverine']},
+  {name:'Transformers',g:3,slug:'transformers',aliases:['transformers','optimus prime','megatron','autobot','decepticon']},
+  {name:'G.I. Joe',g:4,slug:'gijoe',aliases:['g i joe','gi joe','g.i. joe','classified series','cobra commander']},
+  {name:'Masters of the Universe',g:5,slug:'masters-of-the-universe',aliases:['masters of the universe','motu','masterverse','he man','he-man','skeletor']},
+  {name:'Teenage Mutant Ninja Turtles',g:6,slug:'teenage-mutant-ninja-turtles',aliases:['teenage mutant ninja turtles','tmnt','ninja turtles','turtles of grayskull']},
+  {name:'Power Rangers',g:7,slug:'power-rangers',aliases:['power rangers','lightning collection']},
+  {name:'DC',g:8,slug:'dc',aliases:['dc multiverse','dc comics','mcfarlane dc','batman','superman','wonder woman','joker']},
+  {name:'Thundercats',g:9,slug:'thundercats',aliases:['thundercats','thunder cats','lion o','lion-o']},
+  {name:'Indiana Jones',g:10,slug:'indiana-jones',aliases:['indiana jones','adventure series']},
+  {name:'Dungeons & Dragons',g:11,slug:'dungeons-dragons',aliases:['dungeons dragons','dungeons & dragons','d&d','golden archive']},
+  {name:'Mythic Legions',g:12,slug:'mythic-legions',aliases:['mythic legions','four horsemen']},
+  {name:'Action Force',g:13,slug:'action-force',aliases:['action force','valaverse']},
+  {name:'Ghostbusters',g:14,slug:'ghostbusters',aliases:['ghostbusters','ghost busters','plasma series']}
 ];
 
 const GENERIC=new Set(['action','figure','figura','figures','toy','toys','collectible','collectibles','hasbro','mcfarlane','neca','bandai','super7','marvel','legends','series','the','and','with','of','a','an']);
@@ -190,7 +190,14 @@ async function visibleSearch(tabId,genre,term){
     return {ok:true};
   },[term]);
   if(!started?.ok)throw new Error(started?.error||'No se pudo escribir en el buscador de ActionFigure411.');
-  await waitForTab(tabId,tab=>/\/common\/search-results\.php/i.test(tab.url||''),12000);
+  try{
+    await waitForTab(tabId,tab=>/\/common\/search-results\.php/i.test(tab.url||''),2500);
+  }catch{
+    // Mismo destino que usa el Search de la web, pero la navegación la hace
+    // el Chrome real del usuario. No existe ninguna petición desde Vercel.
+    const searchUrl=ACTIONFIGURE411+'/common/search-results.php?g='+genre.g+'&term='+encodeURIComponent(term.replace(/\s+/g,''));
+    await navigate(tabId,searchUrl,tab=>/\/common\/search-results\.php/i.test(tab.url||''));
+  }
   const data=await run(tabId,()=>({
     url:location.href,
     text:document.body?.innerText||'',
