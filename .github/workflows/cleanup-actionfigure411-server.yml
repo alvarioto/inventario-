@@ -1,0 +1,30 @@
+name: Clean obsolete server browser dependencies
+
+on:
+  push:
+    branches: [codex/actionfigure411-browser-search]
+    paths:
+      - .github/workflows/cleanup-actionfigure411-server.yml
+
+permissions:
+  contents: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/actionfigure411-browser-search
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm uninstall @sparticuz/chromium-min puppeteer-core @sparticuz/chromium
+      - name: Commit dependency cleanup
+        run: |
+          git config user.name 'alvarioto'
+          git config user.email 'aldipo7292@gmail.com'
+          git add package.json package-lock.json
+          git commit -m 'Remove obsolete server browser dependencies'
+          git push origin HEAD:codex/actionfigure411-browser-search
