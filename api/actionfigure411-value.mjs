@@ -1,6 +1,9 @@
 const ACTIONFIGURE411='https://www.actionfigure411.com';
-const CACHE_TTL_MS=3*60*60*1000;
+const CACHE_TTL_MS=12*60*60*1000;
 const cache=globalThis.__frikivaultActionFigure411Cache||(globalThis.__frikivaultActionFigure411Cache=new Map());
+const inflight=globalThis.__frikivaultActionFigure411Inflight||(globalThis.__frikivaultActionFigure411Inflight=new Map());
+let cachedExecutablePath=globalThis.__frikivaultChromiumPath||null;
+let chromiumPathPromise=null;
 
 const GENRES=[
  {name:'Star Wars',g:1,slug:'star-wars',aliases:['star wars','black series','vintage collection','mandalorian','darth vader','jedi']},
@@ -42,9 +45,7 @@ function normalize(value){
  return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
   .replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim();
 }
-function words(value){
- return normalize(value).split(' ').filter(x=>x.length>=2);
-}
+function words(value){return normalize(value).split(' ').filter(x=>x.length>=2)}
 function parseNumber(raw){
  let value=String(raw||'').replace(/\s|\u00a0/g,'');
  if(!value)return null;
@@ -94,7 +95,7 @@ function buildSearchTerms(item={}){
  if(title)values.push(title);
  const sku=String(item.sku||'').trim();
  if(sku.length>=4)values.push(sku);
- return [...new Set(values.map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean))].slice(0,4);
+ return [...new Set(values.map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean))].slice(0,3);
 }
 function absoluteUrl(href){
  try{return new URL(decodeHtml(href),ACTIONFIGURE411).href}catch{return''}
@@ -103,12 +104,12 @@ function enclosingRow(html,index){
  const before=html.lastIndexOf('<tr',index);
  const after=html.indexOf('</tr>',index);
  if(before>=0&&after>index&&after-before<12000)return html.slice(before,after+5);
- const cardBefore=Math.max(0,index-900),cardAfter=Math.min(html.length,index+2400);
- return html.slice(cardBefore,cardAfter);
+ return html.slice(Math.max(0,index-900),Math.min(html.length,index+2400));
 }
+function escapeRegExp(value){return String(value||'').replace(/[.*+?^$()|[\]{}\\]/g,'\\$&')}
 function parseLabel(text,label,nextLabels){
- const next=nextLabels.map(x=>x.replace(/[.*+?^$()|[\]{}\\]/g,'\\$&')).join('|');
- const re=new RegExp(label.replace(/[.*+?^$()|[\]{}\\]/g,'\\$&')+'\\s*:\\s*(.*?)(?=\\s+(?:'+next+')\\s*:|$)','i');
+ const next=nextLabels.map(escapeRegExp).join('|');
+ const re=new RegExp(escapeRegExp(label)+'\\s*:\\s*(.*?)(?=\\s+(?:'+next+')\\s*:|$)','i');
  return String(text||'').match(re)?.[1]?.trim()||'';
 }
 function parseSearchResults(html,genre){
@@ -116,20 +117,16 @@ function parseSearchResults(html,genre){
  const raw=String(html||'');
  const re=/<a\b[^>]*href=["']([^"']+\.php(?:\?[^"']*)?)["'][^>]*>([\s\S]*?)<\/a>/gi;
  for(const match of raw.matchAll(re)){
-  const href=match[1],url=absoluteUrl(href);
+  const url=absoluteUrl(match[1]);
   if(!url)continue;
   let pathname='';
   try{pathname=new URL(url).pathname.toLowerCase()}catch{continue}
   if(!pathname.startsWith('/'+genre.slug+'/'))continue;
   if(/(?:price-guide|visual-guide|checklist|aggregator|amazon-prime|stats|index|set-list|build-a-figure-list)\.php$/i.test(pathname))continue;
   let title=stripTags(match[2]);
-  if(!title){
-   const alt=match[2].match(/\balt=["']([^"']+)["']/i)?.[1]||'';
-   title=decodeHtml(alt).trim();
-  }
+  if(!title)title=decodeHtml(match[2].match(/\balt=["']([^"']+)["']/i)?.[1]||'').trim();
   if(!title||title.length>220)continue;
-  const rowHtml=enclosingRow(raw,match.index||0);
-  const rowText=stripTags(rowHtml);
+  const rowText=stripTags(enclosingRow(raw,match.index||0));
   const group=parseLabel(rowText,'Group',['Wave','Year','Retail']);
   const wave=parseLabel(rowText,'Wave',['Year','Retail']);
   const yearRaw=rowText.match(/\bYear\s*:\s*(\d{4})\b/i)?.[1];
@@ -142,8 +139,7 @@ function parseSearchResults(html,genre){
 }
 function overlapScore(a,b){
  const stop=new Set(['marvel','legends','action','figure','figura','series','the','and','with','of','a','an']);
- const aa=[...new Set(words(a).filter(x=>!stop.has(x)))];
- const bb=new Set(words(b).filter(x=>!stop.has(x)));
+ const aa=[...new Set(words(a).filter(x=>!stop.has(x)))],bb=new Set(words(b).filter(x=>!stop.has(x)));
  if(!aa.length)return 0;
  return aa.filter(x=>bb.has(x)).length/aa.length;
 }
@@ -191,105 +187,144 @@ function parseDetailPage(html,url=''){
  const sold=text.match(/average\s+price\s+based\s+(?:upon|on)\s+the\s+last\s+(\d+)\s+sold\s+auctions?\s+is\s*:\s*([$€£]\s*[0-9][0-9.,]*)/i);
  const range=text.match(/High\s*:\s*([$€£]\s*[0-9][0-9.,]*)\s*[/|\-]?\s*Low\s*:\s*([$€£]\s*[0-9][0-9.,]*)/i);
  const bin=text.match(/average\s+Buy\s+It\s+Now\s+price\s+is\s+([$€£]\s*[0-9][0-9.,]*)\s+based\s+(?:upon|on)\s+(\d+)\s+filtered\s+active\s+auctions?\s+out\s+of\s+(\d+)/i);
- const soldMoney=parseMoney(sold?.[2]||'');
- const highMoney=parseMoney(range?.[1]||'');
- const lowMoney=parseMoney(range?.[2]||'');
- const binMoney=parseMoney(bin?.[1]||'');
+ const soldMoney=parseMoney(sold?.[2]||''),highMoney=parseMoney(range?.[1]||''),lowMoney=parseMoney(range?.[2]||''),binMoney=parseMoney(bin?.[1]||'');
  const retailMoney=parseMoney(text.match(/\bRetail\s*:\s*([$€£]\s*[0-9][0-9.,]*)/i)?.[1]||'');
  const year=Number(text.match(/\bYear\s*:\s*(\d{4})\b/i)?.[1])||null;
  const upc=text.match(/\bUPC\s*:\s*([0-9]{8,14})\b/i)?.[1]||'';
- const group=parseLabel(text,'Group',['Wave','Year','Retail','UPC','Where to Buy']);
- const wave=parseLabel(text,'Wave',['Year','Retail','UPC','Where to Buy']);
  return {
-  title,url,group,wave,year,upc,retail:retailMoney?.amount??null,
-  soldCount:sold?Number(sold[1]):0,
-  soldAverage:soldMoney?.amount??null,
-  soldHigh:highMoney?.amount??null,
-  soldLow:lowMoney?.amount??null,
-  buyItNowAverage:binMoney?.amount??null,
-  activeFilteredCount:bin?Number(bin[2]):0,
-  activeTotalCount:bin?Number(bin[3]):0,
+  title,url,group:parseLabel(text,'Group',['Wave','Year','Retail','UPC','Where to Buy']),
+  wave:parseLabel(text,'Wave',['Year','Retail','UPC','Where to Buy']),year,upc,retail:retailMoney?.amount??null,
+  soldCount:sold?Number(sold[1]):0,soldAverage:soldMoney?.amount??null,soldHigh:highMoney?.amount??null,soldLow:lowMoney?.amount??null,
+  buyItNowAverage:binMoney?.amount??null,activeFilteredCount:bin?Number(bin[2]):0,activeTotalCount:bin?Number(bin[3]):0,
   currency:soldMoney?.currency||highMoney?.currency||lowMoney?.currency||binMoney?.currency||retailMoney?.currency||'USD'
  };
 }
-function antiBot(html,status){
- const text=normalize(html);
- return status===403||status===429||/captcha|verify you are human|cloudflare|access denied|too many requests/.test(text);
+function looksBlocked(html){
+ const text=normalize(stripTags(html));
+ return /captcha|verify you are human|access denied|too many requests|temporarily blocked|cloudflare/.test(text);
 }
-async function fetchPublic(url,fetcher=fetch){
- const response=await fetcher(url,{method:'GET',headers:{
-  'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'Accept-Language':'en-US,en;q=0.9,es;q=0.7',
-  'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/153.0.0.0 Safari/537.36'
- },redirect:'follow',cache:'no-store',signal:AbortSignal.timeout(18000)});
- const html=await response.text();
- if(antiBot(html,response.status)){
-  const error=new Error('ActionFigure411 ha limitado temporalmente la consulta pública.');
-  error.code='RATE_LIMITED';throw error;
+function chromiumPackUrl(){
+ if(process.env.CHROMIUM_PACK_URL)return process.env.CHROMIUM_PACK_URL;
+ const arch=process.arch==='arm64'?'arm64':'x64';
+ return 'https://github.com/Sparticuz/chromium/releases/download/v141.0.0/chromium-v141.0.0-pack.'+arch+'.tar';
+}
+async function getChromiumPath(){
+ if(cachedExecutablePath)return cachedExecutablePath;
+ if(!chromiumPathPromise){
+  chromiumPathPromise=(async()=>{
+   const chromium=(await import('@sparticuz/chromium-min')).default;
+   const path=await chromium.executablePath(chromiumPackUrl());
+   cachedExecutablePath=path;
+   globalThis.__frikivaultChromiumPath=path;
+   return path;
+  })().catch(error=>{chromiumPathPromise=null;throw error});
  }
- if(!response.ok)throw new Error('ActionFigure411 HTTP '+response.status);
- return {html,url:response.url||url};
+ return chromiumPathPromise;
 }
-async function resolveActionFigure411(item,{fetcher=fetch}={}){
- if(normalize(item?.type)!=='figure')throw new Error('ActionFigure411 se usa solo para figuras no Funko.');
+async function launchBrowser(){
+ const chromium=(await import('@sparticuz/chromium-min')).default;
+ const puppeteer=await import('puppeteer-core');
+ return puppeteer.launch({
+  args:chromium.args,
+  executablePath:await getChromiumPath(),
+  headless:true,
+  defaultViewport:{width:1365,height:900,deviceScaleFactor:1}
+ });
+}
+async function openSection(page,genre){
+ const response=await page.goto(ACTIONFIGURE411+'/'+genre.slug+'/',{waitUntil:'domcontentloaded',timeout:20000});
+ const html=await page.content();
+ if(!response||response.status()>=400||looksBlocked(html)){
+  const error=new Error('ActionFigure411 no permitió abrir la sección desde el navegador automático.');
+  error.code='BROWSER_BLOCKED';throw error;
+ }
+ await page.waitForSelector('#queryInput',{timeout:10000});
+}
+async function searchWithVisibleBox(page,genre,term){
+ await openSection(page,genre);
+ await page.$eval('#queryInput',el=>{el.value='';});
+ await page.focus('#queryInput');
+ await page.keyboard.type(term,{delay:15});
+ const nav=page.waitForNavigation({waitUntil:'domcontentloaded',timeout:15000}).catch(()=>null);
+ await page.keyboard.press('Enter');
+ await nav;
+ const html=await page.content();
+ if(looksBlocked(html)){
+  const error=new Error('ActionFigure411 pidió una verificación al navegador. FrikiVault no intentará saltársela.');
+  error.code='BROWSER_BLOCKED';throw error;
+ }
+ const url=page.url();
+ if(!/\/common\/search-results\.php/i.test(url)){
+  throw new Error('El buscador visible de ActionFigure411 no abrió la página de resultados.');
+ }
+ return {html,url};
+}
+async function resolveActionFigure411Uncached(item){
  const genres=inferGenres(item);
  if(!genres.length)throw new Error('No se pudo determinar una sección compatible de ActionFigure411 para esta figura.');
  const terms=buildSearchTerms(item);
  if(!terms.length)throw new Error('Faltan datos suficientes para buscar la figura en ActionFigure411.');
- const cacheKey=normalize([genres[0].slug,...terms,item.year,item.wave,item.edition,item.exclusive].filter(Boolean).join('|'));
+
+ let browser;
+ try{
+  browser=await launchBrowser();
+  const page=await browser.newPage();
+  await page.setExtraHTTPHeaders({'Accept-Language':'en-US,en;q=0.9,es;q=0.7'});
+  let best=null,lastAmbiguous=false;
+  for(const genre of genres.slice(0,2)){
+   for(const term of terms){
+    const search=await searchWithVisibleBox(page,genre,term);
+    const chosen=chooseBest(item,parseSearchResults(search.html,genre));
+    if(!chosen)continue;
+    if(chosen.ambiguous){lastAmbiguous=true;continue;}
+    if(!best||chosen.score>best.score)best={...chosen,genre,term,searchUrl:search.url};
+    if(chosen.score>=330)break;
+   }
+   if(best?.score>=330)break;
+  }
+  if(!best){
+   if(lastAmbiguous)throw new Error('ActionFigure411 encontró varias figuras demasiado parecidas; no se usará un precio ambiguo.');
+   throw new Error('No se encontró una ficha suficientemente precisa en ActionFigure411 usando su buscador.');
+  }
+
+  const response=await page.goto(best.row.url,{waitUntil:'domcontentloaded',timeout:20000});
+  const detailHtml=await page.content();
+  if(!response||response.status()>=400||looksBlocked(detailHtml)){
+   const error=new Error('ActionFigure411 no permitió abrir la ficha encontrada desde el navegador.');
+   error.code='BROWSER_BLOCKED';throw error;
+  }
+  const detail=parseDetailPage(detailHtml,page.url()||best.row.url);
+  if(!(detail.soldAverage>0)&&!(detail.soldCount>0))throw new Error('La ficha exacta existe, pero ActionFigure411 no muestra ventas cerradas suficientes para estimar su valor.');
+  if(!(detail.soldAverage>0))throw new Error('ActionFigure411 no publica una media de ventas cerradas utilizable para esta figura.');
+  return {status:'completed',value:{
+   source:'ActionFigure411',amount:detail.soldAverage,currency:detail.currency,url:detail.url||best.row.url,searchUrl:best.searchUrl,
+   title:detail.title||best.row.title,genre:best.genre.name,group:detail.group||best.row.group,wave:detail.wave||best.row.wave,
+   year:detail.year||best.row.year,retail:detail.retail??best.row.retail,upc:detail.upc,soldCount:detail.soldCount,
+   soldAverage:detail.soldAverage,soldHigh:detail.soldHigh,soldLow:detail.soldLow,buyItNowAverage:detail.buyItNowAverage,
+   activeFilteredCount:detail.activeFilteredCount,activeTotalCount:detail.activeTotalCount,
+   evidence:'Media de '+detail.soldCount+' ventas cerradas: '+detail.soldAverage.toFixed(2)+' '+detail.currency+
+    (detail.soldLow!=null&&detail.soldHigh!=null?' · rango '+detail.soldLow.toFixed(2)+'-'+detail.soldHigh.toFixed(2)+' '+detail.currency:'')+
+    (detail.buyItNowAverage!=null?' · Buy It Now medio '+detail.buyItNowAverage.toFixed(2)+' '+detail.currency:''),
+   methodology:'Estimación de mercado de ActionFigure411 leída con un navegador desde su buscador visible y basada en subastas vendidas recientes. Es una referencia de mercado, no el precio pagado ni un precio fijo.'
+  }};
+ }finally{
+  if(browser)await browser.close().catch(()=>{});
+ }
+}
+async function resolveActionFigure411(item){
+ if(normalize(item?.type)!=='figure')throw new Error('ActionFigure411 se usa solo para figuras no Funko.');
+ const genres=inferGenres(item),terms=buildSearchTerms(item);
+ const cacheKey=normalize([genres[0]?.slug,...terms,item.year,item.wave,item.edition,item.exclusive].filter(Boolean).join('|'));
  const cached=cache.get(cacheKey);
  if(cached&&Date.now()-cached.at<CACHE_TTL_MS)return {...cached.value,cacheHit:true};
-
- let best=null,lastAmbiguous=false;
- for(const genre of genres.slice(0,2)){
-  for(const term of terms){
-   const searchUrl=ACTIONFIGURE411+'/common/search-results.php?g='+genre.g+'&term='+encodeURIComponent(term.replace(/\s+/g,''));
-   const page=await fetchPublic(searchUrl,fetcher);
-   const chosen=chooseBest(item,parseSearchResults(page.html,genre));
-   if(!chosen)continue;
-   if(chosen.ambiguous){lastAmbiguous=true;continue;}
-   if(!best||chosen.score>best.score)best={...chosen,genre,term,searchUrl};
-   if(chosen.score>=360)break;
-  }
- }
- if(!best){
-  if(lastAmbiguous)throw new Error('ActionFigure411 encontró varias figuras demasiado parecidas; no se usará un precio ambiguo.');
-  throw new Error('No se encontró una ficha suficientemente precisa en ActionFigure411.');
- }
- const detailPage=await fetchPublic(best.row.url,fetcher);
- const detail=parseDetailPage(detailPage.html,detailPage.url||best.row.url);
- if(!(detail.soldAverage>0)&&!(detail.soldCount>0))throw new Error('La ficha exacta existe, pero ActionFigure411 no muestra ventas cerradas suficientes para estimar su valor.');
- if(!(detail.soldAverage>0))throw new Error('ActionFigure411 no publica una media de ventas cerradas utilizable para esta figura.');
- const value={status:'completed',value:{
-  source:'ActionFigure411',
-  amount:detail.soldAverage,
-  currency:detail.currency,
-  url:detail.url||best.row.url,
-  searchUrl:best.searchUrl,
-  title:detail.title||best.row.title,
-  genre:best.genre.name,
-  group:detail.group||best.row.group,
-  wave:detail.wave||best.row.wave,
-  year:detail.year||best.row.year,
-  retail:detail.retail??best.row.retail,
-  upc:detail.upc,
-  soldCount:detail.soldCount,
-  soldAverage:detail.soldAverage,
-  soldHigh:detail.soldHigh,
-  soldLow:detail.soldLow,
-  buyItNowAverage:detail.buyItNowAverage,
-  activeFilteredCount:detail.activeFilteredCount,
-  activeTotalCount:detail.activeTotalCount,
-  evidence:'Media de '+detail.soldCount+' ventas cerradas: '+detail.soldAverage.toFixed(2)+' '+detail.currency+
-   (detail.soldLow!=null&&detail.soldHigh!=null?' · rango '+detail.soldLow.toFixed(2)+'-'+detail.soldHigh.toFixed(2)+' '+detail.currency:'')+
-   (detail.buyItNowAverage!=null?' · Buy It Now medio '+detail.buyItNowAverage.toFixed(2)+' '+detail.currency:''),
-  methodology:'Estimación de mercado de ActionFigure411 basada en subastas vendidas recientes. Es una referencia de mercado, no el precio pagado ni un precio fijo.'
- }};
- cache.set(cacheKey,{at:Date.now(),value});
- if(cache.size>200){
-  for(const [key] of [...cache.entries()].sort((a,b)=>a[1].at-b[1].at).slice(0,50))cache.delete(key);
- }
- return value;
+ if(inflight.has(cacheKey))return inflight.get(cacheKey);
+ const promise=resolveActionFigure411Uncached(item).then(value=>{
+  cache.set(cacheKey,{at:Date.now(),value});
+  if(cache.size>200)for(const [key] of [...cache.entries()].sort((a,b)=>a[1].at-b[1].at).slice(0,50))cache.delete(key);
+  return value;
+ }).finally(()=>inflight.delete(cacheKey));
+ inflight.set(cacheKey,promise);
+ return promise;
 }
 function configuredOrigins(){
  const values=String(process.env.APP_ORIGIN||'').split(',').map(x=>x.trim().replace(/\/$/,'')).filter(Boolean);
@@ -307,7 +342,9 @@ function applyCors(req,res){
  return true;
 }
 
-export {GENRES,decodeHtml,stripTags,normalize,parseMoney,inferGenres,buildSearchTerms,parseSearchResults,scoreCandidate,chooseBest,parseDetailPage,resolveActionFigure411};
+export {GENRES,decodeHtml,stripTags,normalize,parseMoney,inferGenres,buildSearchTerms,parseSearchResults,scoreCandidate,chooseBest,parseDetailPage,looksBlocked,resolveActionFigure411};
+
+export const config={maxDuration:60};
 
 export default async function handler(req,res){
  if(!applyCors(req,res))return json(res,403,{error:'Origen no autorizado.'});
@@ -321,6 +358,7 @@ export default async function handler(req,res){
   return json(res,200,await resolveActionFigure411(item));
  }catch(error){
   const message=String(error?.message||'No se pudo consultar ActionFigure411.');
-  return json(res,error?.code==='RATE_LIMITED'?429:502,{error:message});
+  const status=error?.code==='BROWSER_BLOCKED'?429:502;
+  return json(res,status,{error:message});
  }
 }
