@@ -38,23 +38,18 @@ function inferGenres(item){
 }
 function buildTerms(item){
   const out=[];
-  const character=cleanName(item.character||'');
-  const title=cleanName(item.title||'');
-  const sku=String(item.sku||'').trim();
-  const barcode=String(item.barcode||'').replace(/\D/g,'');
-  const aliases=value=>{
-    const raw=String(value||'').trim();
-    if(!raw)return [];
-    return [
-      raw.replace(/\bmark\s+lxxxv\b/ig,'MK85').replace(/\bmark\s+85\b/ig,'MK85'),
-      raw
-    ].map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
-  };
-  for(const term of [...aliases(character),...aliases(title),sku,barcode]){
+  const rawCharacter=String(item.character||'').replace(/\s+/g,' ').trim();
+  const rawTitle=String(item.title||'').replace(/\s+/g,' ').trim();
+  const compactTitle=rawTitle.replace(/^hasbro\s+/i,'').replace(/(?:marvel\s+legends\s+series\s*)+/ig,'').replace(/\bF\d{3,}\b/ig,'').replace(/\s+/g,' ').trim();
+  const character=cleanName(rawCharacter),title=cleanName(rawTitle);
+  const sku=String(item.sku||'').trim(),barcode=String(item.barcode||'').replace(/\D/g,'');
+  const aliases=value=>{const raw=String(value||'').trim();if(!raw)return [];return [raw.replace(/\bmark\s+lxxxv\b/ig,'MK85').replace(/\bmark\s+85\b/ig,'MK85'),raw].map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean)};
+  const searchAliases=value=>aliases(value).flatMap(raw=>{const left=raw.split(/\s*(?:&|\b(?:and|vs\.?|versus)\b)\s*/i)[0]?.trim();return left&&left.length>=3&&left.toLowerCase()!==raw.toLowerCase()?[left,raw]:[raw]});
+  for(const term of [...searchAliases(rawCharacter),...searchAliases(compactTitle),barcode,sku,...searchAliases(character),...searchAliases(title)]){
     if(!term)continue;
-    if(!out.some(existing=>normalize(existing)===normalize(term)))out.push(term);
+    if(!out.some(existing=>existing.toLowerCase()===term.toLowerCase()))out.push(term);
   }
-  return out.slice(0,5);
+  return out.slice(0,8);
 }
 function parseNumber(raw){
   let value=String(raw||'').replace(/\s|\u00a0/g,'');
@@ -156,25 +151,27 @@ function parseDetail(data){
     currency:soldMoney?.currency||high?.currency||low?.currency||buy?.currency||retail?.currency||'USD'
   };
 }
-function waitForTab(tabId,predicate,timeout=16000){
-  return new Promise((resolve,reject)=>{
-    let done=false;
-    const timer=setTimeout(()=>finish(new Error('La página tardó demasiado en cargar.')),timeout);
-    function finish(error,tab){
-      if(done)return;done=true;clearTimeout(timer);chrome.tabs.onUpdated.removeListener(listener);
-      error?reject(error):resolve(tab);
-    }
-    function listener(id,change,tab){
-      if(id!==tabId)return;
-      if(change.status==='complete'&&predicate(tab))finish(null,tab);
-    }
-    chrome.tabs.get(tabId).then(tab=>{if(tab.status==='complete'&&predicate(tab))finish(null,tab)}).catch(e=>finish(e));
-  });
+async function waitForReadyTab(tabId,predicate,timeout=18000){
+  const deadline=Date.now()+timeout;
+  let lastUrl='';
+  while(Date.now()<deadline){
+    try{
+      const tab=await chrome.tabs.get(tabId); lastUrl=tab.url||'';
+      if(predicate(tab)){
+        try{
+          const rows=await chrome.scripting.executeScript({target:{tabId},world:'MAIN',func:()=>document.readyState});
+          const state=rows?.[0]?.result;
+          if(state==='interactive'||state==='complete')return tab;
+        }catch{}
+      }
+    }catch{}
+    await new Promise(resolve=>setTimeout(resolve,150));
+  }
+  throw new Error('La página tardó demasiado en estar lista'+(lastUrl?' ('+lastUrl+')':'')+'.');
 }
 async function navigate(tabId,url,predicate=()=>true){
-  const waiting=waitForTab(tabId,predicate,18000);
   await chrome.tabs.update(tabId,{url});
-  return waiting;
+  return waitForReadyTab(tabId,predicate,18000);
 }
 async function run(tabId,func,args=[]){
   const rows=await chrome.scripting.executeScript({target:{tabId},world:'MAIN',func,args});
@@ -183,72 +180,23 @@ async function run(tabId,func,args=[]){
 async function visibleSearch(tabId,genre,term){
   const sectionUrl=ACTIONFIGURE411+'/'+genre.slug+'/';
   await navigate(tabId,sectionUrl,tab=>tab.url?.startsWith(sectionUrl));
-
-  const result=await run(tabId,async(query,genreSlug)=>{
+  const data=await run(tabId,async(query,genreId)=>{
     const input=document.querySelector('#queryInput');
     if(!input)return {ok:false,error:'No aparece el cuadro Search de ActionFigure411.'};
-
-    const normalizeText=value=>String(value||'')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-      .toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim();
-    const queryTokens=normalizeText(query).split(' ').filter(x=>x.length>=2);
-    const inputRect=input.getBoundingClientRect();
-
     input.focus();
     const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
-    if(setter)setter.call(input,'');else input.value='';
-    input.dispatchEvent(new Event('input',{bubbles:true}));
     if(setter)setter.call(input,query);else input.value=query;
-    input.dispatchEvent(new Event('input',{bubbles:true}));
-    input.dispatchEvent(new Event('change',{bubbles:true}));
-
-    const deadline=Date.now()+5000;
-    while(Date.now()<deadline){
-      const candidates=[...document.querySelectorAll('a[href],[role="option"],.ui-menu-item,.autocomplete-suggestion,li')]
-        .map(el=>{
-          const rect=el.getBoundingClientRect();
-          const style=getComputedStyle(el);
-          if(style.display==='none'||style.visibility==='hidden'||rect.width<20||rect.height<10)return null;
-          if(rect.top<inputRect.bottom-15||rect.top>inputRect.bottom+320)return null;
-          if(rect.right<inputRect.left-80||rect.left>inputRect.right+120)return null;
-          const text=(el.textContent||el.querySelector('img')?.alt||'').replace(/\s+/g,' ').trim();
-          const normalized=normalizeText(text);
-          const hits=queryTokens.filter(token=>normalized.includes(token)).length;
-          const ratio=queryTokens.length?hits/queryTokens.length:0;
-          const clickTarget=el.matches('a[href]')?el:(el.querySelector('a[href]')||el);
-          return {el,clickTarget,text,hits,ratio,top:rect.top};
-        })
-        .filter(Boolean)
-        .filter(row=>row.hits>=2||row.ratio>=0.5)
-        .sort((a,b)=>b.ratio-a.ratio||b.hits-a.hits||a.top-b.top);
-
-      const best=candidates[0];
-      if(best){
-        const title=(best.clickTarget.textContent||best.clickTarget.querySelector?.('img')?.alt||best.text).replace(/\s+/g,' ').trim();
-        const rowText=best.text;
-        best.clickTarget.click();
-        return {ok:true,title,rowText};
-      }
-      await new Promise(resolve=>setTimeout(resolve,120));
-    }
-    return {ok:false,error:'ActionFigure411 no mostró una coincidencia debajo del buscador para “'+query+'”.'};
-  },[term,genre.slug]);
-
-  if(!result?.ok)throw new Error(result?.error||'No apareció una coincidencia en el autocompletado de ActionFigure411.');
-  await waitForTab(tabId,tab=>{
-    try{
-      const url=new URL(tab.url||'');
-      return url.hostname==='www.actionfigure411.com'&&url.pathname.toLowerCase().startsWith('/'+genre.slug+'/')&&url.pathname.toLowerCase().endsWith('.php')&&url.pathname!=='/'+genre.slug+'/';
-    }catch{return false;}
-  },12000);
-
-  const page=await run(tabId,()=>({url:location.href,text:document.body?.innerText||''}));
-  if(/verify you are human|access denied|too many requests|captcha/i.test(page?.text||''))throw new Error('ActionFigure411 ha pedido verificación en el navegador.');
-  return {
-    url:sectionUrl,
-    text:page?.text||'',
-    rows:[{title:result.title,url:page.url,rowText:result.rowText}]
-  };
+    let response;
+    try{response=await fetch('/common/search.php?term='+encodeURIComponent(query)+'&genre='+encodeURIComponent(genreId),{credentials:'same-origin'});}catch(error){return {ok:false,error:'Falló el autocomplete AJAX: '+String(error?.message||error)}}
+    if(!response.ok)return {ok:false,error:'Autocomplete AJAX HTTP '+response.status};
+    const items=await response.json();
+    const strip=html=>{const box=document.createElement('div');box.innerHTML=String(html||'');return (box.textContent||'').replace(/\s+/g,' ').trim()};
+    const rows=(Array.isArray(items)?items:[]).filter(item=>item&&item.url).map(item=>({title:strip(item.name),url:new URL(item.url,location.origin).href,rowText:strip(item.name)}));
+    return {ok:true,url:location.href,text:document.body?.innerText||'',rows};
+  },[term,genre.g]);
+  if(!data?.ok)throw new Error(data?.error||'No se pudo consultar el autocompletado de ActionFigure411.');
+  if(/verify you are human|access denied|too many requests|captcha/i.test(data?.text||''))throw new Error('ActionFigure411 ha pedido verificación en el navegador.');
+  return data;
 }
 async function getDetail(tabId,url){
   await navigate(tabId,url,tab=>tab.url===url||tab.url?.startsWith(url));
@@ -273,11 +221,14 @@ async function lookup(item){
   let tab;
   try{
     tab=await chrome.tabs.create({url:'about:blank',active:false});
-    let best=null,ambiguous=false;
+    let best=null,ambiguous=false,lastSearchError='';
     for(const genre of genres.slice(0,2)){
       for(const term of terms){
-        const data=await visibleSearch(tab.id,genre,term);
-        const chosen=choose(item,candidatesFromRows(data.rows,genre));
+        let data;
+        try{data=await visibleSearch(tab.id,genre,term);}
+        catch(error){lastSearchError=genre.name+' ['+term+']: '+String(error?.message||error);continue;}
+        const rows=candidatesFromRows(data.rows,genre);
+        const chosen=choose(item,rows);
         if(!chosen)continue;
         if(chosen.ambiguous){ambiguous=true;continue;}
         if(!best||chosen.score>best.score)best={...chosen,genre,term,searchUrl:data.url};
@@ -287,7 +238,7 @@ async function lookup(item){
     }
     if(!best){
       if(ambiguous)throw new Error('ActionFigure411 encontró varias figuras demasiado parecidas.');
-      throw new Error('ActionFigure411 no encontró una coincidencia suficientemente precisa.');
+      throw new Error(lastSearchError?'ActionFigure411 no encontró una coincidencia suficientemente precisa. Último intento: '+lastSearchError:'ActionFigure411 no encontró una coincidencia suficientemente precisa.');
     }
     const detail=parseDetail(await getDetail(tab.id,best.row.url));
     if(!(detail.soldAverage>0))throw new Error('La ficha exacta no muestra una media de ventas cerradas utilizable.');
@@ -300,7 +251,7 @@ async function lookup(item){
       evidence:'Media de '+detail.soldCount+' ventas cerradas: '+detail.soldAverage.toFixed(2)+' '+detail.currency+
         (detail.soldLow!=null&&detail.soldHigh!=null?' · rango '+detail.soldLow.toFixed(2)+'-'+detail.soldHigh.toFixed(2)+' '+detail.currency:'')+
         (detail.buyItNowAverage!=null?' · Buy It Now medio '+detail.buyItNowAverage.toFixed(2)+' '+detail.currency:''),
-      methodology:'Estimación de mercado de ActionFigure411 obtenida desde su buscador visible usando el navegador real del usuario. Basada en subastas vendidas recientes; no es el precio pagado ni un precio fijo.'
+      methodology:'Estimación de mercado de ActionFigure411 obtenida desde su autocompletado oficial usando el navegador real del usuario. Basada en subastas vendidas recientes; no es el precio pagado ni un precio fijo.'
     };
     await saveCache(key,value);
     return value;
