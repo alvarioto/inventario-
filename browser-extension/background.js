@@ -38,15 +38,23 @@ function inferGenres(item){
 }
 function buildTerms(item){
   const out=[];
-  const barcode=String(item.barcode||'').replace(/\D/g,'');
-  if(barcode.length>=8)out.push(barcode);
   const character=cleanName(item.character||'');
   const title=cleanName(item.title||'');
-  if(character)out.push(character);
-  if(title)out.push(title);
   const sku=String(item.sku||'').trim();
-  if(sku.length>=4)out.push(sku);
-  return [...new Set(out)].slice(0,3);
+  const barcode=String(item.barcode||'').replace(/\D/g,'');
+  const aliases=value=>{
+    const raw=String(value||'').trim();
+    if(!raw)return [];
+    return [
+      raw.replace(/\bmark\s+lxxxv\b/ig,'MK85').replace(/\bmark\s+85\b/ig,'MK85'),
+      raw
+    ].map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
+  };
+  for(const term of [...aliases(character),...aliases(title),sku,barcode]){
+    if(!term)continue;
+    if(!out.some(existing=>normalize(existing)===normalize(term)))out.push(term);
+  }
+  return out.slice(0,5);
 }
 function parseNumber(raw){
   let value=String(raw||'').replace(/\s|\u00a0/g,'');
@@ -173,41 +181,74 @@ async function run(tabId,func,args=[]){
   return rows?.[0]?.result;
 }
 async function visibleSearch(tabId,genre,term){
-  await navigate(tabId,ACTIONFIGURE411+'/'+genre.slug+'/',tab=>tab.url?.startsWith(ACTIONFIGURE411+'/'+genre.slug));
-  const started=await run(tabId,(query)=>{
+  const sectionUrl=ACTIONFIGURE411+'/'+genre.slug+'/';
+  await navigate(tabId,sectionUrl,tab=>tab.url?.startsWith(sectionUrl));
+
+  const result=await run(tabId,async(query,genreSlug)=>{
     const input=document.querySelector('#queryInput');
     if(!input)return {ok:false,error:'No aparece el cuadro Search de ActionFigure411.'};
+
+    const normalizeText=value=>String(value||'')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim();
+    const queryTokens=normalizeText(query).split(' ').filter(x=>x.length>=2);
+    const inputRect=input.getBoundingClientRect();
+
     input.focus();
     const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
+    if(setter)setter.call(input,'');else input.value='';
+    input.dispatchEvent(new Event('input',{bubbles:true}));
     if(setter)setter.call(input,query);else input.value=query;
     input.dispatchEvent(new Event('input',{bubbles:true}));
     input.dispatchEvent(new Event('change',{bubbles:true}));
-    const init={key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true};
-    input.dispatchEvent(new KeyboardEvent('keydown',init));
-    input.dispatchEvent(new KeyboardEvent('keypress',init));
-    input.dispatchEvent(new KeyboardEvent('keyup',init));
-    if(input.form)setTimeout(()=>{try{input.form.requestSubmit()}catch{}},30);
-    return {ok:true};
-  },[term]);
-  if(!started?.ok)throw new Error(started?.error||'No se pudo escribir en el buscador de ActionFigure411.');
-  try{
-    await waitForTab(tabId,tab=>/\/common\/search-results\.php/i.test(tab.url||''),2500);
-  }catch{
-    // Mismo destino que usa el Search de la web, pero la navegación la hace
-    // el Chrome real del usuario. No existe ninguna petición desde Vercel.
-    const searchUrl=ACTIONFIGURE411+'/common/search-results.php?g='+genre.g+'&term='+encodeURIComponent(term.replace(/\s+/g,''));
-    await navigate(tabId,searchUrl,tab=>/\/common\/search-results\.php/i.test(tab.url||''));
-  }
-  const data=await run(tabId,()=>({
-    url:location.href,
-    text:document.body?.innerText||'',
-    rows:[...document.querySelectorAll('a[href]')].map(a=>{
-      const row=a.closest('tr')||a.closest('.row')||a.parentElement?.parentElement||a.parentElement;
-      return {title:(a.textContent||a.querySelector('img')?.alt||'').trim(),url:a.href,rowText:row?.innerText||''};
-    })
-  }));
-  if(/verify you are human|access denied|too many requests|captcha/i.test(data?.text||''))throw new Error('ActionFigure411 ha pedido verificación en el navegador.');
-  return data;
+
+    const deadline=Date.now()+5000;
+    while(Date.now()<deadline){
+      const candidates=[...document.querySelectorAll('a[href],[role="option"],.ui-menu-item,.autocomplete-suggestion,li')]
+        .map(el=>{
+          const rect=el.getBoundingClientRect();
+          const style=getComputedStyle(el);
+          if(style.display==='none'||style.visibility==='hidden'||rect.width<20||rect.height<10)return null;
+          if(rect.top<inputRect.bottom-15||rect.top>inputRect.bottom+320)return null;
+          if(rect.right<inputRect.left-80||rect.left>inputRect.right+120)return null;
+          const text=(el.textContent||el.querySelector('img')?.alt||'').replace(/\s+/g,' ').trim();
+          const normalized=normalizeText(text);
+          const hits=queryTokens.filter(token=>normalized.includes(token)).length;
+          const ratio=queryTokens.length?hits/queryTokens.length:0;
+          const clickTarget=el.matches('a[href]')?el:(el.querySelector('a[href]')||el);
+          return {el,clickTarget,text,hits,ratio,top:rect.top};
+        })
+        .filter(Boolean)
+        .filter(row=>row.hits>=2||row.ratio>=0.5)
+        .sort((a,b)=>b.ratio-a.ratio||b.hits-a.hits||a.top-b.top);
+
+      const best=candidates[0];
+      if(best){
+        const title=(best.clickTarget.textContent||best.clickTarget.querySelector?.('img')?.alt||best.text).replace(/\s+/g,' ').trim();
+        const rowText=best.text;
+        best.clickTarget.click();
+        return {ok:true,title,rowText};
+      }
+      await new Promise(resolve=>setTimeout(resolve,120));
+    }
+    return {ok:false,error:'ActionFigure411 no mostró una coincidencia debajo del buscador para “'+query+'”.'};
+  },[term,genre.slug]);
+
+  if(!result?.ok)throw new Error(result?.error||'No apareció una coincidencia en el autocompletado de ActionFigure411.');
+  await waitForTab(tabId,tab=>{
+    try{
+      const url=new URL(tab.url||'');
+      return url.hostname==='www.actionfigure411.com'&&url.pathname.toLowerCase().startsWith('/'+genre.slug+'/')&&url.pathname.toLowerCase().endsWith('.php')&&url.pathname!=='/'+genre.slug+'/';
+    }catch{return false;}
+  },12000);
+
+  const page=await run(tabId,()=>({url:location.href,text:document.body?.innerText||''}));
+  if(/verify you are human|access denied|too many requests|captcha/i.test(page?.text||''))throw new Error('ActionFigure411 ha pedido verificación en el navegador.');
+  return {
+    url:sectionUrl,
+    text:page?.text||'',
+    rows:[{title:result.title,url:page.url,rowText:result.rowText}]
+  };
 }
 async function getDetail(tabId,url){
   await navigate(tabId,url,tab=>tab.url===url||tab.url?.startsWith(url));
