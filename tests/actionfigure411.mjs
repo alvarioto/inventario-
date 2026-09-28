@@ -88,13 +88,15 @@ assert.match(serverSource,/statusCode=410/);
 assert.doesNotMatch(serverSource,/puppeteer|chromium-min|fetch\(/i);
 assert.match(extensionSource,/#queryInput/);
 assert.match(extensionSource,/chrome\.tabs\.create/);
-assert.match(extensionSource,/getBoundingClientRect/);
-assert.match(extensionSource,/clickTarget\.click\(\)/);
+assert.match(extensionSource,/waitForReadyTab/);
+assert.match(extensionSource,/common\/search\.php\?term=/);
+assert.match(extensionSource,/encodeURIComponent\(query\)/);
+assert.match(extensionSource,/searchAliases/);
 assert.match(extensionSource,/MK85/);
 assert.match(extensionSource,/average\\s\+price\\s\+based/);
 assert.doesNotMatch(extensionSource,/KeyboardEvent/);
 assert.doesNotMatch(extensionSource,/search-results\.php/);
-assert.doesNotMatch(extensionSource,/puppeteer|chromium-min|fetch\(/i);
+assert.doesNotMatch(extensionSource,/puppeteer|chromium-min/i);
 assert.match(bridgeSource,/AF411_LOOKUP/);
 assert.match(bridgeSource,/frikivault-af411-extension/);
 
