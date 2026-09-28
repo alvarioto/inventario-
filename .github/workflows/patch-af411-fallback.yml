@@ -16,12 +16,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: fix/actionfigure411-short-searches
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - name: Patch ActionFigure411 fallback
-        shell: python
         run: |
+          python3 - <<'PY'
           from pathlib import Path
 
           p = Path('src/lib/actionfigure411-browser.ts')
@@ -106,6 +103,7 @@ Si no existe coincidencia exacta o no puedes verificar la media de ventas cerrad
               raise SystemExit('freeResearchShell marker not found')
           s = s.replace(old,new)
           p.write_text(s)
+          PY
       - name: Commit patch
         run: |
           git config user.name 'alvarioto'
