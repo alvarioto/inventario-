@@ -95,7 +95,6 @@ function compactIdentity(item:Partial<InventoryDraft>){
   const character=String(item.character||'').trim();
   let title=String(item.title||'').trim();
 
-  // Evita búsquedas como "Marvel Legends Series Marvel Legends Series...".
   for(const repeated of [manufacturer,line]){
     const escaped=repeated.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     if(escaped)title=title.replace(new RegExp(`^(?:${escaped})\\s+`,'i'),'').trim();
@@ -197,43 +196,78 @@ function validateSearchPayload(item:Partial<InventoryDraft>,payload:SearchPayloa
   };
 }
 
+function buildPublicSearchHints(item:Partial<InventoryDraft>,identity:string){
+  const sku=String(item.sku||'').trim();
+  const barcode=String(item.barcode||'').replace(/\D/g,'');
+  const rawName=String(item.character||item.title||'').replace(/\s+/g,' ').trim();
+  const shortName=rawName
+    .replace(/^Hasbro\s+/i,'')
+    .replace(/^Marvel\s+Legends(?:\s+Series)?\s+/i,'')
+    .replace(/\bThe\s+Infinity\s+Saga\b/ig,'')
+    .replace(/\bF\d{4,}\b/ig,'')
+    .replace(/\s+/g,' ').trim();
+  const aliases=[
+    shortName,
+    shortName.replace(/Mark\s+LXXXV/ig,'MK85').replace(/Mark\s+85/ig,'MK85'),
+    shortName.replace(/Mark\s+LXXXV/ig,'Mark 85')
+  ].filter(Boolean);
+  return [
+    ...(sku?[`site:actionfigure411.com/marvel "${sku}"`,`site:actionfigure411.com "${sku}"`]:[]),
+    ...(barcode?[`site:actionfigure411.com "${barcode}"`]:[]),
+    ...aliases.map(name=>`site:actionfigure411.com/marvel "${name}"`),
+    `site:actionfigure411.com ${identity}`
+  ].filter((value,index,rows)=>value&&rows.indexOf(value)===index).slice(0,5);
+}
+
 async function lookupViaPublicWebSearch(item:Partial<InventoryDraft>){
   const key=readPersonalDeepSeekKey();
   if(!key)throw new Error('No hay una clave de DeepSeek disponible para el fallback público de ActionFigure411.');
   const identity=compactIdentity(item);
   if(!identity)throw new Error('Faltan datos suficientes para buscar la figura en ActionFigure411.');
 
-  const prompt=`Busca EXCLUSIVAMENTE la ficha INDIVIDUAL exacta en ActionFigure411 para este producto físico: ${identity}.
-Usa búsquedas web tipo site:actionfigure411.com y distingue packs, reediciones, BAF y variantes. No uses otra web para el precio.
+  const hints=buildPublicSearchHints(item,identity);
+  let lastError='';
+  for(const hint of hints){
+    const prompt=`Busca EXCLUSIVAMENTE la ficha INDIVIDUAL exacta en ActionFigure411 para este producto físico: ${identity}.
+Haz como PRIMERA búsqueda exactamente: ${hint}
+Si no basta, prueba una variante corta por SKU/UPC/nombre, pero siempre con site:actionfigure411.com. Distingue packs, reediciones, BAF y variantes. No uses otra web para el precio.
 Si encuentras la ficha exacta, lee SOLO los datos publicados por esa ficha. soldAverage debe ser exactamente el valor de "The average price based upon the last N sold auctions is" o "Sold Auctions Avg"; NO uses Retail ni Buy It Now como soldAverage.
 Devuelve ÚNICAMENTE JSON sin markdown con esta forma:
 {"found":true,"title":"","url":"https://www.actionfigure411.com/...php","genre":"","group":"","wave":"","year":null,"retail":null,"upc":"","soldCount":0,"soldAverage":null,"soldHigh":null,"soldLow":null,"buyItNowAverage":null,"activeFilteredCount":0,"activeTotalCount":0}
 Si no existe coincidencia exacta o no puedes verificar la media de ventas cerradas, devuelve {"found":false}. No inventes ningún dato.`;
 
-  const response=await fetch('https://api.deepseek.com/anthropic/v1/messages',{
-    method:'POST',
-    headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:'deepseek-flash',max_tokens:1200,messages:[{role:'user',content:prompt}],
-      tools:[{type:'web_search_20250305',name:'web_search',max_uses:4,user_location:{type:'approximate',country:'ES',timezone:'Europe/Madrid'}}],
-      tool_choice:{type:'auto'},stream:false
-    }),
-    signal:AbortSignal.timeout(32000)
-  });
-  if(!response.ok){
-    if(response.status===402)throw new Error('DeepSeek no tiene saldo disponible para buscar ActionFigure411.');
-    if(response.status===429)throw new Error('DeepSeek ha limitado temporalmente las búsquedas de ActionFigure411.');
-    throw new Error(`La búsqueda pública de ActionFigure411 devolvió HTTP ${response.status}.`);
+    const response=await fetch('https://api.deepseek.com/anthropic/v1/messages',{
+      method:'POST',
+      headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'deepseek-flash',max_tokens:1200,messages:[{role:'user',content:prompt}],
+        tools:[{type:'web_search_20250305',name:'web_search',max_uses:3,user_location:{type:'approximate',country:'ES',timezone:'Europe/Madrid'}}],
+        tool_choice:{type:'auto'},stream:false
+      }),
+      signal:AbortSignal.timeout(30000)
+    });
+    if(!response.ok){
+      if(response.status===402)throw new Error('DeepSeek no tiene saldo disponible para buscar ActionFigure411.');
+      if(response.status===429)throw new Error('DeepSeek ha limitado temporalmente las búsquedas de ActionFigure411.');
+      lastError=`La búsqueda pública de ActionFigure411 devolvió HTTP ${response.status}.`;
+      continue;
+    }
+    const data=await response.json();
+    const texts=(Array.isArray(data?.content)?data.content:[])
+      .filter((block:any)=>block?.type==='text'&&block?.text)
+      .map((block:any)=>String(block.text));
+    for(const text of texts.reverse()){
+      const payload=jsonFromText(text);
+      if(!payload)continue;
+      if(payload.found===false){
+        lastError=`Sin coincidencia con ${hint}`;
+        continue;
+      }
+      try{return validateSearchPayload(item,payload)}
+      catch(error){lastError=error instanceof Error?error.message:String(error)}
+    }
   }
-  const data=await response.json();
-  const texts=(Array.isArray(data?.content)?data.content:[])
-    .filter((block:any)=>block?.type==='text'&&block?.text)
-    .map((block:any)=>String(block.text));
-  for(const text of texts.reverse()){
-    const payload=jsonFromText(text);
-    if(payload)return validateSearchPayload(item,payload);
-  }
-  throw new Error('DeepSeek no devolvió una ficha JSON verificable de ActionFigure411.');
+  throw new Error(lastError||'ActionFigure411 no encontró una ficha exacta indexada tras probar SKU, UPC y nombre corto.');
 }
 
 async function lookupViaExtension(item:Partial<InventoryDraft>){
