@@ -91,7 +91,7 @@ assert.match(extensionSource,/chrome\.tabs\.create/);
 assert.match(extensionSource,/getBoundingClientRect/);
 assert.match(extensionSource,/clickTarget\.click\(\)/);
 assert.match(extensionSource,/MK85/);
-assert.match(extensionSource,/average\s+price\s+based/);
+assert.match(extensionSource,/average\\s\+price\\s\+based/);
 assert.doesNotMatch(extensionSource,/KeyboardEvent/);
 assert.doesNotMatch(extensionSource,/search-results\.php/);
 assert.doesNotMatch(extensionSource,/puppeteer|chromium-min|fetch\(/i);
