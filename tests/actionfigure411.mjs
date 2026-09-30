@@ -15,18 +15,9 @@ assert.ok(terms.includes('spider man'));
 const marvel=GENRES.find(x=>x.g===2);
 const searchHtml=`
 <table>
-<tr>
- <td><a href="/marvel/marvel-legends-hobgoblin-spider-man-200.php">Spider-Man</a></td>
- <td>Group: Spider Man</td><td>Wave: 2</td><td>Year: 2015</td><td>Retail: $19.99</td>
-</tr>
-<tr>
- <td><a href="/marvel/marvel-legends-space-venom-ultimate-spider-man-424.php">Ultimate Spider-Man</a></td>
- <td>Group: Spider Man</td><td>Wave: 4</td><td>Year: 2016</td><td>Retail: $19.99</td>
-</tr>
-<tr>
- <td><a href="/marvel/marvel-legends-retro-spider-man-999.php">Spider-Man (Retro)</a></td>
- <td>Group: Retro Collection</td><td>Wave: Fan</td><td>Year: 2021</td><td>Retail: $22.99</td>
-</tr>
+<tr><td><a href="/marvel/marvel-legends-hobgoblin-spider-man-200.php">Spider-Man</a></td><td>Group: Spider Man</td><td>Wave: 2</td><td>Year: 2015</td><td>Retail: $19.99</td></tr>
+<tr><td><a href="/marvel/marvel-legends-space-venom-ultimate-spider-man-424.php">Ultimate Spider-Man</a></td><td>Group: Spider Man</td><td>Wave: 4</td><td>Year: 2016</td><td>Retail: $19.99</td></tr>
+<tr><td><a href="/marvel/marvel-legends-retro-spider-man-999.php">Spider-Man (Retro)</a></td><td>Group: Retro Collection</td><td>Wave: Fan</td><td>Year: 2021</td><td>Retail: $22.99</td></tr>
 </table>`;
 const rows=parseSearchResults(searchHtml,marvel);
 assert.equal(rows.length,3);
@@ -41,7 +32,6 @@ const usd=parseDetailPage(`
 <h1>Ultimate Spider-Man</h1>
 <div>Group: Spider Man</div><div>Wave: 4</div><div>Year: 2016</div>
 <div>Retail: $19.99</div><div>UPC: 630509402694</div>
-<h3>Where to Buy:</h3>
 <p>The average price based upon the last <b>2</b> sold auctions is: <b>$110.50</b></p>
 <p>[High: $150.00/Low: $70.99]. The average Buy It Now price is <b>$99.20</b> based upon <b>22</b> filtered active auctions out of <b>58</b>.</p>
 </body></html>`,'https://www.actionfigure411.com/marvel/example.php');
@@ -60,7 +50,6 @@ assert.equal(usd.upc,'630509402694');
 
 const eur=parseDetailPage(`
 <h1>Test Figure</h1>
-<p>Where to Buy:</p>
 <p>The average price based upon the last <strong>2</strong> sold auctions is: <strong>€8.04</strong></p>
 <p>[High: €10.82/Low: €5.26]. The average Buy It Now price is <strong>€9.20</strong> based upon <strong>22</strong> filtered active auctions out of <strong>58</strong>.</p>
 `,'https://www.actionfigure411.com/test.php');
@@ -77,27 +66,23 @@ const noSold=parseDetailPage('<h1>No Sales</h1><p>The average Buy It Now price i
 assert.equal(noSold.soldAverage,null);
 assert.equal(noSold.soldCount,0);
 assert.equal(noSold.buyItNowAverage,18);
-
 assert.equal(looksBlocked('<h1>Verify you are human</h1>'),true);
 assert.equal(looksBlocked('<h1>Marvel Action Figure Guides</h1>'),false);
 
-const serverSource=readFileSync(new URL('../api/actionfigure411-value.mjs',import.meta.url),'utf8');
-const extensionSource=readFileSync(new URL('../browser-extension/background.js',import.meta.url),'utf8');
-const bridgeSource=readFileSync(new URL('../src/lib/actionfigure411-browser.ts',import.meta.url),'utf8');
-assert.match(serverSource,/statusCode=410/);
-assert.doesNotMatch(serverSource,/puppeteer|chromium-min|fetch\(/i);
-assert.match(extensionSource,/#queryInput/);
-assert.match(extensionSource,/chrome\.tabs\.create/);
-assert.match(extensionSource,/waitForReadyTab/);
-assert.match(extensionSource,/common\/search\.php\?term=/);
-assert.match(extensionSource,/encodeURIComponent\(query\)/);
-assert.match(extensionSource,/searchAliases/);
-assert.match(extensionSource,/MK85/);
-assert.match(extensionSource,/average\\s\+price\\s\+based/);
-assert.doesNotMatch(extensionSource,/KeyboardEvent/);
-assert.doesNotMatch(extensionSource,/search-results\.php/);
-assert.doesNotMatch(extensionSource,/puppeteer|chromium-min/i);
-assert.match(bridgeSource,/AF411_LOOKUP/);
-assert.match(bridgeSource,/frikivault-af411-extension/);
+const legacySource=readFileSync(new URL('../api/actionfigure411-value.mjs',import.meta.url),'utf8');
+const zenSource=readFileSync(new URL('../api/actionfigure411-zenrows.mjs',import.meta.url),'utf8');
+const clientSource=readFileSync(new URL('../src/lib/actionfigure411-browser.ts',import.meta.url),'utf8');
+assert.match(legacySource,/statusCode=410/);
+assert.match(zenSource,/ZENROWS_API_KEY/);
+assert.match(zenSource,/premium_proxy/);
+assert.match(zenSource,/js_render/);
+assert.match(zenSource,/common\/search\.php\?term=/);
+assert.match(zenSource,/genre=\$\{genre\.g\}/);
+assert.match(zenSource,/GENRES/);
+assert.match(zenSource,/parseDetailPage/);
+assert.doesNotMatch(zenSource,/puppeteer|chromium-min/i);
+assert.match(clientSource,/actionfigure411-zenrows/);
+assert.match(clientSource,/fetch\(actionFigure411ValueUrl/);
+assert.doesNotMatch(clientSource,/frikivault-af411-extension|DeepSeek|AF411_LOOKUP/);
 
 console.log('actionfigure411 tests ok');
