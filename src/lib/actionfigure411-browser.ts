@@ -27,7 +27,7 @@ export interface ActionFigure411BrowserValue {
 
 type RemoteReply =
   | { status: 'completed'; value: ActionFigure411BrowserValue }
-  | { error: string };
+  | { error: string; debug?: unknown };
 
 const actionFigure411ValueUrl=(
   import.meta.env.VITE_ACTIONFIGURE411_VALUE_URL ||
@@ -47,7 +47,9 @@ function identityPayload(item:Partial<InventoryDraft>){
     exclusive:item.exclusive||'',
     year:item.year||null,
     sku:item.sku||'',
-    barcode:item.barcode||''
+    barcode:item.barcode||'',
+    tags:Array.isArray(item.tags)?item.tags.slice(0,12):[],
+    aiExplanation:item.aiExplanation||''
   };
 }
 
