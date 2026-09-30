@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {GENRES,inferGenres,buildSearchTerms,parseSearchResults,chooseBest,parseDetailPage,looksBlocked} from '../api/actionfigure411-value.mjs';
+import {buildFastSearchTerms,identityCoverage,canonicalMarks,itemIdentityTokens} from '../api/actionfigure411-zenrows.mjs';
 
 assert.equal(GENRES.length,14);
 assert.equal(inferGenres({type:'figure',franchise:'Marvel',line:'Marvel Legends'})[0].g,2);
@@ -11,6 +12,28 @@ assert.equal(inferGenres({type:'figure',franchise:'DC Comics',line:'DC Multivers
 const terms=buildSearchTerms({type:'figure',character:'Spider-Man',title:'Hasbro Marvel Legends Ultimate Spider-Man',barcode:'630509402694'});
 assert.equal(terms[0],'630509402694');
 assert.ok(terms.includes('spider man'));
+
+const exactPack={
+ type:'figure',
+ title:'Hasbro Marvel Legends Series The Infinity Saga Iron Man Mark LXXXV & Thanos 2-Pack',
+ character:'Iron Man',
+ manufacturer:'Hasbro',
+ line:'Marvel Legends Series',
+ franchise:'Marvel',
+ edition:'The Infinity Saga',
+ sku:'F0192'
+};
+assert.equal(canonicalMarks('Iron Man Mark LXXXV'),'Iron Man MK85');
+const fastTerms=buildFastSearchTerms(exactPack);
+assert.equal(fastTerms[0],'Iron Man MK85');
+assert.ok(fastTerms.includes('Thanos'));
+assert.ok(fastTerms.includes('F0192'));
+assert.ok(itemIdentityTokens(exactPack).includes('thanos'));
+const exactCoverage=identityCoverage(exactPack,'Iron Man MK85 & Thanos Final Battle (Avengers Endgame) Infinity Saga');
+const wrongCoverage=identityCoverage(exactPack,'Iron Man MK85');
+assert.ok(exactCoverage>=0.9);
+assert.ok(wrongCoverage<0.6);
+assert.ok(exactCoverage>wrongCoverage);
 
 const marvel=GENRES.find(x=>x.g===2);
 const searchHtml=`
@@ -80,6 +103,8 @@ assert.match(zenSource,/common\/search\.php\?term=/);
 assert.match(zenSource,/genre=\$\{genre\.g\}/);
 assert.match(zenSource,/GENRES/);
 assert.match(zenSource,/parseDetailPage/);
+assert.match(zenSource,/buildFastSearchTerms/);
+assert.match(zenSource,/identityCoverage/);
 assert.doesNotMatch(zenSource,/puppeteer|chromium-min/i);
 assert.match(clientSource,/actionfigure411-zenrows/);
 assert.match(clientSource,/fetch\(actionFigure411ValueUrl/);
