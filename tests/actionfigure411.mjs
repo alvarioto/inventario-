@@ -35,6 +35,29 @@ assert.ok(exactCoverage>=0.9);
 assert.ok(wrongCoverage<0.6);
 assert.ok(exactCoverage>wrongCoverage);
 
+// Caso real de móvil: la IA puede devolver un título demasiado corto, pero suele
+// conservar pistas visibles en tags/explicación. Esas pistas deben rescatar la ficha exacta.
+const weakPack={
+ type:'figure',
+ title:'Iron Man',
+ character:'Iron Man',
+ manufacturer:'Hasbro',
+ line:'Marvel Legends',
+ franchise:'Marvel',
+ edition:'',
+ tags:['Thanos','Infinity Saga'],
+ aiExplanation:'En el frontal se lee Iron Man Mark LXXXV junto a Thanos, de The Infinity Saga.'
+};
+const weakTerms=buildFastSearchTerms(weakPack);
+assert.ok(weakTerms.includes('Iron Man MK85'));
+assert.ok(weakTerms.includes('Thanos'));
+assert.ok(itemIdentityTokens(weakPack).includes('thanos'));
+assert.ok(itemIdentityTokens(weakPack).includes('infinity'));
+const weakExactCoverage=identityCoverage(weakPack,'Iron Man MK85 & Thanos Final Battle (Avengers Endgame) Infinity Saga');
+const weakWrongCoverage=identityCoverage(weakPack,'Iron Man MK85');
+assert.ok(weakExactCoverage>weakWrongCoverage);
+assert.ok(weakExactCoverage>=0.75);
+
 const marvel=GENRES.find(x=>x.g===2);
 const searchHtml=`
 <table>
@@ -105,9 +128,13 @@ assert.match(zenSource,/GENRES/);
 assert.match(zenSource,/parseDetailPage/);
 assert.match(zenSource,/buildFastSearchTerms/);
 assert.match(zenSource,/identityCoverage/);
+assert.match(zenSource,/aiExplanation/);
+assert.match(zenSource,/tags/);
 assert.doesNotMatch(zenSource,/puppeteer|chromium-min/i);
 assert.match(clientSource,/actionfigure411-zenrows/);
 assert.match(clientSource,/fetch\(actionFigure411ValueUrl/);
+assert.match(clientSource,/aiExplanation/);
+assert.match(clientSource,/tags/);
 assert.doesNotMatch(clientSource,/frikivault-af411-extension|DeepSeek|AF411_LOOKUP/);
 
 console.log('actionfigure411 tests ok');
