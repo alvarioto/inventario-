@@ -35,7 +35,9 @@ function safeItem(raw={}){
     exclusive:String(raw.exclusive||'').trim(),
     year:Number(raw.year)||null,
     sku:String(raw.sku||'').trim(),
-    barcode:String(raw.barcode||'').replace(/\D/g,'')
+    barcode:String(raw.barcode||'').replace(/\D/g,''),
+    tags:Array.isArray(raw.tags)?raw.tags.map(x=>String(x||'').trim()).filter(Boolean).slice(0,12):[],
+    aiExplanation:String(raw.aiExplanation||'').trim().slice(0,2000)
   };
 }
 
@@ -68,7 +70,8 @@ function distinctiveTokens(value){
 }
 
 function itemIdentityTokens(item){
-  const main=distinctiveTokens([item.title,item.edition,item.character].filter(Boolean).join(' '));
+  const tagText=Array.isArray(item.tags)?item.tags.join(' '):'';
+  const main=distinctiveTokens([item.title,item.edition,item.character,item.wave,tagText].filter(Boolean).join(' '));
   const weak=new Set(distinctiveTokens([item.manufacturer,item.line,item.franchise].filter(Boolean).join(' ')));
   return main.filter(token=>!weak.has(token)||/^(?:mk\d+|\d{3,})$/.test(token));
 }
@@ -107,6 +110,17 @@ function suffixPhrase(value,maxWords=3){
   return tokens.slice(-maxWords).join(' ');
 }
 
+function markPhrases(value){
+  const canonical=canonicalMarks(value||'');
+  const out=[];
+  const re=/\b((?:[A-Za-z][A-Za-z0-9'-]*\s+){1,3}MK\d{1,4})\b/gi;
+  for(const match of canonical.matchAll(re)){
+    const phrase=suffixPhrase(match[1],3);
+    if(phrase)out.push(phrase);
+  }
+  return [...new Set(out)];
+}
+
 function buildFastSearchTerms(item={}){
   const terms=[];
   const barcode=String(item.barcode||'').replace(/\D/g,'');
@@ -119,15 +133,22 @@ function buildFastSearchTerms(item={}){
     if(short)addUnique(terms,short);
   }
 
+  for(const phrase of markPhrases([item.title,item.character,item.edition,item.aiExplanation].filter(Boolean).join(' ')))addUnique(terms,phrase);
+
   const editionCharacter=canonicalMarks([item.edition,item.character].filter(Boolean).join(' '));
   if(editionCharacter)addUnique(terms,editionCharacter);
+
+  for(const tag of Array.isArray(item.tags)?item.tags:[]){
+    const short=suffixPhrase(canonicalMarks(tag),3);
+    if(short)addUnique(terms,short);
+  }
 
   for(const value of buildSearchTerms({...item,title:canonicalMarks(item.title),character:canonicalMarks(item.character)})){
     addUnique(terms,canonicalMarks(value));
   }
 
   if(item.sku)addUnique(terms,item.sku);
-  return terms.slice(0,6);
+  return terms.slice(0,8);
 }
 
 async function zenFetch(targetUrl,{jsRender=false}={}){
@@ -155,7 +176,7 @@ function parseAutocomplete(raw,genre,term,item){
     const row={title,url,group:'',wave:'',year:null,retail:null,genre:genre.name};
     const baseScore=barcodeTerm?650:scoreCandidate({...item,title:canonicalMarks(item.title),character:canonicalMarks(item.character)},row);
     const coverage=identityCoverage(item,title);
-    const score=(Number.isFinite(baseScore)&&baseScore>0?baseScore:0)+Math.round(coverage*280);
+    const score=(Number.isFinite(baseScore)&&baseScore>0?baseScore:0)+Math.round(coverage*320);
     if(!barcodeTerm&&score<100)return null;
     return {row,score,coverage,term,id:Number(entry?.id)||null};
   }).filter(Boolean);
@@ -175,15 +196,25 @@ function strongCandidate(candidate,item){
   if(!candidate)return false;
   if(/^\d{8,14}$/.test(candidate.term))return candidate.score>=650;
   const tokenCount=itemIdentityTokens(item).length;
-  const needed=tokenCount>=4?0.60:0.50;
+  if(tokenCount<2)return false;
+  const needed=tokenCount>=4?0.60:0.67;
   return candidate.coverage>=needed&&candidate.score>=400;
 }
 
 async function searchGenreBatch(item,terms,genres,found){
+  let successfulRequests=0;
+  let lastError=null;
   for(const term of terms){
     const results=await Promise.all(genres.map(async genre=>{
       const target=`${ACTIONFIGURE411}/common/search.php?term=${encodeURIComponent(term)}&genre=${genre.g}`;
-      try{return parseAutocomplete(await zenFetch(target),genre,term,item)}catch{return[]}
+      try{
+        const raw=await zenFetch(target);
+        successfulRequests++;
+        return parseAutocomplete(raw,genre,term,item);
+      }catch(error){
+        lastError=error;
+        return [];
+      }
     }));
     for(const list of results){
       for(const candidate of list){
@@ -194,12 +225,13 @@ async function searchGenreBatch(item,terms,genres,found){
     const best=bestCandidate(found);
     if(strongCandidate(best,item))return true;
   }
+  if(successfulRequests===0&&lastError)throw lastError;
   return false;
 }
 
 async function searchCandidates(item){
   const terms=buildFastSearchTerms(item);
-  if(!terms.length)throw new Error('Faltan UPC, nombre, personaje o SKU para buscar la figura.');
+  if(!terms.length)throw new Error('Faltan UPC, nombre, personaje o pistas de la foto para buscar la figura.');
   const ordered=genreOrder(item);
   const inferred=inferGenres(item);
   const found=new Map();
@@ -207,27 +239,32 @@ async function searchCandidates(item){
   if(inferred.length){
     const primary=ordered.slice(0,Math.min(2,inferred.length));
     const strong=await searchGenreBatch(item,terms,primary,found);
-    if(strong||found.size)return [...found.values()].sort((a,b)=>b.score-a.score).slice(0,6);
+    if(strong||found.size)return [...found.values()].sort((a,b)=>b.score-a.score).slice(0,8);
     const rest=ordered.slice(primary.length);
     for(let i=0;i<rest.length;i+=4){
-      if(await searchGenreBatch(item,terms.slice(0,3),rest.slice(i,i+4),found))break;
+      if(await searchGenreBatch(item,terms.slice(0,5),rest.slice(i,i+4),found))break;
     }
   }else{
     for(let i=0;i<ordered.length;i+=4){
-      if(await searchGenreBatch(item,terms.slice(0,4),ordered.slice(i,i+4),found))break;
+      if(await searchGenreBatch(item,terms.slice(0,5),ordered.slice(i,i+4),found))break;
     }
   }
-  return [...found.values()].sort((a,b)=>b.score-a.score).slice(0,6);
+  return [...found.values()].sort((a,b)=>b.score-a.score).slice(0,8);
 }
 
 function minimumCoverage(item){
-  return itemIdentityTokens(item).length>=4?0.60:0.50;
+  const count=itemIdentityTokens(item).length;
+  if(count>=4)return 0.60;
+  if(count>=2)return 0.67;
+  return 1;
 }
 
 async function resolveBest(item,candidates){
   const requestedBarcode=item.barcode;
+  const identityCount=itemIdentityTokens(item).length;
   const gap=candidates[1]?candidates[0].score-candidates[1].score:999;
-  const limit=gap<80?Math.min(2,candidates.length):Math.min(1,candidates.length);
+  if(!requestedBarcode&&identityCount<2&&candidates.length>1&&gap<120)return null;
+  const limit=gap<100?Math.min(3,candidates.length):Math.min(1,candidates.length);
   let fallback=null;
 
   for(const candidate of candidates.slice(0,limit)){
@@ -251,9 +288,9 @@ async function resolveBest(item,candidates){
       retail:detail.retail,
       genre:candidate.row.genre
     });
-    const resolved={candidate,detail,coverage,score:candidate.score+Math.max(detailScore,0)+Math.round(coverage*320)};
+    const resolved={candidate,detail,coverage,score:candidate.score+Math.max(detailScore,0)+Math.round(coverage*360)};
     if(!fallback||resolved.score>fallback.score)fallback=resolved;
-    if(gap>=80)return resolved;
+    if(gap>=100)return resolved;
   }
   return fallback;
 }
@@ -286,7 +323,7 @@ function valueFromResolved(item,resolved){
     activeFilteredCount:detail.activeFilteredCount,
     activeTotalCount:detail.activeTotalCount,
     evidence:`Media de ${detail.soldCount} ventas cerradas: ${detail.soldAverage.toFixed(2)} ${detail.currency||'USD'}${detail.soldLow!=null&&detail.soldHigh!=null?` · rango ${detail.soldLow.toFixed(2)}-${detail.soldHigh.toFixed(2)} ${detail.currency||'USD'}`:''}${detail.buyItNowAverage!=null?` · Buy It Now medio ${detail.buyItNowAverage.toFixed(2)} ${detail.currency||'USD'}`:''}`,
-    methodology:'Ficha exacta localizada con el buscador oficial de ActionFigure411 a través del backend ZenRows. Se prioriza UPC y búsquedas cortas específicas; la coincidencia debe conservar los rasgos distintivos del producto antes de aceptar la ficha.'
+    methodology:'Ficha exacta localizada con el buscador oficial de ActionFigure411 a través del backend ZenRows. Se usan UPC, nombre, edición, personajes y pistas de la identificación visual; una ficha solo se acepta si conserva suficientes rasgos distintivos del producto.'
   };
 }
 
@@ -300,13 +337,14 @@ export default async function handler(req,res){
     res.setHeader('Content-Type','application/json; charset=utf-8');
     return res.end(JSON.stringify({error:'Usa POST.'}));
   }
+  let item=null;
   try{
-    const item=safeItem(req.body?.item||req.body||{});
+    item=safeItem(req.body?.item||req.body||{});
     if(item.type!=='figure')throw new Error('ActionFigure411 solo se usa para figuras.');
     const candidates=await searchCandidates(item);
     if(!candidates.length)throw new Error('ActionFigure411 no encontró una ficha compatible en sus géneros.');
     const resolved=await resolveBest(item,candidates);
-    if(!resolved)throw new Error('No se pudo validar una ficha exacta de ActionFigure411.');
+    if(!resolved)throw new Error('No se pudo validar una ficha exacta de ActionFigure411 con las pistas recibidas de la foto.');
     const value=valueFromResolved(item,resolved);
     res.statusCode=200;
     res.setHeader('Content-Type','application/json; charset=utf-8');
@@ -315,6 +353,14 @@ export default async function handler(req,res){
   }catch(error){
     res.statusCode=422;
     res.setHeader('Content-Type','application/json; charset=utf-8');
-    return res.end(JSON.stringify({error:error instanceof Error?error.message:String(error)}));
+    const debug=item?{
+      title:item.title,
+      character:item.character,
+      edition:item.edition,
+      tags:item.tags,
+      searchTerms:buildFastSearchTerms(item),
+      identityTokens:itemIdentityTokens(item)
+    }:undefined;
+    return res.end(JSON.stringify({error:error instanceof Error?error.message:String(error),debug}));
   }
 }
