@@ -50,6 +50,15 @@ assert.equal(soldPriority.median,26);
 const fakeFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"summary":"Ficha contrastada","facts":[],"comparableIds":[]}'}}]}),{status:200,headers:{'content-type':'application/json'}});
 assert.equal((await deepseek([{role:'user',content:'test'}],{key:'test',fetcher:fakeFetch})).summary,'Ficha contrastada');
 
+let defaultDeepSeekBody=null;
+const defaultThinkingFetch=async(_url,init)=>{
+ defaultDeepSeekBody=JSON.parse(init.body);
+ return new Response(JSON.stringify({choices:[{message:{content:'{"ok":true}'}}]}),{status:200,headers:{'content-type':'application/json'}});
+};
+await deepseek([{role:'user',content:'default thinking guard'}],{key:'test',fetcher:defaultThinkingFetch});
+assert.equal(defaultDeepSeekBody.thinking?.type,'disabled');
+assert.equal(defaultDeepSeekBody.reasoning_effort,undefined);
+
 const fencedFetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'```json\n{"ok":true,"value":"recuperado"}\n```'}}]}),{status:200,headers:{'content-type':'application/json'}});
 const fencedResult=await deepseek([{role:'user',content:'test fenced'}],{key:'test',fetcher:fencedFetch});
 assert.equal(fencedResult.ok,true);
@@ -91,8 +100,8 @@ let unifiedImages=0;
 const unifiedIdentifyFetch=async(_url,init)=>{
  unifiedIdentifyCalls++;
  const body=JSON.parse(init.body);
- assert.equal(body.thinking?.type,'disabled');
- assert.equal(body.reasoning_effort,undefined);
+ assert.equal(body.thinking?.type,'enabled');
+ assert.equal(body.reasoning_effort,'high');
  unifiedImages=body.messages[1].content.filter(block=>block.type==='image_url').length;
  const result={title:'Funko Pop! Éomer #1982',type:'funko',franchise:'The Lord of the Rings',character:'Éomer',manufacturer:'Funko',line:'Pop! Movies',sku:'90310',confidence:.99,explanation:'Frontal como vista principal; trasera usada solo para la referencia'};
  return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{status:200,headers:{'content-type':'application/json'}});
@@ -369,7 +378,8 @@ assert.match(currentCoreSource,/PriceCharting es la referencia principal/);
 
 assert.doesNotMatch(currentCoreSource,/reasoning:\{effort:'none'\}/);
 assert.match(currentCoreSource,/limitPricingSources/);
-assert.match(currentCoreSource,/thinking:\{type:'disabled'\}/);
+assert.match(currentCoreSource,/thinking='disabled'/);
+assert.match(currentCoreSource,/reasoningEffort='none'/);
 assert.match(currentCoreSource,/sourceLooksBroken/);
 assert.doesNotMatch(currentCoreSource,/hobbydb|\bppg\b/i);
 assert.doesNotMatch(currentStylesSource,/\.sheet-foot \.primary,.sheet-foot \.secondary,.sheet-foot \.danger\{min-height:54px/);
