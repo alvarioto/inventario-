@@ -74,7 +74,73 @@ function config() {
     }} : {})
   };
 }
-export const identifyDirect = (images: string[]) => identify(images, config());
+
+async function verifyFigureIdentityDirect(images: string[], initial: any) {
+  const visibleImages = images.filter(image => typeof image === 'string' && image.startsWith('data:image/')).slice(0, 5);
+  if (!visibleImages.length || initial?.type !== 'figure') return initial;
+
+  const candidate = {
+    title: initial.title || '',
+    franchise: initial.franchise || '',
+    character: initial.character || '',
+    manufacturer: initial.manufacturer || '',
+    line: initial.line || '',
+    scale: initial.scale || '',
+    wave: initial.wave || '',
+    exclusive: initial.exclusive || '',
+    edition: initial.edition || '',
+    year: initial.year ?? null,
+    sku: initial.sku || '',
+    barcode: initial.barcode || ''
+  };
+
+  const content: any[] = [{
+    type: 'text',
+    text: `AUDITORÍA VISUAL INDEPENDIENTE DE UNA FIGURA. La identificación inicial puede estar EQUIVOCADA: no la aceptes por defecto. Compara la figura de las fotos con esta candidata: ${JSON.stringify(candidate)}. Examina únicamente rasgos realmente visibles y discriminantes: escultura de cabeza/cara, máscara/casco, pelo/barba, traje y patrones, colores, emblemas/logos, armadura, botas/guantes, accesorios/armas, capa, proporciones, daños/deco, base y cualquier texto o código legible del embalaje. No uses solo "se parece a" ni memoria vaga de una franquicia. Si dos lanzamientos comparten molde o no hay rasgos suficientes para distinguirlos, NO inventes una versión exacta: devuelve verdict="uncertain". Si ves una contradicción fuerte con la candidata, devuelve verdict="correct" y corrige SOLO con una identidad respaldada por al menos dos evidencias visuales independientes o por texto/código literal visible. Si la candidata encaja sin contradicciones fuertes, verdict="confirm". Devuelve SOLO JSON: {"verdict":"confirm|correct|uncertain","title":"","franchise":"","character":"","manufacturer":"","line":"","scale":"","wave":"","exclusive":"","edition":"","year":null,"sku":"","barcode":"","visualEvidence":["evidencia visible 1","evidencia visible 2"],"confidence":0.0}. visualEvidence debe describir rasgos observables breves, no razonamiento interno. Nunca inventes SKU, año, wave, exclusiva o edición si no son visibles o inequívocos.`
+  }];
+  for (const image of visibleImages) content.push({type:'image_url', image_url:{url:image, detail:'original'}});
+
+  try {
+    const audit: any = await (deepseek as any)([
+      {role:'system', content:'Actúa como verificador visual conservador de figuras de colección. Tu trabajo principal es detectar falsos positivos entre figuras parecidas. No des por correcta la identificación previa. Si falta evidencia discriminante, marca uncertain en lugar de adivinar.'},
+      {role:'user', content}
+    ], {...config(), maxTokens:900, timeoutMs:42000, retries:0, jsonMode:false, thinking:'enabled', reasoningEffort:'high'});
+
+    const verdict = String(audit?.verdict || '').toLowerCase();
+    const confidence = Math.max(0, Math.min(1, Number(audit?.confidence) || 0));
+    const evidence = Array.isArray(audit?.visualEvidence)
+      ? audit.visualEvidence.map((value: unknown) => String(value || '').trim()).filter(Boolean).slice(0, 6)
+      : [];
+
+    if (verdict === 'uncertain') {
+      return {
+        ...initial,
+        confidence: Math.min(Number(initial?.confidence) || 0.65, 0.68),
+        explanation: `${initial?.explanation || ''} Verificación visual: no hay rasgos suficientes para distinguir con seguridad esta versión de otras figuras parecidas.`.trim()
+      };
+    }
+
+    if (verdict !== 'correct' || confidence < 0.82 || evidence.length < 2 || !String(audit?.title || '').trim()) return initial;
+
+    const corrected: any = {...initial};
+    for (const key of ['title','franchise','character','manufacturer','line','scale','wave','exclusive','edition','sku','barcode']) {
+      const value = String(audit?.[key] || '').trim();
+      if (value) corrected[key] = value;
+    }
+    if (Number.isInteger(audit?.year) && audit.year >= 1800 && audit.year <= 2200) corrected.year = audit.year;
+    corrected.confidence = confidence;
+    corrected.explanation = `${initial?.explanation || ''} Verificación visual independiente corrigió la identidad por rasgos discriminantes visibles: ${evidence.join('; ')}.`.trim();
+    return corrected;
+  } catch {
+    // Esta segunda opinión nunca debe romper la identificación principal.
+    return initial;
+  }
+}
+
+export const identifyDirect = async (images: string[]) => {
+  const initial = await identify(images, config());
+  return verifyFigureIdentityDirect(images, initial);
+};
 export const researchDirect = (item: Partial<InventoryDraft>) => research({confirmed: true, item}, config());
 
 export async function inspectFunkoStickersDirect(images: string[]): Promise<{performed:boolean;stickerTexts:string[];confidence:number}> {
