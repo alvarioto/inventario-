@@ -48,6 +48,12 @@ if tests.count(old_test) != 1:
     raise SystemExit(f'Expected identify thinking assertion once, got {tests.count(old_test)}')
 tests = tests.replace(old_test, new_test, 1)
 
+old_static = "assert.match(currentCoreSource,/thinking:\\{type:'disabled'\\}/);"
+new_static = "assert.match(currentCoreSource,/thinking='disabled'/);\nassert.match(currentCoreSource,/reasoningEffort='none'/);"
+if tests.count(old_static) != 1:
+    raise SystemExit(f'Expected static thinking assertion once, got {tests.count(old_static)}')
+tests = tests.replace(old_static, new_static, 1)
+
 # Add a regression that the shared helper still defaults to non-thinking mode,
 # so pricing/search behavior is not silently changed by this vision-only upgrade.
 anchor = "assert.equal((await deepseek([{role:'user',content:'test'}],{key:'test',fetcher:fakeFetch})).summary,'Ficha contrastada');\n"
