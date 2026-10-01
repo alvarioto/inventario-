@@ -42,8 +42,8 @@ for old, new in replacements:
         raise SystemExit(f'Expected exactly one match, got {count}: {old[:100]}')
     core = core.replace(old, new, 1)
 
-old_test = "  assert.equal(body.thinking?.type,'disabled');\n  assert.equal(body.reasoning_effort,undefined);"
-new_test = "  assert.equal(body.thinking?.type,'enabled');\n  assert.equal(body.reasoning_effort,'high');"
+old_test = " assert.equal(body.thinking?.type,'disabled');\n assert.equal(body.reasoning_effort,undefined);"
+new_test = " assert.equal(body.thinking?.type,'enabled');\n assert.equal(body.reasoning_effort,'high');"
 if tests.count(old_test) != 1:
     raise SystemExit(f'Expected identify thinking assertion once, got {tests.count(old_test)}')
 tests = tests.replace(old_test, new_test, 1)
