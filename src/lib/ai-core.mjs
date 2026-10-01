@@ -720,10 +720,65 @@ function bestIdentification(analyses,reason=''){
  },analyses);
 }
 
+
+const figurePackageAuditSchema=z.object({
+ printedNames:z.array(z.string().max(140)).max(6).default([]),
+ line:z.string().max(160).default(''),
+ edition:z.string().max(160).default(''),
+ sku:z.string().max(120).default(''),
+ visibleTexts:z.array(z.string().max(180)).max(16).default([]),
+ confidence:z.number().min(0).max(1).default(0)
+});
+
+function cleanPrintedLabel(value){
+ return String(value||'').replace(/\s+/g,' ').replace(/^[\s:;,.\-–—]+|[\s:;,.\-–—]+$/g,'').trim();
+}
+
+export function applyFigurePackageAudit(row,audit){
+ if(!row||row.type!=='figure'||!audit||Number(audit.confidence)<.68)return row;
+ const names=[...new Set((audit.printedNames||[]).map(cleanPrintedLabel).filter(Boolean))]
+  .filter(name=>!/^(?:marvel(?: comics)?|x-?men|dc(?: comics)?|hasbro|legends(?: series)?|warning)$/i.test(name));
+ if(!names.length)return row;
+ const audited=normalizeComparableText(names.join(' '));
+ const current=normalizeComparableText(`${row.title||''} ${row.character||''}`);
+ const nameTokens=audited.split(' ').filter(token=>token.length>=3&&!['the','and','with'].includes(token));
+ const overlap=nameTokens.filter(token=>current.includes(token)).length;
+ const conflict=nameTokens.length>0&&overlap<Math.ceil(nameTokens.length*.7);
+ const line=cleanPrintedLabel(row.line||audit.line||'');
+ const printedTitle=[line,names.join(' & ')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+ const edition=cleanPrintedLabel(audit.edition||row.edition||'');
+ const sku=cleanPrintedLabel(audit.sku||row.sku||'');
+ const tags=[...new Set([...(Array.isArray(row.tags)?row.tags:[]),...names,...(edition?[edition]:[]),...(audit.visibleTexts||[]).map(cleanPrintedLabel).filter(Boolean).slice(0,8)])];
+ return {
+  ...row,
+  title:(conflict||names.length>1||isGenericProductTitle(row.title))&&printedTitle?printedTitle:row.title,
+  character:names.join(' & '),
+  line:line||row.line,
+  edition:edition||row.edition,
+  sku:sku||row.sku,
+  tags,
+  confidence:Math.max(Number(row.confidence)||0,Number(audit.confidence)||0),
+  explanation:`${row.explanation||''} Auditoría literal del frontal: ${names.join(' & ')}${sku?` · SKU ${sku}`:''}.`.trim()
+ };
+}
+
+async function auditFigurePackage(images,config){
+ try{
+  const result=await deepseek([
+   {role:'system',content:'SEGUNDA PASADA DE CONTROL PARA FIGURAS. Tu única tarea es LEER TEXTO LITERAL del embalaje; NO identifiques la variante por la cara, traje, edad, pose ni por memoria. Devuelve SOLO JSON: {"printedNames":[],"line":"","edition":"","sku":"","visibleTexts":[],"confidence":0}. printedNames contiene EXCLUSIVAMENTE los nombres/etiquetas del producto impresos junto a la figura o en su cartela (por ejemplo "Wolverine (Weapon X)", "Iron Man Mark LXXXV", "Thanos"). NO metas logos de franquicia como Marvel, X-Men o DC. line es la línea impresa si se lee (p. ej. Marvel Legends Series). edition es una edición/colección explícita si está impresa. sku solo si el código de producto es legible. visibleTexts conserva otras frases cortas útiles. Si no puedes leer una etiqueta con seguridad, déjala fuera. Está PROHIBIDO sustituir una etiqueta visible por otra versión conocida del personaje: si el cartón dice Weapon X, no puedes responder Old Man Logan.'},
+   {role:'user',content:[
+    {type:'text',text:'Lee literalmente el frontal de este artículo. Prioriza la etiqueta de nombre del producto sobre cualquier deducción visual. No inventes ninguna variante que no aparezca escrita.'},
+    ...images.slice(0,2).map((url,index)=>({type:'image_url',image_url:{url},detail:index===0?'high':'low'}))
+   ]}
+  ],{...config,maxTokens:500,timeoutMs:18000,retries:0,jsonMode:false});
+  return figurePackageAuditSchema.parse(result);
+ }catch{return null;}
+}
+
 export async function identify(input,config){
  const images=(Array.isArray(input)?input:[input]).filter(x=>typeof x==='string'&&x.startsWith('data:image/')).slice(0,5);
  if(!images.length)throw new Error('Añade al menos una foto válida del artículo.');
- const system=`Devuelve SOLO un objeto JSON con title,type,franchise,character,manufacturer,line,scale,wave,exclusive,edition,issueNumber,volume,setName,cardNumber,rarity,platform,year,barcode,isbn,sku,popNumber,funkoCategory,funkoVariant,country,language,condition,hasBox,sealed,signed,graded,gradingCompany,grade,confidence,explanation,tags. type: ${itemTypes.join(',')}. TIPO DE OBJETO CRÍTICO: decide type por la NATURALEZA FÍSICA antes de leer logos o franquicias. Para FIGURAS, extrae manufacturer, line, scale, wave y exclusive siempre que estén visibles; no los pierdas aunque el título ya parezca suficiente. FIGURAS EN CAJA Y MULTIPACKS: antes de identificar por apariencia, lee literalmente el frontal. Si el embalaje nombra dos o más personajes, conserva TODOS esos nombres en title y character; nunca reduzcas un multipack a una sola figura. Conserva también el nombre de colección/edición impreso (por ejemplo Infinity Saga), las designaciones exactas del personaje/modelo (por ejemplo Mark LXXXV) y cualquier código de producto legible (por ejemplo F0192) en sku. Añade en tags cada personaje adicional y cada nombre de colección/edición claramente visible para que la búsqueda posterior pueda desambiguar la ficha exacta. El texto del packaging nunca decide por sí solo el tipo. type=comic exige una publicación real con páginas/grapas/lomo. title debe ser el nombre comercial/canónico real, jamás una descripción de la fotografía. Datos desconocidos: cadena vacía; booleanos desconocidos: null; year null. confidence 0..1. No inventes precios ni datos personales. VARIANTE FUNKO CRÍTICA: revisa expresamente el frontal y todas las pegatinas. Una pegatina CHASE obliga a funkoVariant="Chase" y debe conservarse también en title o tags; nunca la conviertas en Classic/Regular/Standard/normal. Para otras pegatinas usa su variante literal. Si no hay evidencia suficiente, deja funkoVariant vacío en vez de adivinar.`;
+ const system=`Devuelve SOLO un objeto JSON con title,type,franchise,character,manufacturer,line,scale,wave,exclusive,edition,issueNumber,volume,setName,cardNumber,rarity,platform,year,barcode,isbn,sku,popNumber,funkoCategory,funkoVariant,country,language,condition,hasBox,sealed,signed,graded,gradingCompany,grade,confidence,explanation,tags. type: ${itemTypes.join(',')}. TIPO DE OBJETO CRÍTICO: decide type por la NATURALEZA FÍSICA antes de leer logos o franquicias. Para FIGURAS, extrae manufacturer, line, scale, wave y exclusive siempre que estén visibles; no los pierdas aunque el título ya parezca suficiente. FIGURAS EN CAJA Y MULTIPACKS: antes de identificar por apariencia, lee literalmente el frontal. Si el embalaje nombra dos o más personajes, conserva TODOS esos nombres en title y character; nunca reduzcas un multipack a una sola figura. Conserva también el nombre de colección/edición impreso (por ejemplo Infinity Saga), las designaciones exactas del personaje/modelo (por ejemplo Mark LXXXV) y cualquier código de producto legible (por ejemplo F0192) en sku. Añade en tags cada personaje adicional y cada nombre de colección/edición claramente visible para que la búsqueda posterior pueda desambiguar la ficha exacta. El texto del packaging nunca decide por sí solo el tipo. type=comic exige una publicación real con páginas/grapas/lomo. title debe ser el nombre comercial/canónico real, jamás una descripción de la fotografía. REGLA ANTI-ALUCINACIÓN PARA FIGURAS: si el frontal imprime un nombre o variante concreta, ese texto manda sobre tu reconocimiento visual. NO puedes cambiarlo por otra versión del mismo personaje que no esté escrita (por ejemplo, si aparece Wolverine (Weapon X), está prohibido responder Old Man Logan). Datos desconocidos: cadena vacía; booleanos desconocidos: null; year null. confidence 0..1. No inventes precios ni datos personales. VARIANTE FUNKO CRÍTICA: revisa expresamente el frontal y todas las pegatinas. Una pegatina CHASE obliga a funkoVariant="Chase" y debe conservarse también en title o tags; nunca la conviertas en Classic/Regular/Standard/normal. Para otras pegatinas usa su variante literal. Si no hay evidencia suficiente, deja funkoVariant vacío en vez de adivinar.`;
  const makeContent=(rows)=>[
   {type:'text',text:`Identifica UN único artículo de colección usando ${rows.length} foto(s). La FOTO 1 es la vista PRINCIPAL y manda para el nombre comercial. Las demás son evidencia complementaria para trasera, códigos, caja, edición y detalles. Nunca sustituyas un nombre comercial por “caja”, “dorso”, “barcode”, “código de barras” o “Item No.”. En Funko, Item No./Item Number pertenece a sku. Antes de responder, amplía mentalmente el frontal y lee las pegatinas: si aparece CHASE, funkoVariant debe ser "Chase". Extrae también popNumber, funkoCategory y funkoVariant; nunca confundas Item No. con el número Pop. funkoCategory es el FORMATO/LÍNEA física (Kinder / Promotional, Bitty Pop!, Pocket Pop!, Pop! Regular/Super/Jumbo/Mega, Rides, Town, Moments, Covers, Pack, Funko Soda, Mystery Minis, Funko Gold, Loungefly), no la franquicia. Kinder/Promotional puede no tener número Pop; conserva códigos moldeados como VC265 en sku. funkoVariant es solo la versión real (Chase, Glow, Flocked, Diamond, Upside Down, etc.), nunca "Kinder". Devuelve únicamente JSON.`},
   ...rows.map((url,index)=>({type:'image_url',image_url:{url},detail:index===0?'high':'low'}))
@@ -747,7 +802,12 @@ export async function identify(input,config){
    throw primaryError;
   }
  }
- return finalizeIdentification(result,[result]);
+ let finalized=finalizeIdentification(result,[result]);
+ if(finalized.type==='figure'){
+  const packageAudit=await auditFigurePackage(images,config);
+  finalized=finalizeIdentification(applyFigurePackageAudit(finalized,packageAudit),[finalized]);
+ }
+ return finalized;
 }
 
 export async function research(input,config){
