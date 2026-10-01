@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify, isGenericProductTitle, buildResearchIdentity } from '../server/core.mjs';
+import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify, isGenericProductTitle, buildResearchIdentity, applyFigurePackageAudit } from '../server/core.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
@@ -146,6 +146,22 @@ const weaponXIdentification=await identify('data:image/jpeg;base64,WEAPONX',{key
 assert.equal(weaponXIdentification.type,'figure');
 assert.equal(weaponXIdentification.manufacturer,'Hasbro');
 assert.equal(weaponXIdentification.sku,'G0644');
+
+
+// Regresión: una lectura visual equivocada como "Old Man Logan" debe perder
+// frente al texto literal impreso en la cartela: "Wolverine (Weapon X)".
+const correctedWeaponX=applyFigurePackageAudit({
+ title:'Marvel Legends Wolverine (Old Man Logan)',type:'figure',franchise:'Marvel',character:'Old Man Logan',
+ manufacturer:'Hasbro',line:'Marvel Legends Series',edition:'',sku:'',confidence:.95,
+ explanation:'Reconocimiento visual de Logan',tags:[]
+},{
+ printedNames:['Wolverine (Weapon X)'],line:'Marvel Legends Series',edition:'',sku:'G0644',
+ visibleTexts:['X-Men','Weapon X'],confidence:.99
+});
+assert.equal(correctedWeaponX.title,'Marvel Legends Series Wolverine (Weapon X)');
+assert.equal(correctedWeaponX.character,'Wolverine (Weapon X)');
+assert.equal(correctedWeaponX.sku,'G0644');
+assert.doesNotMatch(correctedWeaponX.title,/Old Man Logan/i);
 
 // La naturaleza física manda para todas las familias.
 const physicalCases=[
