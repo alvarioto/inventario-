@@ -1,0 +1,36 @@
+name: Apply DeepSeek vision thinking patch
+
+on:
+  push:
+    branches: [fix/deepseek-flash-vision-thinking]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/deepseek-flash-vision-thinking
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply patch
+        run: python3 scripts/patch-deepseek-vision-thinking.py
+      - name: Install
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Commit patched code
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/ai-core.mjs tests/core.mjs
+          git diff --cached --quiet && exit 0
+          git commit -m "Improve DeepSeek Flash vision reasoning"
+          git push
