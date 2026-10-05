@@ -658,14 +658,12 @@ function conservativeFallbackComparables(item,listings,sources){
  });
 }
 
-export async function deepseek(messages,{key,model='deepseek-flash',fetcher=fetch,maxTokens=1800,timeoutMs=55000,retries=0,jsonMode=true,thinking='disabled',reasoningEffort='none'}){
+export async function deepseek(messages,{key,model='deepseek-flash',fetcher=fetch,maxTokens=1800,timeoutMs=55000,retries=0,jsonMode=true}){
  if(!key)throw new Error('Falta configurar DEEPSEEK_API_KEY en el servidor.');
  let lastError=null;
  for(let attempt=0;attempt<=retries;attempt++){
   try{
-   const thinkingType=thinking==='enabled'?'enabled':'disabled';
-   const body={model,messages,max_tokens:maxTokens,stream:false,thinking:{type:thinkingType}};
-   if(thinkingType==='enabled')body.reasoning_effort=['low','high','max'].includes(reasoningEffort)?reasoningEffort:'high';
+   const body={model,messages,max_tokens:maxTokens,stream:false,thinking:{type:'disabled'}};
    if(jsonMode)body.response_format={type:'json_object'};
    const response=await fetcher('https://api.deepseek.com/chat/completions',{
     method:'POST',
@@ -770,9 +768,9 @@ async function auditFigurePackage(images,config){
    {role:'system',content:'SEGUNDA PASADA DE CONTROL PARA FIGURAS. Tu única tarea es LEER TEXTO LITERAL del embalaje; NO identifiques la variante por la cara, traje, edad, pose ni por memoria. Devuelve SOLO JSON: {"printedNames":[],"line":"","edition":"","sku":"","visibleTexts":[],"confidence":0}. printedNames contiene EXCLUSIVAMENTE los nombres/etiquetas del producto impresos junto a la figura o en su cartela (por ejemplo "Wolverine (Weapon X)", "Iron Man Mark LXXXV", "Thanos"). NO metas logos de franquicia como Marvel, X-Men o DC. line es la línea impresa si se lee (p. ej. Marvel Legends Series). edition es una edición/colección explícita si está impresa. sku solo si el código de producto es legible. visibleTexts conserva otras frases cortas útiles. Si no puedes leer una etiqueta con seguridad, déjala fuera. Está PROHIBIDO sustituir una etiqueta visible por otra versión conocida del personaje: si el cartón dice Weapon X, no puedes responder Old Man Logan.'},
    {role:'user',content:[
     {type:'text',text:'Lee literalmente el frontal de este artículo. Prioriza la etiqueta de nombre del producto sobre cualquier deducción visual. No inventes ninguna variante que no aparezca escrita.'},
-    ...images.slice(0,2).map(url=>({type:'image_url',image_url:{url,detail:'original'}}))
+    ...images.slice(0,2).map((url,index)=>({type:'image_url',image_url:{url},detail:index===0?'high':'low'}))
    ]}
-  ],{...config,maxTokens:900,timeoutMs:30000,retries:0,jsonMode:false,thinking:'enabled',reasoningEffort:'high'});
+  ],{...config,maxTokens:500,timeoutMs:18000,retries:0,jsonMode:false});
   return figurePackageAuditSchema.parse(result);
  }catch{return null;}
 }
@@ -783,12 +781,12 @@ export async function identify(input,config){
  const system=`Devuelve SOLO un objeto JSON con title,type,franchise,character,manufacturer,line,scale,wave,exclusive,edition,issueNumber,volume,setName,cardNumber,rarity,platform,year,barcode,isbn,sku,popNumber,funkoCategory,funkoVariant,country,language,condition,hasBox,sealed,signed,graded,gradingCompany,grade,confidence,explanation,tags. type: ${itemTypes.join(',')}. TIPO DE OBJETO CRÍTICO: decide type por la NATURALEZA FÍSICA antes de leer logos o franquicias. Para FIGURAS, extrae manufacturer, line, scale, wave y exclusive siempre que estén visibles; no los pierdas aunque el título ya parezca suficiente. FIGURAS EN CAJA Y MULTIPACKS: antes de identificar por apariencia, lee literalmente el frontal. Si el embalaje nombra dos o más personajes, conserva TODOS esos nombres en title y character; nunca reduzcas un multipack a una sola figura. Conserva también el nombre de colección/edición impreso (por ejemplo Infinity Saga), las designaciones exactas del personaje/modelo (por ejemplo Mark LXXXV) y cualquier código de producto legible (por ejemplo F0192) en sku. Añade en tags cada personaje adicional y cada nombre de colección/edición claramente visible para que la búsqueda posterior pueda desambiguar la ficha exacta. El texto del packaging nunca decide por sí solo el tipo. type=comic exige una publicación real con páginas/grapas/lomo. title debe ser el nombre comercial/canónico real, jamás una descripción de la fotografía. REGLA ANTI-ALUCINACIÓN PARA FIGURAS: si el frontal imprime un nombre o variante concreta, ese texto manda sobre tu reconocimiento visual. NO puedes cambiarlo por otra versión del mismo personaje que no esté escrita (por ejemplo, si aparece Wolverine (Weapon X), está prohibido responder Old Man Logan). Datos desconocidos: cadena vacía; booleanos desconocidos: null; year null. confidence 0..1. No inventes precios ni datos personales. VARIANTE FUNKO CRÍTICA: revisa expresamente el frontal y todas las pegatinas. Una pegatina CHASE obliga a funkoVariant="Chase" y debe conservarse también en title o tags; nunca la conviertas en Classic/Regular/Standard/normal. Para otras pegatinas usa su variante literal. Si no hay evidencia suficiente, deja funkoVariant vacío en vez de adivinar.`;
  const makeContent=(rows)=>[
   {type:'text',text:`Identifica UN único artículo de colección usando ${rows.length} foto(s). La FOTO 1 es la vista PRINCIPAL y manda para el nombre comercial. Las demás son evidencia complementaria para trasera, códigos, caja, edición y detalles. Nunca sustituyas un nombre comercial por “caja”, “dorso”, “barcode”, “código de barras” o “Item No.”. En Funko, Item No./Item Number pertenece a sku. Antes de responder, amplía mentalmente el frontal y lee las pegatinas: si aparece CHASE, funkoVariant debe ser "Chase". Extrae también popNumber, funkoCategory y funkoVariant; nunca confundas Item No. con el número Pop. funkoCategory es el FORMATO/LÍNEA física (Kinder / Promotional, Bitty Pop!, Pocket Pop!, Pop! Regular/Super/Jumbo/Mega, Rides, Town, Moments, Covers, Pack, Funko Soda, Mystery Minis, Funko Gold, Loungefly), no la franquicia. Kinder/Promotional puede no tener número Pop; conserva códigos moldeados como VC265 en sku. funkoVariant es solo la versión real (Chase, Glow, Flocked, Diamond, Upside Down, etc.), nunca "Kinder". Devuelve únicamente JSON.`},
-  ...rows.map(url=>({type:'image_url',image_url:{url,detail:'original'}}))
+  ...rows.map((url,index)=>({type:'image_url',image_url:{url},detail:index===0?'high':'low'}))
  ];
  const call=rows=>deepseek([
   {role:'system',content:system+' En Funko revisa expresamente TODAS las fotos para localizar el número Pop. Si aparece un número Pop visible, popNumber no puede quedar vacío. Si es una línea no numerada (Kinder/Promotional, Mystery Minis, etc.), popNumber debe quedar vacío y cualquier código moldeado va en sku. No lo confundas con Item No./SKU.'},
   {role:'user',content:makeContent(rows)}
- ],{...config,maxTokens:1600,timeoutMs:42000,retries:1,jsonMode:false,thinking:'enabled',reasoningEffort:'high'});
+ ],{...config,maxTokens:1200,timeoutMs:30000,retries:1,jsonMode:false});
  let result;
  try{
   result=await call(images);
@@ -798,7 +796,7 @@ export async function identify(input,config){
    result=await deepseek([
     {role:'system',content:system},
     {role:'user',content:makeContent([images[0]])}
-   ],{...config,maxTokens:1600,timeoutMs:38000,retries:0,jsonMode:false,thinking:'enabled',reasoningEffort:'high'});
+   ],{...config,maxTokens:1200,timeoutMs:25000,retries:0,jsonMode:false});
    if(result&&typeof result==='object')result.explanation=`${result.explanation||''} Identificación recuperada usando la foto principal porque el análisis conjunto falló.`.trim();
   }catch{
    throw primaryError;
