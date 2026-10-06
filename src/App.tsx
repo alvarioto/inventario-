@@ -55,11 +55,11 @@ import {
   removeItem,
   saveItem,
   subscribeItems,
-  tryReadBarcode,
+  tryReadBarcodeWithTimeout,
   uploadItemImage,
   maxCloudPhotos
 } from './lib/inventory';
-import { investigate } from './lib/api';
+import { identifyPhoto, investigate } from './lib/api';
 import { DirectAiSettings } from './components/DirectAiSettings';
 import { importDemo } from './lib/demo';
 import QRCode from 'qrcode';
@@ -406,9 +406,10 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
       const previewRows = await Promise.all(prepared.map(fileToDataUrl));
       setFiles((current) => [...current, ...prepared].slice(0, photoLimit));
       setPreviews((current) => [...current, ...previewRows].slice(0, photoLimit));
-      const codes = await Promise.all(prepared.map(tryReadBarcode));
-      const code = codes.find(Boolean);
-      if (code) setBarcode((current) => current || code || '');
+      void Promise.all(prepared.map((file) => tryReadBarcodeWithTimeout(file))).then((codes) => {
+        const code = codes.find(Boolean);
+        if (code) setBarcode((current) => current || code || '');
+      });
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No se pudieron preparar las fotos.');
     } finally {
@@ -423,7 +424,7 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
     setPhotoBusy(true);
     try {
       const prepared = await prepareImage(file);
-      const code = await tryReadBarcode(prepared);
+      const code = await tryReadBarcodeWithTimeout(prepared);
       if (code) { setBarcode(code); showToast(`Código detectado: ${code}`); }
       else showToast('No se pudo leer el código. Acerca la cámara y evita reflejos.');
     } catch (error) {
@@ -440,7 +441,7 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
     setPreviews((current) => current.filter((_, i) => i !== index));
     setBarcode('');
     for (const photo of remaining) {
-      const code = await tryReadBarcode(photo);
+      const code = await tryReadBarcodeWithTimeout(photo);
       if (code) { setBarcode(code); break; }
     }
   }
@@ -766,15 +767,78 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
 
 
   async function refreshResearch() {
-    if (!draft.title.trim() || researchBusy) return;
+    if (researchBusy || busy || photoPreparing) return;
     setResearchBusy(true);
     setPhotoError('');
     try {
-      const next = await investigate(draft);
+      let working: InventoryDraft = { ...draft };
+      const analyzableImages = (draft.imageUrls || [])
+        .filter((url) => typeof url === 'string' && url.startsWith('data:image/'))
+        .slice(0, maxCloudPhotos());
+
+      if (analyzableImages.length) {
+        const identified = await identifyPhoto(analyzableImages);
+        working = {
+          ...working,
+          title: identified.title || working.title,
+          type: identified.type || working.type,
+          franchise: identified.franchise || working.franchise,
+          character: identified.character || working.character,
+          manufacturer: identified.manufacturer || working.manufacturer,
+          line: identified.line || working.line,
+          scale: identified.scale || working.scale,
+          wave: identified.wave || working.wave,
+          exclusive: identified.exclusive || working.exclusive,
+          edition: identified.edition || working.edition,
+          issueNumber: identified.issueNumber || working.issueNumber,
+          volume: identified.volume || working.volume,
+          setName: identified.setName || working.setName,
+          cardNumber: identified.cardNumber || working.cardNumber,
+          rarity: identified.rarity || working.rarity,
+          platform: identified.platform || working.platform,
+          year: identified.year ?? working.year,
+          barcode: identified.barcode || working.barcode,
+          isbn: identified.isbn || working.isbn,
+          sku: identified.sku || working.sku,
+          popNumber: identified.popNumber || working.popNumber,
+          funkoCategory: identified.funkoCategory || working.funkoCategory,
+          funkoVariant: identified.funkoVariant || working.funkoVariant,
+          country: identified.country || working.country,
+          language: identified.language || working.language,
+          condition: identified.condition || working.condition,
+          hasBox: identified.hasBox ?? working.hasBox,
+          sealed: identified.sealed ?? working.sealed,
+          signed: identified.signed ?? working.signed,
+          graded: identified.graded ?? working.graded,
+          gradingCompany: identified.gradingCompany || working.gradingCompany,
+          grade: identified.grade || working.grade,
+          tags: identified.tags?.length ? identified.tags : working.tags,
+          aiConfidence: identified.confidence,
+          aiExplanation: identified.explanation,
+          identificationConfirmed: true
+        };
+        setDraft(working);
+      } else if (!working.title.trim()) {
+        throw new Error('Añade una foto para que la IA pueda identificar el artículo.');
+      }
+
+      const next = await investigate(working);
       setResearch(next);
-      setDraft((current) => ({ ...current, currentValue: next.asking.median != null ? Number(next.asking.median.toFixed(2)) : current.currentValue }));
+      setDraft((current) => ({
+        ...current,
+        ...(next.resolvedIdentity?.title ? {
+          title: next.resolvedIdentity.title,
+          manufacturer: current.manufacturer || next.resolvedIdentity.manufacturer || '',
+          line: current.line || next.resolvedIdentity.line || '',
+          character: current.character || next.resolvedIdentity.character || '',
+          franchise: current.franchise || next.resolvedIdentity.franchise || '',
+          sku: current.sku || next.resolvedIdentity.sku || '',
+          barcode: current.barcode || next.resolvedIdentity.barcode || ''
+        } : {}),
+        currentValue: next.asking.median != null ? Number(next.asking.median.toFixed(2)) : current.currentValue
+      }));
     } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : 'No se pudo mejorar la investigación.');
+      setPhotoError(error instanceof Error ? error.message : 'No se pudo mejorar con IA.');
     } finally { setResearchBusy(false); }
   }
 
