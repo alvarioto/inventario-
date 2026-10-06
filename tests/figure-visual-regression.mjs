@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { identify, applyFigureVisualAudit } from '../server/core.mjs';
+import { identify, applyFigureVisualAudit, applyFigurePackageAudit } from '../server/core.mjs';
 
 // Unit guard: a confident correction requires 2 independent visible clues.
 const corrected=applyFigureVisualAudit({
