@@ -220,11 +220,11 @@ export async function identifyWithAi(files: File[]): Promise<AiIdentification> {
   const selected = files.slice(0, MAX_FIRESTORE_PHOTOS);
   if (!selected.length) throw new Error('Añade al menos una foto del artículo.');
   const prepared = await Promise.all(selected.map((file) => prepareImage(file, 1200)));
-  const [images, codes] = await Promise.all([
-    Promise.all(prepared.map(fileToDataUrl)),
-    Promise.all(prepared.map(tryReadBarcode))
+  const images = await Promise.all(prepared.map(fileToDataUrl));
+  const [identification, codes] = await Promise.all([
+    identifyPhoto(images),
+    Promise.all(prepared.map((file) => tryReadBarcodeWithTimeout(file)))
   ]);
-  const identification = await identifyPhoto(images);
   const detectedCode = codes.find(Boolean) || null;
   if (detectedCode && !identification.barcode) identification.barcode = detectedCode;
   if (detectedCode && /^(978|979)\d{10}$/.test(detectedCode) && !identification.isbn) {
@@ -268,6 +268,13 @@ async function readBarcodeZxing(file: File): Promise<string | null> {
 
 export async function tryReadBarcode(file: File): Promise<string | null> {
   return (await readBarcodeNative(file)) || (await readBarcodeZxing(file));
+}
+
+export async function tryReadBarcodeWithTimeout(file: File, timeoutMs = 2500): Promise<string | null> {
+  return Promise.race([
+    tryReadBarcode(file),
+    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), timeoutMs))
+  ]);
 }
 
 export async function lookupIsbn(isbn: string) {
