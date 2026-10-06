@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { identify, applyFigurePackageAudit, buildResearchIdentity } from '../server/core.mjs';
+import { identify, applyFigurePackageAudit, applyFigureVisualAudit, buildResearchIdentity } from '../server/core.mjs';
 
 // Guardia 1: el camino visual estable de Funko no puede heredar thinking/reasoning
 // activado para mejoras exclusivas de figuras.
@@ -64,5 +64,13 @@ const afterFigureAudit=applyFigurePackageAudit(protectedFunko,{
   visibleTexts:['X-Men','Weapon X'],confidence:1
 });
 assert.deepEqual(afterFigureAudit,protectedFunko);
+
+const afterVisualFigureAudit=applyFigureVisualAudit(protectedFunko,{
+  verdict:'correct',title:'Marvel Legends Wolverine (Weapon X)',franchise:'Marvel',
+  character:'Wolverine',manufacturer:'Hasbro',line:'Marvel Legends Series',
+  scale:'6 inch',wave:'',exclusive:'',edition:'',year:2026,
+  visualEvidence:['máscara visible','traje amarillo y azul'],confidence:1
+});
+assert.deepEqual(afterVisualFigureAudit,protectedFunko);
 
 console.log('funko regression tests ok');
