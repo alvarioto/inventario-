@@ -721,6 +721,65 @@ function bestIdentification(analyses,reason=''){
 }
 
 
+const figureVisualAuditSchema=z.object({
+ verdict:z.enum(['confirm','correct','uncertain']).default('uncertain'),
+ title:z.string().max(250).default(''),
+ franchise:z.string().max(500).default(''),
+ character:z.string().max(500).default(''),
+ manufacturer:z.string().max(500).default(''),
+ line:z.string().max(500).default(''),
+ scale:z.string().max(500).default(''),
+ wave:z.string().max(500).default(''),
+ exclusive:z.string().max(500).default(''),
+ edition:z.string().max(500).default(''),
+ year:z.number().int().min(1800).max(2200).nullable().default(null),
+ visualEvidence:z.array(z.string().max(220)).max(8).default([]),
+ confidence:z.number().min(0).max(1).default(0)
+});
+
+export function applyFigureVisualAudit(row,audit){
+ if(!row||row.type!=='figure'||!audit)return row;
+ const verdict=String(audit.verdict||'uncertain');
+ const confidence=Number(audit.confidence)||0;
+ const evidence=(audit.visualEvidence||[]).map(x=>String(x||'').trim()).filter(Boolean).slice(0,8);
+ if(verdict==='uncertain'){
+  return {
+   ...row,
+   confidence:Math.min(Number(row.confidence)||0.7,0.68),
+   explanation:`${row.explanation||''} Verificación visual específica de figura: no hay rasgos suficientes para distinguir con seguridad esta versión de otras parecidas.`.trim()
+  };
+ }
+ if(verdict!=='correct'||confidence<.84||evidence.length<2||!String(audit.title||'').trim())return row;
+ const next={...row};
+ for(const key of ['title','franchise','character','manufacturer','line','scale','wave','exclusive','edition']){
+  const value=String(audit[key]||'').trim();
+  if(value)next[key]=value;
+ }
+ if(Number.isInteger(audit.year)&&audit.year>=1800&&audit.year<=2200)next.year=audit.year;
+ next.confidence=confidence;
+ next.explanation=`${row.explanation||''} Verificación visual específica de figura corrigió la identidad por: ${evidence.join('; ')}.`.trim();
+ return next;
+}
+
+async function auditFigureVisualIdentity(images,row,config){
+ try{
+  const current={
+   title:row.title||'',franchise:row.franchise||'',character:row.character||'',
+   manufacturer:row.manufacturer||'',line:row.line||'',scale:row.scale||'',
+   wave:row.wave||'',exclusive:row.exclusive||'',edition:row.edition||'',
+   year:row.year??null,sku:row.sku||'',barcode:row.barcode||''
+  };
+  const result=await deepseek([
+   {role:'system',content:'VERIFICADOR VISUAL EXCLUSIVO PARA FIGURAS NO-FUNKO. La identificación inicial puede estar equivocada. Debes comprobar la figura física usando rasgos discriminantes visibles y NO aceptar por inercia el candidato previo. Compara escultura de cabeza/cara, máscara/casco, pelo/barba, traje y patrones, colores, emblemas, armadura, botas/guantes, accesorios/armas, capa, proporciones, deco/daños, base y texto/códigos visibles. Distingue versiones del mismo personaje y reediciones. Si dos lanzamientos comparten molde o faltan rasgos suficientes, verdict="uncertain". Solo usa verdict="correct" si hay al menos DOS evidencias visuales independientes o una evidencia literal fuerte de packaging/código. No inventes SKU, UPC/EAN, año, wave, exclusiva o edición. Devuelve SOLO JSON con verdict,title,franchise,character,manufacturer,line,scale,wave,exclusive,edition,year,visualEvidence,confidence.'},
+   {role:'user',content:[
+    {type:'text',text:`Candidato inicial: ${JSON.stringify(current)}. Revisa TODAS las fotos y decide confirm, correct o uncertain. Si corriges, title debe ser el nombre comercial de la figura exacta; visualEvidence debe contener rasgos observables breves, no razonamiento interno.`},
+    ...images.map(url=>({type:'image_url',image_url:{url,detail:'original'}}))
+   ]}
+  ],{...config,maxTokens:950,timeoutMs:42000,retries:0,jsonMode:false});
+  return figureVisualAuditSchema.parse(result);
+ }catch{return null;}
+}
+
 const figurePackageAuditSchema=z.object({
  printedNames:z.array(z.string().max(140)).max(6).default([]),
  line:z.string().max(160).default(''),
@@ -804,6 +863,8 @@ export async function identify(input,config){
  }
  let finalized=finalizeIdentification(result,[result]);
  if(finalized.type==='figure'){
+  const visualAudit=await auditFigureVisualIdentity(images,finalized,config);
+  finalized=finalizeIdentification(applyFigureVisualAudit(finalized,visualAudit),[finalized]);
   const packageAudit=await auditFigurePackage(images,config);
   finalized=finalizeIdentification(applyFigurePackageAudit(finalized,packageAudit),[finalized]);
  }
