@@ -349,6 +349,11 @@ const apiSource=readFileSync(new URL('../src/lib/api.ts',import.meta.url),'utf8'
 assert.match(apiSource,/runGeneralResearch/);
 assert.match(apiSource,/researchDirect/);
 assert.match(apiSource,/ActionFigure411|actionFigure411/i);
+// Regresión: una figura no puede aceptar un fallback de PriceCharting solo por
+// coincidir en "Batman"/"Action Figure". Debe compartir UPC/EAN/SKU fuerte.
+assert.match(apiSource,/priceChartingMatchesExactFigure/);
+assert.match(apiSource,/no comparte UPC\/EAN\/SKU con esta figura/i);
+assert.match(apiSource,/strongIds\.some\(id=>hay\.includes\(id\)\)/);
 assert.match(aiCoreSource,/Coleka/);
 assert.match(aiCoreSource,/LegendsVerse/);
 assert.match(aiCoreSource,/FigureRealm/);
