@@ -27,6 +27,28 @@ const weak=applyFigureVisualAudit({
 });
 assert.equal(weak.title,'McFarlane Batman');
 
+// Regresión: la auditoría de packaging nunca puede romper identificationSchema
+// aunque el modelo devuelva demasiadas etiquetas o textos demasiado largos.
+const noisyAudit=applyFigurePackageAudit({
+  title:'Hasbro Marvel Legends The Infinity Saga Iron Man Mark LXXXV & Thanos',
+  type:'figure',franchise:'Marvel',character:'Iron Man Mark LXXXV & Thanos',
+  manufacturer:'Hasbro',line:'Marvel Legends Series',edition:'The Infinity Saga',
+  sku:'F0192',confidence:.95,explanation:'x',
+  tags:Array.from({length:10},(_,i)=>`tag-base-${i}`)
+},{
+  printedNames:['Iron Man Mark LXXXV','Thanos'],
+  line:'Marvel Legends Series',
+  edition:'The Infinity Saga',
+  sku:'F0192',
+  visibleTexts:[
+    'texto visible extremadamente largo que supera claramente los sesenta caracteres permitidos por el esquema de identificación',
+    ...Array.from({length:12},(_,i)=>`texto-extra-${i}`)
+  ],
+  confidence:.99
+});
+assert.ok(noisyAudit.tags.length<=12);
+assert.ok(noisyAudit.tags.every(tag=>tag.length<=60));
+
 // End-to-end: figure => main vision + independent visual verification + package audit.
 // The second call corrects a loose/misread figure even if the packaging audit has no text.
 let calls=0;
