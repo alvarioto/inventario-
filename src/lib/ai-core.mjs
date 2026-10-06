@@ -416,16 +416,62 @@ function normalizeFunkoNumber(value){
 function funkoCategoryFromText(value){
  const raw=String(value||'');
  // funkoCategory representa FORMATO/LÍNEA física, no la franquicia ni el acabado.
+ // Mantener primero los formatos más específicos para que "VHS Covers" no caiga en "Covers".
  const rows=[
-  ['Kinder / Promotional',/\bkinder(?: joy)?\b|\bpromotional\b|\bpromo mini\b/i],
-  ['Bitty Pop!',/\bbitty(?: pop)?\b/i],['Pocket Pop!',/\bpocket pop\b|\bkeychain\b|\bllavero\b/i],
-  ['Pop! Mega',/\bmega pop\b|\b18(?:[- ]?inch| pulgadas?)\b/i],['Pop! Jumbo',/\bjumbo pop\b|\b10(?:[- ]?inch| pulgadas?)\b/i],
-  ['Pop! Super',/\bsuper pop\b|\b6(?:[- ]?inch| pulgadas?)\b/i],['Pop! Rides',/\bpop!? rides?\b|\brides?\b/i],
-  ['Pop! Town',/\bpop!? towns?\b|\btowns?\b/i],['Pop! Moments',/\b(?:movie )?moments?\b/i],
-  ['Pop! Covers',/\b(?:comic|album|game) covers?\b|\bpop!? covers?\b/i],['Pop! Pack',/\b[234]-?pack\b|\bmulti-?pack\b/i],
-  ['Funko Soda',/\bfunko soda\b|\bsoda figure\b/i],['Mystery Minis',/\bmystery minis?\b/i],
-  ['Funko Gold',/\bfunko gold\b/i],['Loungefly',/\bloungefly\b/i],
-  ['Pop! Regular',/\bfunko pop!?\b|\bpop!? (?:vinyl|television|movies?|games?|animation|heroes|disney|marvel|star wars|sports|music|icons)\b/i]
+  ['Popsies',/\bpopsies\b/i],
+  ['REWIND',/\bfunko\s+rewind\b|\brewind\b/i],
+  ['Pop! VHS Covers',/\bpop!?\s+vhs\s+covers?\b|\bvhs\s+covers?\b/i],
+  ['Pop! Comic Covers',/\bpop!?\s+comic\s+covers?\b|\bcomic\s+covers?\b/i],
+  ['Pop! Album Covers',/\bpop!?\s+(?:album|albums)\s+covers?\b|\bpop!?\s+albums?\b|\balbum\s+covers?\b/i],
+  ['Pop! Art Covers',/\bpop!?\s+art\s+covers?\b|\bart\s+covers?\b/i],
+  ['Pop! Book Covers',/\bpop!?\s+book\s+covers?\b|\bbook\s+covers?\b/i],
+  ['Pop! Game Covers',/\bpop!?\s+game\s+covers?\b|\bgame\s+covers?\b/i],
+  ['Pop! Covers',/\bpop!?\s+covers?\b/i],
+  ['Pop! Die-Cast',/\bpop!?\s+die[- ]?cast\b|\bdie[- ]?cast\b/i],
+  ['Pop! Deluxe',/\bpop!?\s+deluxe\b/i],
+  ['Pop! Premium',/\bpop!?\s+premium\b/i],
+  ['Pop! Plus',/\bpop!?\s+plus\b/i],
+  ['Pop! Nooks',/\bpop!?\s+nooks?\b/i],
+  ['Pop! Elements',/\bpop!?\s+elements?\b/i],
+  ['Pop! Mini Globes',/\bpop!?\s+mini\s+globes?\b|\bmini\s+globes?\b/i],
+  ['Pop! & Buddy',/\bpop!?\s*(?:&|and)\s*buddy\b|\bpop!?\s+buddy\b/i],
+  ['Pop! Pez',/\bpop!?\s+pez\b|\bpez\s+dispenser\b/i],
+  ['Pop! Keychain',/\bpop!?\s+keychain\b|\bpocket\s+pop!?\s+keychain\b/i],
+  ['Pop! Mega',/\bmega pop\b|\bpop!?\s+mega\b|\b18(?:[- ]?inch| pulgadas?)\b/i],
+  ['Pop! Jumbo',/\bjumbo pop\b|\bpop!?\s+jumbo\b|\b10(?:[- ]?inch| pulgadas?)\b/i],
+  ['Pop! Super',/\bsuper pop\b|\bpop!?\s+super\b|\b6(?:[- ]?inch| pulgadas?)\b/i],
+  ['Pop! Rides Super Deluxe',/\bpop!?\s+rides?\s+super\s+deluxe\b/i],
+  ['Pop! Rides Deluxe',/\bpop!?\s+rides?\s+deluxe\b/i],
+  ['Pop! Rides',/\bpop!?\s+rides?\b|\brides?\b/i],
+  ['Pop! Town',/\bpop!?\s+towns?\b|\btowns?\b/i],
+  ['Pop! Moments',/\bpop!?\s+(?:movie\s+)?moments?\b|\bmovie\s+moments?\b/i],
+  ['Pop! Multipack',/\bpop!?\s+multipack\b|\b[234]-?pack\b|\bmulti-?pack\b/i],
+  ['Pop! Mystery',/\bpop!?\s+mystery\b/i],
+  ['Bitty Pop! Arcade',/\bbitty\s+pop!?\s+arcade\b|\bbitty\s+arcade\b/i],
+  ['Bitty Pop! Rides',/\bbitty\s+pop!?\s+rides?\b/i],
+  ['Bitty Pop! Towns',/\bbitty\s+pop!?\s+towns?\b/i],
+  ['Bitty Pop! Display',/\bbitty\s+pop!?\s+display\b|\bbitty\s+display\b/i],
+  ['Bitty Pop!',/\bbitty(?:\s+pop!?)?\b/i],
+  ['Pocket Pop!',/\bpocket\s+pop!?\b|\bpocket\b/i],
+  ['Funko Soda',/\bfunko\s+soda\b|\bvinyl\s+soda\b|\bsoda\s+figure\b/i],
+  ['Mystery Minis',/\bmystery\s+minis?\b/i],
+  ['Pint Size Heroes',/\bpint\s+size\s+heroes?\b/i],
+  ['Dorbz',/\bdorbz\b/i],
+  ['Wacky Wobbler',/\bwacky\s+wobblers?\b/i],
+  ['Rock Candy',/\brock\s+candy\b/i],
+  ['Hikari',/\bhikari\b/i],
+  ['Vynl.',/\bvynl\.?\b/i],
+  ['Paka Paka',/\bpaka\s+paka\b/i],
+  ['Snaps!',/\bsnaps!?\b/i],
+  ['5 Star',/\b5\s*star\b/i],
+  ['HeroWorld',/\bhero\s*world\b/i],
+  ['Vinyl Idolz',/\bvinyl\s+idolz\b/i],
+  ['MoPEEZ',/\bmopeez\b/i],
+  ['Fabrikations',/\bfabrikations?\b/i],
+  ['Funko Gold',/\bfunko\s+gold\b/i],
+  ['Kinder / Promotional',/\bkinder(?:\s+joy)?\b|\bpromotional\b|\bpromo\s+mini\b/i],
+  ['Loungefly',/\bloungefly\b/i],
+  ['Pop! Regular',/\bfunko\s+pop!?\b|\bpop!?\s+(?:vinyl|television|movies?|games?|animation|heroes|disney|marvel|star wars|sports|music|icons)\b/i]
  ];
  return rows.find(([,re])=>re.test(raw))?.[0]||'';
 }
@@ -451,7 +497,7 @@ function funkoNameFromItem(item){
  if(parts.length>1)title=parts[parts.length-1];
  title=title
   .replace(/#\s*\d{1,5}\b/g,' ')
-  .replace(/\bfunko\b|\bpop!?\b|\bmovies?\b|\btelevision\b|\btv\b|\bgames?\b|\banimation\b|\bvinyl\b|\bfigure\b|\bfigura\b|\bkinder(?: joy)?\b|\bpromotional\b|\bbitty\b|\bpocket\b|\bmystery minis?\b|\bsoda\b|\brides?\b|\btowns?\b|\bmoments?\b|\bcovers?\b/gi,' ')
+  .replace(/\bfunko\b|\bpop!?\b|\bmovies?\b|\btelevision\b|\btv\b|\bgames?\b|\banimation\b|\bvinyl\b|\bfigure\b|\bfigura\b|\bkinder(?: joy)?\b|\bpromotional\b|\bbitty\b|\bpocket\b|\bmystery minis?\b|\bsoda\b|\brides?\b|\btowns?\b|\bmoments?\b|\bcovers?\b|\bvhs\b|\bpopsies\b|\brewind\b|\bdorbz\b|\bwacky wobblers?\b|\brock candy\b|\bpint size heroes?\b|\bhikari\b|\bvynl\.?\b|\bpaka paka\b|\bsnaps!?\b|\bpez\b/gi,' ')
   .replace(/\bchase\b|glow in the dark|\bgitd\b|\bflocked\b|\bmetallic\b|\bdiamond(?: collection)?\b|black light|\bchrome\b|special edition|\bexclusive\b/gi,' ')
   .replace(/[|:]+/g,' ').replace(/\s+/g,' ').trim();
  return title;
@@ -528,9 +574,13 @@ function specificTitleScore(value){
 
 function correctCollectibleType(row){
  if(!row)return row;
- if(row.type==='funko'||/\bfunko\b|\bpop!?\b/i.test(`${row.manufacturer||''} ${row.line||''}`))return row;
+ if(row.type==='funko')return row;
  const manufacturer=normalizeComparableText(row.manufacturer),line=normalizeComparableText(row.line);
  const evidence=normalizeComparableText(`${row.title||''} ${row.edition||''} ${row.explanation||''} ${Array.isArray(row.tags)?row.tags.join(' '):''}`);
+ const funkoEvidence=normalizeComparableText(`${row.manufacturer||''} ${row.line||''} ${row.title||''} ${row.funkoCategory||''} ${row.edition||''}`);
+ const explicitFunkoBrand=manufacturer==='funko'||/\bfunko\b/.test(funkoEvidence);
+ const knownFunkoFamily=/\b(?:popsies|rewind|dorbz|wacky wobbler|rock candy|pint size heroes|hikari|vynl|paka paka|mystery minis|pocket pop|bitty pop|funko soda|vinyl soda|pop pez|pop vhs covers|pop comic covers|pop album covers|pop art covers|pop book covers|pop game covers|pop rides|pop town|pop moments|pop die cast|pop deluxe|pop premium|pop jumbo|pop mega|pop super)\b/.test(funkoEvidence);
+ if(explicitFunkoBrand||knownFunkoFamily)return {...row,type:'funko',manufacturer:String(row.manufacturer||'').trim()||'Funko'};
  const scores={figure:0,comic:0,manga:0,card:0,game:0,lego:0,plush:0,replica:0,movie:0,merch:0};
  const add=(type,re,weight)=>{if(re.test(evidence)||re.test(line)||re.test(manufacturer))scores[type]+=weight;};
  add('figure',/\baction figure\b|\bfigura articulada\b|\barticulated figure\b|\bblister\b|\bcarded figure\b|\bfigurine\b|\bstatue\b|\bmaquette\b|\binterchangeable accessories\b|\baccesorios intercambiables\b/,6);
@@ -554,7 +604,7 @@ function correctCollectibleType(row){
 
 function finalizeIdentification(result,analyses=[]){
  let parsed=identificationSchema.parse(result);
- parsed=identificationSchema.parse(correctCollectibleType(deriveFunkoFields(parsed)));
+ parsed=identificationSchema.parse(deriveFunkoFields(correctCollectibleType(parsed)));
  if(!isGenericProductTitle(parsed.title))return parsed;
  const candidate=[parsed,...analyses]
   .filter(row=>row?.title&&!isGenericProductTitle(row.title))
@@ -840,9 +890,9 @@ async function auditFigurePackage(images,config){
 export async function identify(input,config){
  const images=(Array.isArray(input)?input:[input]).filter(x=>typeof x==='string'&&x.startsWith('data:image/')).slice(0,5);
  if(!images.length)throw new Error('Añade al menos una foto válida del artículo.');
- const system=`Devuelve SOLO un objeto JSON con title,type,franchise,character,manufacturer,line,scale,wave,exclusive,edition,issueNumber,volume,setName,cardNumber,rarity,platform,year,barcode,isbn,sku,popNumber,funkoCategory,funkoVariant,country,language,condition,hasBox,sealed,signed,graded,gradingCompany,grade,confidence,explanation,tags. type: ${itemTypes.join(',')}. TIPO DE OBJETO CRÍTICO: decide type por la NATURALEZA FÍSICA antes de leer logos o franquicias. Para FIGURAS, extrae manufacturer, line, scale, wave y exclusive siempre que estén visibles; no los pierdas aunque el título ya parezca suficiente. FIGURAS EN CAJA Y MULTIPACKS: antes de identificar por apariencia, lee literalmente el frontal. Si el embalaje nombra dos o más personajes, conserva TODOS esos nombres en title y character; nunca reduzcas un multipack a una sola figura. Conserva también el nombre de colección/edición impreso (por ejemplo Infinity Saga), las designaciones exactas del personaje/modelo (por ejemplo Mark LXXXV) y cualquier código de producto legible (por ejemplo F0192) en sku. Añade en tags cada personaje adicional y cada nombre de colección/edición claramente visible para que la búsqueda posterior pueda desambiguar la ficha exacta. El texto del packaging nunca decide por sí solo el tipo. type=comic exige una publicación real con páginas/grapas/lomo. title debe ser el nombre comercial/canónico real, jamás una descripción de la fotografía. REGLA ANTI-ALUCINACIÓN PARA FIGURAS: si el frontal imprime un nombre o variante concreta, ese texto manda sobre tu reconocimiento visual. NO puedes cambiarlo por otra versión del mismo personaje que no esté escrita (por ejemplo, si aparece Wolverine (Weapon X), está prohibido responder Old Man Logan). Datos desconocidos: cadena vacía; booleanos desconocidos: null; year null. confidence 0..1. No inventes precios ni datos personales. VARIANTE FUNKO CRÍTICA: revisa expresamente el frontal y todas las pegatinas. Una pegatina CHASE obliga a funkoVariant="Chase" y debe conservarse también en title o tags; nunca la conviertas en Classic/Regular/Standard/normal. Para otras pegatinas usa su variante literal. Si no hay evidencia suficiente, deja funkoVariant vacío en vez de adivinar.`;
+ const system=`Devuelve SOLO un objeto JSON con title,type,franchise,character,manufacturer,line,scale,wave,exclusive,edition,issueNumber,volume,setName,cardNumber,rarity,platform,year,barcode,isbn,sku,popNumber,funkoCategory,funkoVariant,country,language,condition,hasBox,sealed,signed,graded,gradingCompany,grade,confidence,explanation,tags. type: ${itemTypes.join(',')}. TIPO DE OBJETO CRÍTICO: decide type por la NATURALEZA FÍSICA antes de leer logos o franquicias. Para FIGURAS, extrae manufacturer, line, scale, wave y exclusive siempre que estén visibles; no los pierdas aunque el título ya parezca suficiente. FIGURAS EN CAJA Y MULTIPACKS: antes de identificar por apariencia, lee literalmente el frontal. Si el embalaje nombra dos o más personajes, conserva TODOS esos nombres en title y character; nunca reduzcas un multipack a una sola figura. Conserva también el nombre de colección/edición impreso (por ejemplo Infinity Saga), las designaciones exactas del personaje/modelo (por ejemplo Mark LXXXV) y cualquier código de producto legible (por ejemplo F0192) en sku. Añade en tags cada personaje adicional y cada nombre de colección/edición claramente visible para que la búsqueda posterior pueda desambiguar la ficha exacta. El texto del packaging nunca decide por sí solo el tipo. type=comic exige una publicación real con páginas/grapas/lomo. title debe ser el nombre comercial/canónico real, jamás una descripción de la fotografía. REGLA ANTI-ALUCINACIÓN PARA FIGURAS: si el frontal imprime un nombre o variante concreta, ese texto manda sobre tu reconocimiento visual. NO puedes cambiarlo por otra versión del mismo personaje que no esté escrita (por ejemplo, si aparece Wolverine (Weapon X), está prohibido responder Old Man Logan). Datos desconocidos: cadena vacía; booleanos desconocidos: null; year null. confidence 0..1. No inventes precios ni datos personales. REGLA FUNKO GLOBAL: cualquier producto claramente fabricado o marcado por FUNKO debe usar type="funko", aunque físicamente parezca merchandising, figura, tarjeta-regalo, VHS/caja, llavero, miniatura u otro formato. No limites Funko a Pop! estándar. Conserva en funkoCategory el FORMATO/LÍNEA literal impreso (por ejemplo Popsies, REWIND, Pop! VHS Covers, Bitty Pop!, Pocket Pop!, Mystery Minis, Funko Soda, Dorbz, Wacky Wobbler, Rock Candy, Pint Size Heroes, Pop! Pez). Si aparece una línea Funko nueva o desconocida, usa igualmente type="funko" y copia el nombre literal de esa línea en funkoCategory; NO la conviertas en Pop! Regular. VARIANTE FUNKO CRÍTICA: revisa expresamente el frontal y todas las pegatinas. Una pegatina CHASE obliga a funkoVariant="Chase" y debe conservarse también en title o tags; nunca la conviertas en Classic/Regular/Standard/normal. Para otras pegatinas usa su variante literal. Si no hay evidencia suficiente, deja funkoVariant vacío en vez de adivinar.`;
  const makeContent=(rows)=>[
-  {type:'text',text:`Identifica UN único artículo de colección usando ${rows.length} foto(s). La FOTO 1 es la vista PRINCIPAL y manda para el nombre comercial. Las demás son evidencia complementaria para trasera, códigos, caja, edición y detalles. Nunca sustituyas un nombre comercial por “caja”, “dorso”, “barcode”, “código de barras” o “Item No.”. En Funko, Item No./Item Number pertenece a sku. Antes de responder, amplía mentalmente el frontal y lee las pegatinas: si aparece CHASE, funkoVariant debe ser "Chase". Extrae también popNumber, funkoCategory y funkoVariant; nunca confundas Item No. con el número Pop. funkoCategory es el FORMATO/LÍNEA física (Kinder / Promotional, Bitty Pop!, Pocket Pop!, Pop! Regular/Super/Jumbo/Mega, Rides, Town, Moments, Covers, Pack, Funko Soda, Mystery Minis, Funko Gold, Loungefly), no la franquicia. Kinder/Promotional puede no tener número Pop; conserva códigos moldeados como VC265 en sku. funkoVariant es solo la versión real (Chase, Glow, Flocked, Diamond, Upside Down, etc.), nunca "Kinder". Devuelve únicamente JSON.`},
+  {type:'text',text:`Identifica UN único artículo de colección usando ${rows.length} foto(s). La FOTO 1 es la vista PRINCIPAL y manda para el nombre comercial. Las demás son evidencia complementaria para trasera, códigos, caja, edición y detalles. Nunca sustituyas un nombre comercial por “caja”, “dorso”, “barcode”, “código de barras” o “Item No.”. En Funko, Item No./Item Number pertenece a sku. Antes de responder, amplía mentalmente el frontal y lee las pegatinas: si aparece CHASE, funkoVariant debe ser "Chase". Extrae también popNumber, funkoCategory y funkoVariant; nunca confundas Item No. con el número Pop. funkoCategory es el FORMATO/LÍNEA física, no la franquicia. Ejemplos: Popsies, REWIND, Pop! VHS Covers, Pop! Comic/Album/Art/Book/Game Covers, Bitty Pop! y subtipos, Pocket Pop!, Pop! Regular/Super/Jumbo/Mega, Rides, Town, Moments, Multipack, Deluxe, Die-Cast, Premium, Plus, Funko Soda, Mystery Minis, Pint Size Heroes, Dorbz, Wacky Wobbler, Rock Candy, Pop! Pez, Hikari, Vynl., Paka Paka, Snaps!, Funko Gold, Kinder/Promotional. Si el producto dice FUNKO pero la línea no está en esta lista, sigue siendo type="funko" y funkoCategory debe conservar el nombre literal impreso de esa línea. Kinder/Promotional puede no tener número Pop; conserva códigos moldeados como VC265 en sku. funkoVariant es solo la versión real (Chase, Glow, Flocked, Diamond, Upside Down, etc.), nunca "Kinder". Devuelve únicamente JSON.`},
   ...rows.map((url,index)=>({type:'image_url',image_url:{url},detail:index===0?'high':'low'}))
  ];
  const call=rows=>deepseek([
