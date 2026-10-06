@@ -72,6 +72,16 @@ function buildSearchQuery(item){
   if(item.popNumber)parts.push(String(item.popNumber).trim());
   if(requestedVariant(item))parts.push(String(item.funkoVariant).trim());
   parts.push('Funko');
+ }else if(item?.type==='comic'||item?.type==='manga'){
+  for(const value of [
+   item?.title,
+   item?.line,
+   item?.issueNumber?('#'+String(item.issueNumber).trim()):'',
+   item?.volume?('Vol '+String(item.volume).trim()):'',
+   item?.edition,
+   item?.isbn,
+   item?.sku
+  ].filter(Boolean))parts.push(String(value).trim());
  }else{
   for(const value of [item?.title,item?.manufacturer,item?.line,item?.sku].filter(Boolean))parts.push(String(value).trim());
  }
@@ -133,9 +143,22 @@ function parseProductPage(html,url=''){
  };
  return {title:productTitleFromHtml(html),console:'',url,prices};
 }
+function incompatibleCategory(item,row){
+ const type=String(item?.type||'').toLowerCase();
+ const raw=normalize(String(row?.console||'')+' '+String(row?.title||'')+' '+String(row?.url||''));
+ if(type==='comic'||type==='manga'){
+  if(/\btrading cards?\b|\bsports cards?\b|\bpokemon cards?\b|\btopps\b|\bpanini\b/.test(raw))return true;
+  if(/\bxbox\b|\bplaystation\b|\bnintendo\b|\bvideo games?\b|\bfunko\b|\blego\b/.test(raw))return true;
+ }
+ if(type==='card'){
+  if(/\bcomics?\b|\bmanga\b|\bxbox\b|\bplaystation\b|\bnintendo\b|\bvideo games?\b/.test(raw))return true;
+ }
+ return false;
+}
 function exactScore(item,row){
  const isFunko=item?.type==='funko'||normalize(item?.manufacturer)==='funko';
- const hay=normalize(row.title+' '+row.console);
+ if(incompatibleCategory(item,row))return -1;
+ const hay=normalize(row.title+' '+row.console+' '+row.url);
  const strongIds=[item?.barcode,item?.sku].filter(Boolean).map(normalize).filter(x=>x.length>=5);
  if(strongIds.some(id=>hay.includes(id)))return 1000;
  const name=String(item?.character||item?.title||'').trim();
@@ -162,6 +185,23 @@ function exactScore(item,row){
   const titleTokens=words(item?.title||'').filter(x=>x.length>=3&&!stop.has(x)&&!/^\d+$/.test(x));
   const titleHits=titleTokens.filter(x=>hay.includes(x)).length;
   if(titleTokens.length>2&&titleHits/titleTokens.length<.5)return -1;
+  if(item?.type==='comic'||item?.type==='manga'){
+   const isbn=normalize(item?.isbn||'');
+   if(isbn&&isbn.length>=8&&!hay.includes(isbn))return -1;
+   const issue=normalize(item?.issueNumber||'');
+   if(issue){
+    const explicitNumbers=[...String(row.title||'').matchAll(/#\s*([a-z0-9.-]+)\b/gi)].map(x=>normalize(x[1]));
+    if(explicitNumbers.length&&!explicitNumbers.includes(issue))return -1;
+    if(!explicitNumbers.includes(issue)&&!hay.split(' ').includes(issue))return -1;
+    score+=160;
+   }
+   const editionTokens=words(item?.edition||'').filter(x=>x.length>=3);
+   if(editionTokens.length){
+    const editionHits=editionTokens.filter(x=>hay.includes(x)).length;
+    if(editionHits===0&&editionTokens.length>=2)score-=60;
+    else score+=editionHits*25;
+   }
+  }
   score+=titleHits*20;
  }
  return score;

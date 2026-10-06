@@ -42,4 +42,43 @@ const page=parseProductPage(`
 assert.equal(page.title,'Eomer #1982');
 assert.deepEqual(page.prices,{outOfBox:17,inBox:22,new:25});
 
+
+const comic={
+ type:'comic',
+ title:'Star Wars: Sombra de Maul',
+ line:'Planeta Cómic',
+ issueNumber:'1',
+ edition:'Edición limitada 001 Variant Cover',
+ isbn:'9788413420000'
+};
+const comicQuery=buildSearchQuery(comic);
+assert.match(comicQuery,/Sombra de Maul/i);
+assert.match(comicQuery,/#1/);
+assert.match(comicQuery,/Edición limitada 001 Variant Cover/i);
+assert.match(comicQuery,/9788413420000/);
+
+const mixedHtml=`
+<row id="product-card" data-product="10">
+ <cell class="title"><a href="/game/star-wars-cards/darth-maul-2-cc-10">Darth Maul 2 #CC-10 Star Wars 2023 Topps Comic Cover Art</a></cell>
+ <cell class="console phone-landscape-hidden">Trading Cards</cell>
+ <cell class="price numeric used_price">$1.34</cell>
+ <cell class="price numeric cib_price"></cell>
+ <cell class="price numeric new_price"></cell>
+</row>
+<row id="product-comic" data-product="11">
+ <cell class="title"><a href="/game/comics/star-wars-sombra-de-maul-1">Star Wars: Sombra de Maul #1</a></cell>
+ <cell class="console phone-landscape-hidden">Comics</cell>
+ <cell class="price numeric used_price">$20.00</cell>
+ <cell class="price numeric cib_price">$25.00</cell>
+ <cell class="price numeric new_price">$30.00</cell>
+</row>`;
+const mixedRows=parseSearchRows(mixedHtml);
+const comicBest=chooseBest({...comic,isbn:''},mixedRows);
+assert.ok(comicBest);
+assert.match(comicBest.url,/\/game\/comics\/star-wars-sombra-de-maul-1$/);
+assert.doesNotMatch(comicBest.url,/star-wars-cards/);
+
+const onlyWrongCard=chooseBest({...comic,isbn:''},mixedRows.filter(row=>row.console==='Trading Cards'));
+assert.equal(onlyWrongCard,null);
+
 console.log('pricecharting tests ok');
