@@ -78,13 +78,32 @@ function cleanFunkoIdentification(row:AiIdentification,audit?:{performed:boolean
 
  return {...row,title,funkoVariant:finalVariant,edition,tags};
 }
+function normalizeStrongId(value:unknown){
+ return String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+}
+function priceChartingMatchesExactFigure(item:Partial<InventoryDraft>,guide:{url?:string;title?:string;evidence?:string}){
+ if(item.type!=='figure')return true;
+ const strongIds=[item.barcode,item.sku]
+  .map(normalizeStrongId)
+  .filter(id=>id.length>=5);
+ if(!strongIds.length)return false;
+ const hay=normalizeStrongId(`${guide.title||''} ${guide.evidence||''} ${guide.url||''}`);
+ return strongIds.some(id=>hay.includes(id));
+}
+
 async function readPriceChartingValue(item:Partial<InventoryDraft>){
  if(!priceChartingValueUrl)return null;
  const name=String(item.character||item.title||'').trim();
  if(!name&&!item.sku&&!item.barcode)return null;
  const identity={type:item.type||'other',title:item.title||'',character:item.character||name,manufacturer:item.manufacturer||'',line:item.line||'',edition:item.edition||'',popNumber:item.popNumber||'',funkoCategory:item.funkoCategory||item.line||'',funkoVariant:item.funkoVariant||'',sku:item.sku||'',barcode:item.barcode||'',hasBox:item.hasBox,sealed:item.sealed};
  const result=await priceChartingPost({item:identity});
- if(result.status==='completed'&&result.value)return result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string;title:string;condition:string;prices?:{outOfBox:number|null;inBox:number|null;new:number|null}};
+ if(result.status==='completed'&&result.value){
+  const value=result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string;title:string;condition:string;prices?:{outOfBox:number|null;inBox:number|null;new:number|null}};
+  if(!priceChartingMatchesExactFigure(item,value)){
+   throw new Error('PriceCharting devolvió una ficha que no comparte UPC/EAN/SKU con esta figura; se descarta para evitar falsos positivos.');
+  }
+  return value;
+ }
  throw new Error('PriceCharting no devolvió un precio público verificable para el artículo exacto.');
 }
 async function readActionFigure411Value(item:Partial<InventoryDraft>){
