@@ -55,7 +55,6 @@ import {
   removeItem,
   saveItem,
   subscribeItems,
-  tryReadBarcode,
   tryReadBarcodeWithTimeout,
   uploadItemImage,
   maxCloudPhotos
