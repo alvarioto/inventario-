@@ -807,7 +807,10 @@ export function applyFigurePackageAudit(row,audit){
  const printedTitle=[line,names.join(' & ')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
  const edition=cleanPrintedLabel(audit.edition||row.edition||'');
  const sku=cleanPrintedLabel(audit.sku||row.sku||'');
- const tags=[...new Set([...(Array.isArray(row.tags)?row.tags:[]),...names,...(edition?[edition]:[]),...(audit.visibleTexts||[]).map(cleanPrintedLabel).filter(Boolean).slice(0,8)])];
+ const tags=[...new Set([...(Array.isArray(row.tags)?row.tags:[]),...names,...(edition?[edition]:[]),...(audit.visibleTexts||[]).map(cleanPrintedLabel).filter(Boolean)])]
+  .map(tag=>String(tag||'').replace(/\s+/g,' ').trim().slice(0,60))
+  .filter(Boolean)
+  .slice(0,12);
  return {
   ...row,
   title:(conflict||names.length>1||isGenericProductTitle(row.title))&&printedTitle?printedTitle:row.title,
