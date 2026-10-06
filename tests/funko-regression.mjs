@@ -73,4 +73,61 @@ const afterVisualFigureAudit=applyFigureVisualAudit(protectedFunko,{
 });
 assert.deepEqual(afterVisualFigureAudit,protectedFunko);
 
+
+
+const classifyFunkoCase=async(result)=>{
+  let localCalls=0;
+  const fetcher=async(_url,init)=>{
+    localCalls++;
+    const body=JSON.parse(init.body);
+    assert.equal(body.thinking?.type,'disabled');
+    return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}),{
+      status:200,headers:{'content-type':'application/json'}
+    });
+  };
+  const identified=await identify('data:image/jpeg;base64,FUNKOFORMAT',{key:'test',fetcher});
+  assert.equal(localCalls,1);
+  return identified;
+};
+
+// Popsies: aunque el modelo lo vea como merchandising/tarjeta-regalo, la marca Funko manda.
+const popsies=await classifyFunkoCase({
+  title:'Popsies Michael Scott',type:'merch',franchise:'The Office',character:'Michael Scott',
+  manufacturer:'Funko',line:'Popsies',funkoCategory:'',confidence:.97,
+  explanation:'Producto Funko Popsies con mensaje desplegable.',tags:['Popsies']
+});
+assert.equal(popsies.type,'funko');
+assert.equal(popsies.funkoCategory,'Popsies');
+assert.equal(popsies.popNumber,'');
+assert.equal(buildResearchIdentity(popsies),'Michael Scott Popsies');
+
+// REWIND: el embalaje tipo VHS no puede convertirlo en película/VHS.
+const rewind=await classifyFunkoCase({
+  title:'REWIND Voltron',type:'movie',franchise:'Voltron',character:'Voltron',
+  manufacturer:'Funko',line:'REWIND',funkoCategory:'',confidence:.98,
+  explanation:'Figura Funko REWIND en embalaje inspirado en VHS.',tags:['REWIND']
+});
+assert.equal(rewind.type,'funko');
+assert.equal(rewind.funkoCategory,'REWIND');
+assert.equal(buildResearchIdentity(rewind),'Voltron REWIND');
+
+// Pop! VHS Covers: debe conservar el subtipo exacto y no degradarse a Covers genérico ni a película.
+const vhsCover=await classifyFunkoCase({
+  title:'Pop! VHS Covers Ripley',type:'movie',franchise:'Alien',character:'Ripley',
+  manufacturer:'Funko',line:'Pop! Movies',funkoCategory:'',popNumber:'23',sku:'90319',
+  confidence:.99,explanation:'Pop! VHS Covers Ripley de Funko.',tags:['VHS Covers']
+});
+assert.equal(vhsCover.type,'funko');
+assert.equal(vhsCover.funkoCategory,'Pop! VHS Covers');
+assert.equal(vhsCover.sku,'90319');
+
+// Línea Funko futura/desconocida: no debe caer a Pop! Regular ni a merch.
+const futureLine=await classifyFunkoCase({
+  title:'Funko Future Widget Test Character',type:'merch',franchise:'Test',character:'Test Character',
+  manufacturer:'Funko',line:'Future Widget',funkoCategory:'Future Widget',confidence:.9,
+  explanation:'Marca Funko y línea Future Widget impresas.',tags:[]
+});
+assert.equal(futureLine.type,'funko');
+assert.equal(futureLine.funkoCategory,'Future Widget');
+
 console.log('funko regression tests ok');
