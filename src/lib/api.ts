@@ -318,6 +318,19 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
   const withRates=await ensureUsdDisplayRates({...baseResearch,warnings});
   return applyPriceChartingValue(withRates,guide);
  };
+ const tryEbayExact=async(previous:ResearchResult|null)=>{
+  try{
+   const market=await readEbayMarketValue(item);
+   if(market?.found&&market.average!=null&&market.min!=null&&market.max!=null){
+    const seed=previous?mergeResearchWarnings(previous,warnings):{...baseResearch,warnings:[...warnings]};
+    return applyEbayMarketValue(seed,market);
+   }
+   if(market?.reason)warnings.push(`eBay: ${market.reason}`);
+  }catch(error){
+   warnings.push(`eBay: ${error instanceof Error?error.message:'no se pudo consultar el mercado exacto.'}`);
+  }
+  return null;
+ };
 
  // Figuras no Funko: ActionFigure411 es la fuente principal de estimación.
  // Solo si no identifica con seguridad la pieza o no tiene ventas cerradas,
@@ -357,6 +370,8 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
 
   try{return await tryPriceCharting();}
   catch(error){warnings.push(`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`);}
+  const ebay=await tryEbayExact(general);
+  if(ebay)return ebay;
 
   return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
  }
@@ -374,6 +389,8 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
   }
   try{return await tryPriceCharting();}
   catch(error){warnings.push(`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`);}
+  const ebay=await tryEbayExact(general);
+  if(ebay)return ebay;
   return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
  }
 
@@ -382,8 +399,16 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
  if(item.type==='funko'){
   try{return await tryPriceCharting();}
   catch(error){warnings.push(`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`);}
-  try{return mergeResearchWarnings(await runGeneralResearch(item),warnings);}
-  catch(error){return {...baseResearch,warnings:[...warnings,`Fuentes generales: ${error instanceof Error?error.message:'no se pudo completar la búsqueda pública.'}`]};}
+  let general:ResearchResult|null=null;
+  try{
+   general=mergeResearchWarnings(await runGeneralResearch(item),warnings);
+   if(hasVerifiedValue(general))return general;
+  }catch(error){
+   warnings.push(`Fuentes generales: ${error instanceof Error?error.message:'no se pudo completar la búsqueda pública.'}`);
+  }
+  const ebay=await tryEbayExact(general);
+  if(ebay)return ebay;
+  return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
  }
 
  let general:ResearchResult|null=null;
@@ -395,5 +420,7 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
  }
  try{return await tryPriceCharting();}
  catch(error){warnings.push(`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`);}
+ const ebay=await tryEbayExact(general);
+ if(ebay)return ebay;
  return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
 }
