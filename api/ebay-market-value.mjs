@@ -122,6 +122,8 @@ function exactMatch(item,row){
     if(candidateMpn===sku||compact(hay).includes(sku)){score+=110;strong.push('SKU/MPN');}
   }
 
+  const hasStrongProductId=strong.some(x=>['GTIN/ISBN','SKU/MPN','ISBN'].includes(x));
+
   const manufacturer=String(item.manufacturer||'').trim();
   if(manufacturer){
     if(hasConflictingAspect(map,['brand','marca'],manufacturer))return {ok:false,score:0,reason:'marca distinta'};
@@ -137,12 +139,12 @@ function exactMatch(item,row){
   if(character){
     const c=tokenCoverage(character,hay);
     if(c>=.8)score+=25;
-    else if(c<.5)return {ok:false,score:0,reason:'personaje distinto'};
+    else if(c<.5&&!hasStrongProductId)return {ok:false,score:0,reason:'personaje distinto'};
   }
 
   const title=String(item.title||'').trim();
   const titleCoverage=tokenCoverage(title,hay);
-  if(fieldTokens(title).length>=2&&titleCoverage<.62)return {ok:false,score:0,reason:'título insuficiente'};
+  if(fieldTokens(title).length>=2&&titleCoverage<.62&&!hasStrongProductId)return {ok:false,score:0,reason:'título insuficiente'};
   score+=Math.round(titleCoverage*45);
 
   if(item.type==='funko'){
