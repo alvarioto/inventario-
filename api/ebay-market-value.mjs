@@ -106,6 +106,7 @@ function exactMatch(item,row){
   const barcode=numericId(item.barcode||item.isbn);
   const sku=compact(item.sku);
   const candidateGtins=uniq([
+    row?._matchedGtin,
     ...(Array.isArray(row?.gtin)?row.gtin:row?.gtin?[row.gtin]:[]),
     map.get('ean'),map.get('upc'),map.get('isbn'),map.get('gtin')
   ].map(numericId));
@@ -255,7 +256,7 @@ async function token(){
   return cache.token;
 }
 function headers(accessToken,marketplace){
-  return {Authorization:'Bearer '+accessToken,'X-EBAY-C-MARKETPLACE-ID':marketplace,'X-EBAY-C-ENDUSERCTX':'contextualLocation=country%3DES'};
+  return {Authorization:'Bearer '+accessToken,'X-EBAY-C-MARKETPLACE-ID':marketplace};
 }
 async function search(accessToken,marketplace,item){
   const out=new Map();
@@ -268,7 +269,10 @@ async function search(accessToken,marketplace,item){
     if(!response.ok)continue;
     const data=await response.json().catch(()=>({}));
     for(const row of data.itemSummaries||[]){
-      if(row?.itemId&&!out.has(row.itemId))out.set(row.itemId,row);
+      if(!row?.itemId)continue;
+      const enriched=query.kind==='gtin'?{...row,_matchedGtin:query.value}:row;
+      if(!out.has(row.itemId))out.set(row.itemId,enriched);
+      else if(query.kind==='gtin')out.set(row.itemId,{...out.get(row.itemId),_matchedGtin:query.value});
     }
     if(out.size>=DETAIL_LIMIT)break;
   }
