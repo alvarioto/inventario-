@@ -53,7 +53,19 @@ function evidence(row){
 }
 function listingLooksWrong(item,row){
   const raw=normalize(evidence(row));
+  const category=normalize(row?.categoryPath||row?.category?.categoryName||'');
   const wanted=normalize([item.title,item.edition,item.funkoVariant,item.funkoCategory].filter(Boolean).join(' '));
+  if(item.type==='comic'||item.type==='manga'){
+    if(/trading card|sports card|video game|action figure|funko|lego/.test(category))return'categoría incompatible';
+  }else if(item.type==='figure'){
+    if(/video game|trading card|comic book|manga|funko pop/.test(category))return'categoría incompatible';
+  }else if(item.type==='card'){
+    if(/video game|comic book|manga|action figure/.test(category))return'categoría incompatible';
+  }else if(item.type==='game'){
+    if(/trading card|comic book|manga|action figure/.test(category))return'categoría incompatible';
+  }else if(item.type==='funko'){
+    if(/video game|trading card|comic book|manga/.test(category))return'categoría incompatible';
+  }
   const rejects=[
     ['empty box',/\bempty box\b|\bbox only\b|\bpackaging only\b|\bno figure\b|\bno game\b|\bno comic\b/],
     ['replacement',/\breplacement\b|\bspare part\b|\bparts only\b/],
