@@ -49,6 +49,16 @@ const noisyAudit=applyFigurePackageAudit({
 assert.ok(noisyAudit.tags.length<=12);
 assert.ok(noisyAudit.tags.every(tag=>tag.length<=60));
 
+const barcodeAudit=applyFigurePackageAudit({
+  title:'NECA Batman 1989',type:'figure',character:'Batman',manufacturer:'NECA',
+  line:'Batman',sku:'966W071213',barcode:'',confidence:.9,explanation:'x',tags:[]
+},{
+  printedNames:['Batman'],line:'Batman',edition:'',sku:'966W071213',
+  barcode:'634482612415',visibleTexts:['634482612415'],confidence:.99
+});
+assert.equal(barcodeAudit.barcode,'634482612415');
+assert.equal(barcodeAudit.sku,'966W071213');
+
 // End-to-end: figure => main vision + independent visual verification + package audit.
 // The second call corrects a loose/misread figure even if the packaging audit has no text.
 let calls=0;
