@@ -189,7 +189,7 @@ function exactMatch(item,row){
 
   const title=String(item.title||'').trim();
   const titleCoverage=tokenCoverage(title,hay);
-  if(fieldTokens(title).length>=2&&titleCoverage<.62&&!hasStrongProductId)return {ok:false,score:0,reason:'título insuficiente'};
+  const titleTooWeak=fieldTokens(title).length>=2&&titleCoverage<.62&&!hasStrongProductId;
   score+=Math.round(titleCoverage*45);
   if(titleCoverage>=.72)softExact.push('título');
 
@@ -202,6 +202,8 @@ function exactMatch(item,row){
     const yearHint=inferredYear(item);
     if(yearHint&&standalone(hay,yearHint)){score+=15;softExact.push('año');}
   }
+
+  if(titleTooWeak&&softExact.length<3)return {ok:false,score:0,reason:'título insuficiente'};
 
   if(item.type==='funko'){
     const pop=String(item.popNumber||'').replace(/\D/g,'');
