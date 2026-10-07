@@ -25,6 +25,17 @@ const batmanExact={
 };
 assert.equal(exactMatch(batman,batmanExact).ok,true);
 
+// Un GTIN exacto debe seguir validando el producto aunque el vendedor abrevie el título.
+const batmanShortTitle={
+  title:'NECA Batman 18" Michael Keaton New Factory Sealed',
+  brand:'NECA',
+  _matchedGtin:'634482612415',
+  categoryPath:'Toys & Hobbies > Action Figures',
+  price:{value:'249.99',currency:'EUR'},
+  localizedAspects:[{name:'Brand',value:'NECA'}]
+};
+assert.equal(exactMatch(batman,batmanShortTitle).ok,true);
+
 const batmanWrongGame={
   title:'Batman Rise Of Sin Tzu Action Figure Commemorative Edition Xbox',
   gtin:['999999999999'],
