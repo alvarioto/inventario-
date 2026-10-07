@@ -835,6 +835,7 @@ const figurePackageAuditSchema=z.object({
  line:z.string().max(160).default(''),
  edition:z.string().max(160).default(''),
  sku:z.string().max(120).default(''),
+ barcode:z.string().max(32).default(''),
  visibleTexts:z.array(z.string().max(180)).max(16).default([]),
  confidence:z.number().min(0).max(1).default(0)
 });
@@ -857,6 +858,8 @@ export function applyFigurePackageAudit(row,audit){
  const printedTitle=[line,names.join(' & ')].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
  const edition=cleanPrintedLabel(audit.edition||row.edition||'');
  const sku=cleanPrintedLabel(audit.sku||row.sku||'');
+ const auditedBarcode=String(audit.barcode||'').replace(/\D/g,'');
+ const barcode=/^\d{8,14}$/.test(auditedBarcode)?auditedBarcode:String(row.barcode||'');
  const tags=[...new Set([...(Array.isArray(row.tags)?row.tags:[]),...names,...(edition?[edition]:[]),...(audit.visibleTexts||[]).map(cleanPrintedLabel).filter(Boolean)])]
   .map(tag=>String(tag||'').replace(/\s+/g,' ').trim().slice(0,60))
   .filter(Boolean)
@@ -868,19 +871,20 @@ export function applyFigurePackageAudit(row,audit){
   line:line||row.line,
   edition:edition||row.edition,
   sku:sku||row.sku,
+  barcode:barcode||row.barcode,
   tags,
   confidence:Math.max(Number(row.confidence)||0,Number(audit.confidence)||0),
-  explanation:`${row.explanation||''} Auditoría literal del frontal: ${names.join(' & ')}${sku?` · SKU ${sku}`:''}.`.trim()
+  explanation:`${row.explanation||''} Auditoría literal del embalaje: ${names.join(' & ')}${sku?` · SKU ${sku}`:''}${barcode?` · código ${barcode}`:''}.`.trim()
  };
 }
 
 async function auditFigurePackage(images,config){
  try{
   const result=await deepseek([
-   {role:'system',content:'SEGUNDA PASADA DE CONTROL PARA FIGURAS. Tu única tarea es LEER TEXTO LITERAL del embalaje; NO identifiques la variante por la cara, traje, edad, pose ni por memoria. Devuelve SOLO JSON: {"printedNames":[],"line":"","edition":"","sku":"","visibleTexts":[],"confidence":0}. printedNames contiene EXCLUSIVAMENTE los nombres/etiquetas del producto impresos junto a la figura o en su cartela (por ejemplo "Wolverine (Weapon X)", "Iron Man Mark LXXXV", "Thanos"). NO metas logos de franquicia como Marvel, X-Men o DC. line es la línea impresa si se lee (p. ej. Marvel Legends Series). edition es una edición/colección explícita si está impresa. sku solo si el código de producto es legible. visibleTexts conserva otras frases cortas útiles. Si no puedes leer una etiqueta con seguridad, déjala fuera. Está PROHIBIDO sustituir una etiqueta visible por otra versión conocida del personaje: si el cartón dice Weapon X, no puedes responder Old Man Logan.'},
+   {role:'system',content:'SEGUNDA PASADA DE CONTROL PARA FIGURAS. Tu única tarea es LEER TEXTO LITERAL del embalaje en TODAS las fotos; NO identifiques la variante por la cara, traje, edad, pose ni por memoria. Devuelve SOLO JSON: {"printedNames":[],"line":"","edition":"","sku":"","barcode":"","visibleTexts":[],"confidence":0}. printedNames contiene EXCLUSIVAMENTE los nombres/etiquetas del producto impresos junto a la figura o en su cartela. NO metas logos de franquicia como Marvel, X-Men o DC. line es la línea impresa si se lee. edition es una edición/colección explícita si está impresa. sku es el código de producto o Item No. barcode es EXCLUSIVAMENTE el EAN/UPC numérico de 8 a 14 dígitos leído debajo o junto al código de barras; no confundas SKU con barcode. visibleTexts conserva otras frases cortas útiles. Si no puedes leer un dato con seguridad, déjalo vacío. Está PROHIBIDO sustituir una etiqueta visible por otra versión conocida del personaje.'},
    {role:'user',content:[
-    {type:'text',text:'Lee literalmente el frontal de este artículo. Prioriza la etiqueta de nombre del producto sobre cualquier deducción visual. No inventes ninguna variante que no aparezca escrita.'},
-    ...images.slice(0,2).map((url,index)=>({type:'image_url',image_url:{url},detail:index===0?'high':'low'}))
+    {type:'text',text:'Lee literalmente el embalaje completo en todas las vistas disponibles. Prioriza nombre, línea, SKU/Item No. y EAN/UPC numérico del código de barras. No inventes ninguna variante que no aparezca escrita.'},
+    ...images.slice(0,4).map((url,index)=>({type:'image_url',image_url:{url},detail:index<2?'high':'low'}))
    ]}
   ],{...config,maxTokens:500,timeoutMs:18000,retries:0,jsonMode:false});
   return figurePackageAuditSchema.parse(result);

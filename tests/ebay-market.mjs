@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { exactMatch, aggregate, buildQueries } from '../api/ebay-market-value.mjs';
+import ebayHandler, { exactMatch, aggregate, buildQueries } from '../api/ebay-market-value.mjs';
 
 const batman={
   type:'figure',
@@ -44,6 +44,26 @@ const batmanWrongGame={
   localizedAspects:[{name:'Platform',value:'Microsoft Xbox'}]
 };
 assert.equal(exactMatch(batman,batmanWrongGame).ok,false);
+
+const appBatman={
+  type:'figure',
+  title:'NECA Batman (1989) Batman (1989) 1/4 Scale Action Figure 966W071213',
+  character:'Batman (1989)',
+  manufacturer:'NECA',
+  line:'Batman (1989) 1/4 Scale Action Figure',
+  sku:'966W071213'
+};
+const appBatmanExact={
+  title:'NECA Batman 1989 Michael Keaton 1/4 Scale Action Figure',
+  brand:'NECA',
+  categoryPath:'Toys & Hobbies > Action Figures',
+  localizedAspects:[{name:'Brand',value:'NECA'},{name:'Character',value:'Batman'}],
+  price:{value:'199.99',currency:'EUR'}
+};
+assert.equal(exactMatch(appBatman,appBatmanExact).ok,true);
+const appQueries=buildQueries(appBatman);
+assert.ok(appQueries.some(q=>q.kind==='q'&&q.value==='966W071213'));
+assert.ok(appQueries.some(q=>q.kind==='q'&&/NECA/i.test(q.value)&&/Batman/i.test(q.value)&&/1\/4/.test(q.value)&&!q.value.includes('966W071213')));
 
 const comic={
   type:'comic',
@@ -116,5 +136,23 @@ assert.equal(market.count,4);
 assert.equal(market.average,102.5);
 assert.equal(market.min,95);
 assert.equal(market.max,110);
+
+
+// El endpoint debe aceptar la web Firebase por CORS y resolver OPTIONS sin tocar eBay.
+{
+  const headers={};
+  let ended=false;
+  const req={method:'OPTIONS',headers:{origin:'https://frikivault-alvarioto-2026.web.app'}};
+  const res={
+    statusCode:0,
+    setHeader:(k,v)=>{headers[k]=v;},
+    end:()=>{ended=true;}
+  };
+  await ebayHandler(req,res);
+  assert.equal(res.statusCode,204);
+  assert.equal(headers['Access-Control-Allow-Origin'],'https://frikivault-alvarioto-2026.web.app');
+  assert.equal(headers['Access-Control-Allow-Methods'],'POST, OPTIONS');
+  assert.equal(ended,true);
+}
 
 console.log('ebay market tests ok');
