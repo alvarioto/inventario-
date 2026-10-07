@@ -12,6 +12,21 @@ function json(res,status,body){
   res.setHeader('Cache-Control','no-store');
   res.end(JSON.stringify(body));
 }
+function configuredOrigins(){
+  const values=String(process.env.APP_ORIGIN||'').split(',').map(x=>x.trim().replace(/\/$/,'')).filter(Boolean);
+  return new Set(['https://frikivault-alvarioto-2026.web.app','https://frikivault-alvarioto-2026.firebaseapp.com',...values]);
+}
+function applyCors(req,res){
+  const origin=String(req.headers?.origin||'').replace(/\/$/,'');
+  if(!origin)return true;
+  if(!configuredOrigins().has(origin))return false;
+  res.setHeader('Access-Control-Allow-Origin',origin);
+  res.setHeader('Vary','Origin');
+  res.setHeader('Access-Control-Allow-Headers','Content-Type');
+  res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');
+  res.setHeader('Access-Control-Max-Age','86400');
+  return true;
+}
 function normalize(value){
   return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim();
 }
@@ -87,6 +102,35 @@ function tokenCoverage(value,hay){
   const hits=tokens.filter(t=>normalize(hay).includes(t)).length;
   return hits/tokens.length;
 }
+function extractScaleHint(item){
+  const raw=String(item?.scale||'')+' '+String(item?.line||'')+' '+String(item?.title||'');
+  const ratio=raw.match(/\b1\s*[\/:]\s*(\d{1,2})\b/i);
+  if(ratio)return {kind:'ratio',value:Number(ratio[1])};
+  const inches=raw.match(/\b(\d{1,2}(?:\.\d+)?)\s*(?:inch(?:es)?|in\b|")/i);
+  if(inches)return {kind:'inch',value:Number(inches[1])};
+  return null;
+}
+function scaleMatches(hay,hint){
+  if(!hint)return true;
+  const raw=String(hay||'');
+  if(hint.kind==='ratio'){
+    if(new RegExp('\\b1\\s*[\\/:]\\s*'+hint.value+'\\b','i').test(raw))return true;
+    if(hint.value===4){
+      const inch=raw.match(/\b(1[789]|20|21)\s*(?:inch(?:es)?|in\b|")/i);
+      if(inch)return true;
+      if(/\bquarter\s+scale\b/i.test(raw))return true;
+    }
+    return false;
+  }
+  const found=raw.match(/\b(\d{1,2}(?:\.\d+)?)\s*(?:inch(?:es)?|in\b|")/i);
+  return !!found&&Math.abs(Number(found[1])-hint.value)<=1;
+}
+function inferredYear(item){
+  const direct=Number(item?.year);
+  if(Number.isInteger(direct)&&direct>=1900&&direct<=2100)return String(direct);
+  const raw=[item?.title,item?.line,item?.edition].filter(Boolean).join(' ');
+  return raw.match(/\b(?:19|20)\d{2}\b/)?.[0]||'';
+}
 function hasConflictingAspect(map,names,wanted){
   const expected=compact(wanted);
   if(!expected)return false;
@@ -103,6 +147,7 @@ function exactMatch(item,row){
 
   let score=0;
   const strong=[];
+  const softExact=[];
   const barcode=numericId(item.barcode||item.isbn);
   const sku=compact(item.sku);
   const candidateGtins=uniq([
@@ -128,17 +173,17 @@ function exactMatch(item,row){
   if(manufacturer){
     if(hasConflictingAspect(map,['brand','marca'],manufacturer))return {ok:false,score:0,reason:'marca distinta'};
     const c=tokenCoverage(manufacturer,hay);
-    if(c>=.8)score+=18;
+    if(c>=.8){score+=18;softExact.push('marca');}
   }
   const line=String(item.line||'').trim();
   if(line){
     const c=tokenCoverage(line,hay);
-    if(c>=.75)score+=20;
+    if(c>=.75){score+=20;softExact.push('línea');}
   }
   const character=String(item.character||'').trim();
   if(character){
     const c=tokenCoverage(character,hay);
-    if(c>=.8)score+=25;
+    if(c>=.8){score+=25;softExact.push('personaje');}
     else if(c<.5&&!hasStrongProductId)return {ok:false,score:0,reason:'personaje distinto'};
   }
 
@@ -146,6 +191,17 @@ function exactMatch(item,row){
   const titleCoverage=tokenCoverage(title,hay);
   if(fieldTokens(title).length>=2&&titleCoverage<.62&&!hasStrongProductId)return {ok:false,score:0,reason:'título insuficiente'};
   score+=Math.round(titleCoverage*45);
+  if(titleCoverage>=.72)softExact.push('título');
+
+  if(item.type==='figure'){
+    const scaleHint=extractScaleHint(item);
+    if(scaleHint){
+      if(!scaleMatches(hay,scaleHint))return {ok:false,score:0,reason:'escala/tamaño distinto o no verificable'};
+      score+=30;softExact.push('escala');
+    }
+    const yearHint=inferredYear(item);
+    if(yearHint&&standalone(hay,yearHint)){score+=15;softExact.push('año');}
+  }
 
   if(item.type==='funko'){
     const pop=String(item.popNumber||'').replace(/\D/g,'');
@@ -203,9 +259,13 @@ function exactMatch(item,row){
     else if(fieldTokens(v).length>=2&&c<.4)return {ok:false,score:0,reason:`${label} distinta`};
   }
 
-  // Si conocemos un identificador fuerte, al menos uno debe aparecer realmente en el anuncio.
-  if((barcode||sku)&&!strong.some(x=>['GTIN/ISBN','SKU/MPN','ISBN'].includes(x))){
-    return {ok:false,score:0,reason:'sin identificador fuerte verificable'};
+  // Un GTIN/ISBN conocido sí debe quedar demostrado. Un SKU puede no estar publicado
+  // por el vendedor; si no hay MPN contradictorio, exigimos varios rasgos físicos exactos.
+  if(barcode&&!strong.some(x=>['GTIN/ISBN','ISBN'].includes(x))){
+    return {ok:false,score:0,reason:'sin GTIN/ISBN verificable'};
+  }
+  if(sku&&!strong.includes('SKU/MPN')&&softExact.length<3){
+    return {ok:false,score:0,reason:'SKU no verificable y faltan rasgos exactos suficientes'};
   }
   // Sin códigos, exigimos al menos un rasgo discriminante específico además del título.
   if(!barcode&&!sku&&strong.length===0){
@@ -228,8 +288,16 @@ function buildQueries(item){
   };
   if(item.type==='funko'){
     pushText([item.character||item.title,item.popNumber,item.funkoVariant,item.funkoCategory]);
+    pushText([item.character||item.title,item.popNumber]);
   }else if(item.type==='figure'){
-    pushText([item.manufacturer,item.line,item.character||item.title,item.sku,item.exclusive]);
+    const scaleHint=extractScaleHint(item);
+    const scaleText=scaleHint?.kind==='ratio'?`1/${scaleHint.value}`:scaleHint?.kind==='inch'?`${scaleHint.value} inch`:'';
+    const yearHint=inferredYear(item);
+    if(item.sku)pushText([item.sku]);
+    pushText([item.manufacturer,item.character||item.title,yearHint,scaleText,item.exclusive]);
+    pushText([item.manufacturer,item.character||item.title,scaleText]);
+    pushText([item.manufacturer,item.character||item.title,yearHint]);
+    pushText([item.manufacturer,item.character||item.title]);
   }else if(item.type==='comic'||item.type==='manga'){
     pushText([item.title,item.issueNumber?('#'+item.issueNumber):'',item.edition,item.isbn]);
   }else if(item.type==='card'){
@@ -240,7 +308,7 @@ function buildQueries(item){
     pushText([item.manufacturer,item.line,item.title,item.sku,item.edition]);
   }
   pushText([item.title,item.sku,item.barcode]);
-  return rows.slice(0,3);
+  return rows.slice(0,6);
 }
 async function token(){
   const now=Date.now();
@@ -348,6 +416,8 @@ function aggregate(rows){
 export {normalize,buildQueries,exactMatch,aggregate};
 
 export default async function handler(req,res){
+  if(!applyCors(req,res))return json(res,403,{ok:false,error:'Origen no autorizado.'});
+  if(req.method==='OPTIONS'){res.statusCode=204;return res.end();}
   if(req.method!=='POST')return json(res,405,{ok:false,error:'POST only'});
   const item=req.body?.item||{};
   if(!String(item.title||item.character||item.sku||item.barcode||item.isbn||'').trim()){
