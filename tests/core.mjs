@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify, isGenericProductTitle, buildResearchIdentity, applyFigurePackageAudit } from '../server/core.mjs';
-import { exactMatch as exactEbayMatch, marketplaceOrder } from '../api/ebay-market-value.mjs';
+import { exactMatch as exactEbayMatch, marketplaceOrder, funkoIdentityFromAccepted } from '../api/ebay-market-value.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
@@ -50,6 +50,22 @@ assert.match(alienWrongPopWithoutGtin.reason,/número Pop/i);
 assert.deepEqual(marketplaceOrder('EBAY_ES',{type:'funko'}),['EBAY_ES','EBAY_US','EBAY_GB']);
 assert.deepEqual(marketplaceOrder('EBAY_US',{type:'funko'}),['EBAY_US','EBAY_GB']);
 assert.deepEqual(marketplaceOrder('EBAY_ES',{type:'figure'}),['EBAY_ES']);
+
+const resolvedAlien=funkoIdentityFromAccepted(
+  {type:'funko',barcode:'889698903189'},
+  [{
+    match:{matchedBy:['GTIN/ISBN'],ok:true},
+    row:{
+      title:'Funko Pop! Premium Sfx: Alien - Chestburster #1988',
+      localizedAspects:[
+        {name:'Box Number',value:'1988'},
+        {name:'Product Line',value:'Pop! Premium Sfx'}
+      ]
+    }
+  }]
+);
+assert.equal(resolvedAlien.popNumber,'1988');
+assert.equal(resolvedAlien.funkoCategory,'Pop! Premium');
 
 const market = summarizeListings([
   {price:10,currency:'EUR',shipping:2},
@@ -384,6 +400,8 @@ assert.doesNotMatch(appSource,/site:figurerealm\.com|site:figurestash\.com|site:
 assert.match(appSource,/Otras referencias orientativas/);
 assert.match(appSource,/preserveVerifiedResearch\(research, freshResearch\)/);
 assert.match(appSource,/displayedResearchValue\(next, current\.currency \|\| 'EUR'\)/);
+assert.match(appSource,/popNumber: next\.resolvedIdentity\.popNumber \|\| current\.popNumber/);
+assert.match(appSource,/funkoCategory: next\.resolvedIdentity\.funkoCategory \|\| current\.funkoCategory/);
 assert.match(appSource,/function valuationIdentityChanged/);
 assert.match(appSource,/eBay Product Research · ventas reales/);
 assert.match(appSource,/>PriceCharting<\/a>/);
