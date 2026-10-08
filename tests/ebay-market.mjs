@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import ebayHandler, { exactMatch, aggregate, buildQueries } from '../api/ebay-market-value.mjs';
+import ebayHandler, { exactMatch, aggregate, buildQueries, validGtin, funkoIdentityFromAccepted } from '../api/ebay-market-value.mjs';
 
 const batman={
   type:'figure',
@@ -114,6 +114,80 @@ const exactChase={
 };
 assert.equal(exactMatch(chase,regular).ok,false);
 assert.equal(exactMatch(chase,exactChase).ok,true);
+
+// Los GTIN inválidos se descartan y el SKU pasa a ser la identidad fuerte.
+assert.equal(validGtin('889698903189'),'889698903189');
+assert.equal(validGtin('889698710010'),'');
+assert.equal(validGtin('889698710015'),'889698710015');
+
+const ianMalcolm={
+  type:'funko',
+  title:'Funko Blockbuster Rewind Jurassic Park Ian Malcolm Chase',
+  character:'Ian Malcolm',
+  manufacturer:'Funko',
+  funkoCategory:'REWIND',
+  funkoVariant:'Chase',
+  popNumber:'1982',
+  sku:'71001',
+  barcode:'889698710010'
+};
+const ianQueries=buildQueries(ianMalcolm);
+assert.equal(ianQueries.some(q=>q.kind==='gtin'),false);
+assert.ok(ianQueries[0].kind==='q'&&ianQueries[0].value.includes('71001'));
+const ianExact={
+  title:'Funko REWIND Jurassic Park Ian Malcolm Flare Variant CHASE',
+  brand:'Funko',
+  mpn:'71001',
+  gtin:['889698710015'],
+  categoryPath:'Collectibles > Funko',
+  price:{value:'25.99',currency:'USD'},
+  itemId:'ian-chase',
+  localizedAspects:[
+    {name:'Brand',value:'Funko'},
+    {name:'MPN',value:'71001'},
+    {name:'Product Line',value:'REWIND'},
+    {name:'UPC',value:'889698710015'}
+  ]
+};
+const ianMatch=exactMatch(ianMalcolm,ianExact);
+assert.equal(ianMatch.ok,true);
+const ianResolved=funkoIdentityFromAccepted(ianMalcolm,[{row:ianExact,match:ianMatch}]);
+assert.equal(ianResolved.funkoCategory,'REWIND');
+assert.equal(ianResolved.barcode,'889698710015');
+
+const chestburster={
+  type:'funko',
+  title:'Pop! Movies Alien Chestburster',
+  character:'Chestburster',
+  manufacturer:'Funko',
+  funkoCategory:'Pop! Regular',
+  funkoVariant:'',
+  popNumber:'1982',
+  sku:'90318',
+  barcode:'889698903189'
+};
+const chestbursterExact={
+  title:'Funko Pop! Premium Alien Chestburster Light Up #1988',
+  brand:'Funko',
+  mpn:'90318',
+  gtin:['889698903189'],
+  categoryPath:'Collectibles > Funko',
+  price:{value:'29.99',currency:'USD'},
+  itemId:'chestburster-1988',
+  localizedAspects:[
+    {name:'Brand',value:'Funko'},
+    {name:'MPN',value:'90318'},
+    {name:'Product Line',value:'Pop! Premium'},
+    {name:'UPC',value:'889698903189'},
+    {name:'Box Number',value:'1988'}
+  ]
+};
+const chestMatch=exactMatch(chestburster,chestbursterExact);
+assert.equal(chestMatch.ok,true);
+const chestResolved=funkoIdentityFromAccepted(chestburster,[{row:chestbursterExact,match:chestMatch}]);
+assert.equal(chestResolved.popNumber,'1988');
+assert.equal(chestResolved.funkoCategory,'Pop! Premium');
+assert.equal(chestResolved.barcode,'889698903189');
 
 const queries=buildQueries({
   type:'figure',title:'Marvel Legends Iron Man Mark LXXXV & Thanos',

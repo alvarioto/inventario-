@@ -87,6 +87,17 @@ function cleanFunkoIdentification(row:AiIdentification,audit?:{performed:boolean
 function normalizeStrongId(value:unknown){
  return String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 }
+function validGtin(value:unknown){
+ const raw=String(value||'').replace(/[^0-9]/g,'');
+ if(![8,12,13,14].includes(raw.length))return'';
+ let sum=0,weight=3;
+ for(let i=raw.length-2;i>=0;i--){
+  sum+=Number(raw[i])*weight;
+  weight=weight===3?1:3;
+ }
+ const expected=String((10-(sum%10))%10);
+ return raw.at(-1)===expected?raw:'';
+}
 function priceChartingMatchesExactFigure(item:Partial<InventoryDraft>,guide:{url?:string;title?:string;evidence?:string}){
  if(item.type!=='figure')return true;
  const strongIds=[item.barcode,item.sku]
@@ -140,7 +151,7 @@ type EbayMarketValue={
  ok:boolean;found:boolean;source?:string;marketplace?:string;targetSample?:number;minimumSample?:number;
  average?:number;min?:number;max?:number;currency?:string;count?:number;listings?:EbayExactListing[];
  methodology?:string;reason?:string;singleReference?:boolean;
- resolvedIdentity?:{popNumber?:string;funkoCategory?:string};
+ resolvedIdentity?:{popNumber?:string;funkoCategory?:string;barcode?:string};
 };
 async function readEbayMarketValue(item:Partial<InventoryDraft>):Promise<EbayMarketValue|null>{
  if(!ebayMarketValueUrl)return null;
@@ -288,7 +299,10 @@ function applyLegendsVerseValue(research:ResearchResult,item:Partial<InventoryDr
  const result=direct?await identifyDirect(images):await post<AiIdentification>('identify',{images});
  let audit:{performed:boolean;stickerTexts:string[];confidence:number}|undefined;
  if(result.type==='funko'&&direct) audit=await inspectFunkoStickersDirect(images);
- return cleanFunkoIdentification(result,audit);
+ const cleaned=cleanFunkoIdentification(result,audit);
+ // Un EAN/UPC con checksum inválido nunca debe ganar a SKU, texto de caja o
+ // una lectura posterior del mercado exacto.
+ return {...cleaned,barcode:validGtin(cleaned.barcode)};
 }
 function freeResearchShell(item:Partial<InventoryDraft>):ResearchResult{
  const identity=[item.manufacturer,item.line,item.character||item.title,item.wave,item.edition,item.exclusive,item.year,item.popNumber,item.funkoVariant].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()||String(item.title||'').trim();
@@ -420,20 +434,46 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
   return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
  }
 
- // Funkos: eBay exacto es la base automática. PriceCharting queda como
- // respaldo opcional: un 403/Cloudflare nunca debe dejar el Funko sin valorar.
+ // Funkos: los identificadores fuertes resuelven primero la identidad. Para el
+ // VALOR, una guía/venta cerrada exacta gana a unos pocos anuncios activos.
  if(item.type==='funko'){
-  const ebay=await tryEbayExact(null);
-  if(ebay)return ebay;
-  try{return await tryPriceCharting();}
-  catch(error){warnings.push(`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`);}
+  let ebayMarket:EbayMarketValue|null=null;
+  try{
+   ebayMarket=await readEbayMarketValue(item);
+   if(ebayMarket?.resolvedIdentity){
+    item={...item,...ebayMarket.resolvedIdentity,barcode:ebayMarket.resolvedIdentity.barcode||item.barcode};
+   }
+   if(ebayMarket?.reason)warnings.push(`eBay: ${ebayMarket.reason}`);
+  }catch(error){
+   warnings.push(`eBay: ${error instanceof Error?error.message:'no se pudo consultar el mercado exacto.'}`);
+  }
+
+  try{
+   const guide=await readPriceChartingValue(item);
+   if(!guide)throw new Error('PriceCharting no devolvió un precio verificable.');
+   const withRates=await ensureUsdDisplayRates({...baseResearch,warnings:[...warnings]});
+   const priced=applyPriceChartingValue(withRates,guide);
+   return ebayMarket?.resolvedIdentity
+    ?{...priced,resolvedIdentity:{...(priced.resolvedIdentity||{}),...ebayMarket.resolvedIdentity}}
+    :priced;
+  }catch(error){
+   warnings.push(`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`);
+  }
+
   let general:ResearchResult|null=null;
   try{
    general=mergeResearchWarnings(await runGeneralResearch(item),warnings);
-   if(hasVerifiedValue(general))return general;
+   if(hasVerifiedValue(general)&&['sold','guide'].includes(general.asking.kind))return general;
   }catch(error){
    warnings.push(`Fuentes generales: ${error instanceof Error?error.message:'no se pudo completar la búsqueda pública.'}`);
   }
+
+  if(ebayMarket?.found&&ebayMarket.average!=null&&ebayMarket.min!=null&&ebayMarket.max!=null){
+   const seed=general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings:[...warnings]};
+   const withRates=await ensureUsdDisplayRates(seed);
+   return applyEbayMarketValue(withRates,ebayMarket);
+  }
+  if(hasVerifiedValue(general))return general!;
   return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
  }
 

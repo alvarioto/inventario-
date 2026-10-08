@@ -104,11 +104,12 @@ assert.equal(buildResearchIdentity(popsies),'Michael Scott Popsies');
 // REWIND: el embalaje tipo VHS no puede convertirlo en película/VHS.
 const rewind=await classifyFunkoCase({
   title:'REWIND Voltron',type:'movie',franchise:'Voltron',character:'Voltron',
-  manufacturer:'Funko',line:'REWIND',funkoCategory:'',confidence:.98,
+  manufacturer:'Funko',line:'REWIND',funkoCategory:'',popNumber:'1982',confidence:.98,
   explanation:'Figura Funko REWIND en embalaje inspirado en VHS.',tags:['REWIND']
 });
 assert.equal(rewind.type,'funko');
 assert.equal(rewind.funkoCategory,'REWIND');
+assert.equal(rewind.popNumber,'');
 assert.equal(buildResearchIdentity(rewind),'Voltron REWIND');
 
 // Pop! VHS Covers: debe conservar el subtipo exacto y no degradarse a Covers genérico ni a película.
