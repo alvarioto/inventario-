@@ -161,7 +161,8 @@ async function readEbayMarketValue(item:Partial<InventoryDraft>):Promise<EbayMar
   exclusive:item.exclusive||'',edition:item.edition||'',issueNumber:item.issueNumber||'',volume:item.volume||'',
   setName:item.setName||'',cardNumber:item.cardNumber||'',rarity:item.rarity||'',platform:item.platform||'',
   year:item.year||null,barcode:item.barcode||'',isbn:item.isbn||'',sku:item.sku||'',
-  popNumber:item.popNumber||'',funkoCategory:item.funkoCategory||'',funkoVariant:item.funkoVariant||''
+  popNumber:item.popNumber||'',funkoCategory:item.funkoCategory||'',funkoVariant:item.funkoVariant||'',
+  signed:Boolean(item.signed),signedBy:item.signedBy||''
  }});
  return result as EbayMarketValue;
 }
@@ -305,7 +306,7 @@ function applyLegendsVerseValue(research:ResearchResult,item:Partial<InventoryDr
  return {...cleaned,barcode:validGtin(cleaned.barcode)};
 }
 function freeResearchShell(item:Partial<InventoryDraft>):ResearchResult{
- const identity=[item.manufacturer,item.line,item.character||item.title,item.wave,item.edition,item.exclusive,item.year,item.popNumber,item.funkoVariant].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()||String(item.title||'').trim();
+ const identity=[item.manufacturer,item.line,item.character||item.title,item.wave,item.edition,item.exclusive,item.year,item.popNumber,item.funkoVariant,item.signed?item.signedBy:'',item.signed?'Signed Autographed':''].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()||String(item.title||'').trim();
  return {
   checkedAt:new Date().toISOString(),
   searchIdentity:identity,
@@ -371,6 +372,25 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
   }
   return null;
  };
+
+ // Firmados: nunca usamos una guía estándar como si incluyera la prima de la firma.
+ // Primero buscamos eBay exacto firmado y después fuentes públicas que acrediten la firma.
+ if(item.signed===true){
+  if(!String(item.signedBy||'').trim()){
+   warnings.push('Firmado: indica “Firmado por” para evitar mezclar firmas distintas. Se buscarán solo anuncios que acrediten que el artículo está firmado.');
+  }
+  const ebay=await tryEbayExact(null);
+  if(ebay)return ebay;
+  let general:ResearchResult|null=null;
+  try{
+   general=mergeResearchWarnings(await runGeneralResearch(item),warnings);
+   if(hasVerifiedValue(general))return general;
+  }catch(error){
+   warnings.push(`Fuentes firmadas: ${error instanceof Error?error.message:'no se pudo completar la búsqueda pública.'}`);
+  }
+  warnings.push('No se encontró una valoración firmada verificable. No se usa el precio de una unidad normal como sustituto.');
+  return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
+ }
 
  // Figuras no Funko: ActionFigure411 es la fuente principal de estimación.
  // Solo si no identifica con seguridad la pieza o no tiene ventas cerradas,
