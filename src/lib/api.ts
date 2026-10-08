@@ -139,6 +139,7 @@ type EbayMarketValue={
  ok:boolean;found:boolean;source?:string;marketplace?:string;targetSample?:number;minimumSample?:number;
  average?:number;min?:number;max?:number;currency?:string;count?:number;listings?:EbayExactListing[];
  methodology?:string;reason?:string;
+ resolvedIdentity?:{popNumber?:string;funkoCategory?:string};
 };
 async function readEbayMarketValue(item:Partial<InventoryDraft>):Promise<EbayMarketValue|null>{
  if(!ebayMarketValueUrl)return null;
@@ -200,6 +201,7 @@ function applyEbayMarketValue(research:ResearchResult,market:EbayMarketValue):Re
   comparables:[...comparables,...research.comparables.filter(x=>!x.url.includes('ebay.'))],
   asking:{kind:'market',currency,count:market.count||listings.length,min,max,median:average,label:`Promedio eBay · ${market.count||listings.length} anuncios exactos`,originalCurrency:currency,originalMedian:average},
   sold:{available:false,count:0,median:null,reason:'La Browse API de eBay aporta anuncios activos; este promedio no representa ventas cerradas.'},
+  resolvedIdentity:market.resolvedIdentity?{...(research.resolvedIdentity||{}),...market.resolvedIdentity}:research.resolvedIdentity,
   warnings:[...(research.warnings||[]),'eBay: valoración basada en precios solicitados de anuncios activos exactos, no en ventas cerradas.'].filter((v,i,a)=>a.indexOf(v)===i)
  };
 }async function ensureUsdDisplayRates(research:ResearchResult):Promise<ResearchResult>{
