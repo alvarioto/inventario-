@@ -416,6 +416,11 @@ assert.match(appSource,/displayedResearchValue\(next, current\.currency \|\| 'EU
 assert.match(appSource,/popNumber: next\.resolvedIdentity\.popNumber \|\| current\.popNumber/);
 assert.match(appSource,/funkoCategory: next\.resolvedIdentity\.funkoCategory \|\| current\.funkoCategory/);
 assert.match(appSource,/function valuationIdentityChanged/);
+assert.match(appSource,/await saveItem\(draft, id \|\| undefined\)/);
+assert.match(appSource,/submitInFlightRef\.current/);
+assert.match(appSource,/function duplicateIdentityKey/);
+assert.match(appSource,/function duplicateGroups/);
+assert.match(appSource,/Auditoría de duplicados/);
 assert.match(appSource,/eBay Product Research · ventas reales/);
 assert.match(appSource,/>PriceCharting<\/a>/);
 assert.match(appSource,/Analizar artículo/);
