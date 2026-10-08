@@ -557,14 +557,16 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
         const research = await investigate(seed);
         seed = {
           ...seed,
-          ...(research.resolvedIdentity?.title ? {
-            title: research.resolvedIdentity.title,
+          ...(research.resolvedIdentity ? {
+            title: research.resolvedIdentity.title || seed.title,
             manufacturer: seed.manufacturer || research.resolvedIdentity.manufacturer || '',
             line: seed.line || research.resolvedIdentity.line || '',
             character: seed.character || research.resolvedIdentity.character || '',
             franchise: seed.franchise || research.resolvedIdentity.franchise || '',
-            sku: seed.sku || research.resolvedIdentity.sku || '',
-            barcode: seed.barcode || research.resolvedIdentity.barcode || ''
+            sku: research.resolvedIdentity.sku || seed.sku || '',
+            barcode: research.resolvedIdentity.barcode || seed.barcode || '',
+            popNumber: research.resolvedIdentity.popNumber || seed.popNumber || '',
+            funkoCategory: research.resolvedIdentity.funkoCategory || seed.funkoCategory || ''
           } : {}),
           research,
           currentValue: research.asking.median != null ? Number(research.asking.median.toFixed(2)) : null
@@ -868,14 +870,14 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       setResearch(next);
       setDraft((current) => ({
         ...current,
-        ...(next.resolvedIdentity?.title ? {
-          title: next.resolvedIdentity.title,
+        ...(next.resolvedIdentity ? {
+          title: next.resolvedIdentity.title || current.title,
           manufacturer: current.manufacturer || next.resolvedIdentity.manufacturer || '',
           line: current.line || next.resolvedIdentity.line || '',
           character: current.character || next.resolvedIdentity.character || '',
           franchise: current.franchise || next.resolvedIdentity.franchise || '',
-          sku: current.sku || next.resolvedIdentity.sku || '',
-          barcode: current.barcode || next.resolvedIdentity.barcode || '',
+          sku: next.resolvedIdentity.sku || current.sku || '',
+          barcode: next.resolvedIdentity.barcode || current.barcode || '',
           popNumber: next.resolvedIdentity.popNumber || current.popNumber || '',
           funkoCategory: next.resolvedIdentity.funkoCategory || current.funkoCategory || ''
         } : {}),
