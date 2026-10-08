@@ -151,10 +151,28 @@ function hasConflictingAspect(map,names,wanted){
   }
   return false;
 }
+function autographEvidence(item,hay){
+  const normalized=normalize(hay);
+  const hasSignature=/\b(signed|autograph(?:ed)?|signature|autografo|autógrafo|firmad[oa])\b/i.test(normalized);
+  if(item?.signed===true){
+    if(!hasSignature)return {ok:false,reason:'el anuncio no acredita que esté firmado'};
+    const signer=String(item.signedBy||'').trim();
+    if(signer){
+      const coverage=tokenCoverage(signer,hay);
+      if(coverage<.8)return {ok:false,reason:'firmante distinto o ausente'};
+    }
+    return {ok:true,signer:signer||''};
+  }
+  if(item?.signed===false&&hasSignature)return {ok:false,reason:'anuncio firmado para una unidad no firmada'};
+  return {ok:true,signer:''};
+}
+
 function exactMatch(item,row){
   const hay=evidence(row),norm=normalize(hay),map=aspectMap(row);
   const reason=listingLooksWrong(item,row);
   if(reason)return {ok:false,score:0,reason:`descartado: ${reason}`};
+  const autograph=autographEvidence(item,hay);
+  if(!autograph.ok)return {ok:false,score:0,reason:autograph.reason};
 
   let score=0;
   const strong=[];
@@ -179,6 +197,10 @@ function exactMatch(item,row){
   }
 
   const hasStrongProductId=strong.some(x=>['GTIN/ISBN','SKU/MPN','ISBN'].includes(x));
+  if(item?.signed===true){
+    score+=35;
+    strong.push(item.signedBy?'firma':'firmado');
+  }
 
   const manufacturer=String(item.manufacturer||'').trim();
   if(manufacturer){
@@ -298,11 +320,16 @@ function exactMatch(item,row){
 function buildQueries(item){
   const rows=[];
   const barcode=validGtin(item.barcode)||numericId(item.isbn);
+  const signatureParts=item?.signed?[String(item.signedBy||'').trim(),'signed','autographed'].filter(Boolean):[];
   if(barcode)rows.push({kind:'gtin',value:barcode});
   const pushText=(parts)=>{
     const q=uniq(parts.map(x=>String(x||'').trim())).join(' ').replace(/\s+/g,' ').trim();
     if(q&&q.length>=3&&!rows.some(r=>r.kind==='q'&&r.value===q))rows.push({kind:'q',value:q.slice(0,100)});
   };
+  if(item?.signed){
+    pushText([item.sku||item.barcode,item.manufacturer,item.character||item.title,item.popNumber,item.funkoVariant,...signatureParts]);
+    pushText([item.character||item.title,item.popNumber,item.funkoVariant,...signatureParts]);
+  }
   if(item.type==='funko'){
     // Identificadores fuertes primero: un SKU/MPN exacto debe ganar a un nombre
     // generado por visión y también permite recuperarnos de un popNumber mal leído.
@@ -330,7 +357,7 @@ function buildQueries(item){
   }else{
     pushText([item.manufacturer,item.line,item.title,item.sku,item.edition]);
   }
-  pushText([item.title,item.sku,item.barcode]);
+  pushText([item.title,item.sku,item.barcode,...signatureParts]);
   return rows.slice(0,6);
 }
 async function token(){
@@ -491,9 +518,12 @@ function aggregate(rows){
 }
 
 function singleExactReferenceAllowed(item,market){
-  if(item?.type!=='funko'||!market||market.count!==1||!market.listings?.length)return false;
+  if(!market||market.count!==1||!market.listings?.length)return false;
   const matched=market.listings[0]?.matchedBy||[];
-  return matched.includes('GTIN/ISBN')||matched.includes('SKU/MPN');
+  const strongId=matched.includes('GTIN/ISBN')||matched.includes('SKU/MPN');
+  if(item?.signed===true&&String(item?.signedBy||'').trim())return strongId&&matched.includes('firma');
+  if(item?.type==='funko')return strongId;
+  return false;
 }
 
 export {normalize,validGtin,buildQueries,exactMatch,aggregate,marketplaceOrder,funkoIdentityFromAccepted,singleExactReferenceAllowed};
