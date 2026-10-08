@@ -505,11 +505,14 @@ function funkoNameFromItem(item){
 
 function deriveFunkoFields(row){
  if(row?.type!=='funko')return row;
- const popNumber=normalizeFunkoNumber(row.popNumber)||funkoNumberFromTitle(row.title);
+ const rawPopNumber=normalizeFunkoNumber(row.popNumber)||funkoNumberFromTitle(row.title);
  const categoryEvidence=`${row.funkoCategory||''} ${row.line||''} ${row.title||''} ${row.edition||''} ${row.explanation||''} ${Array.isArray(row.tags)?row.tags.join(' '):''}`;
  const detectedCategory=funkoCategoryFromText(categoryEvidence);
  const oldCategory=/^(Movies|Television|Games|Animation|Heroes|Disney|Marvel|Star Wars|Sports|Music|Icons)$/i.test(String(row.funkoCategory||'').trim());
  const funkoCategory=detectedCategory||(!oldCategory?String(row.funkoCategory||'').trim():'');
+ // REWIND, Popsies, Soda, Mystery Minis, etc. no son cajas Pop numeradas.
+ // Si la IA arrastra un # de otra lectura, no debe contaminar la identidad.
+ const popNumber=!funkoCategory||/^Pop!/i.test(funkoCategory)?rawPopNumber:'';
  const funkoVariant=String(row.funkoVariant||'').trim()||funkoVariantFromText(`${row.edition||''} ${row.title||''} ${row.explanation||''} ${Array.isArray(row.tags)?row.tags.join(' '):''}`);
  const character=String(row.character||'').trim()||funkoNameFromItem({...row,character:''});
  return {...row,popNumber,funkoCategory,funkoVariant,character};
