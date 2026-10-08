@@ -138,7 +138,7 @@ type EbayExactListing={
 type EbayMarketValue={
  ok:boolean;found:boolean;source?:string;marketplace?:string;targetSample?:number;minimumSample?:number;
  average?:number;min?:number;max?:number;currency?:string;count?:number;listings?:EbayExactListing[];
- methodology?:string;reason?:string;
+ methodology?:string;reason?:string;singleReference?:boolean;
  resolvedIdentity?:{popNumber?:string;funkoCategory?:string};
 };
 async function readEbayMarketValue(item:Partial<InventoryDraft>):Promise<EbayMarketValue|null>{
