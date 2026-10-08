@@ -334,6 +334,11 @@ async function token(){
 function headers(accessToken,marketplace){
   return {Authorization:'Bearer '+accessToken,'X-EBAY-C-MARKETPLACE-ID':marketplace};
 }
+function marketplaceOrder(primary,item){
+  const first=String(primary||'EBAY_ES').trim()||'EBAY_ES';
+  if(item?.type!=='funko')return [first];
+  return uniq([first,'EBAY_US','EBAY_GB']);
+}
 async function search(accessToken,marketplace,item){
   const out=new Map();
   for(const query of buildQueries(item)){
@@ -373,6 +378,45 @@ async function details(accessToken,marketplace,summaries){
   }
   return result;
 }
+function funkoIdentityFromAccepted(item,acceptedMatches){
+  if(item?.type!=='funko')return null;
+  const exact=acceptedMatches.filter(x=>x.match?.matchedBy?.includes('GTIN/ISBN'));
+  if(!exact.length)return null;
+  const popNumbers=[];
+  const categories=[];
+  for(const {row} of exact){
+    const map=aspectMap(row);
+    const box=String(
+      map.get('box number')||
+      map.get('box no')||
+      map.get('numero de caja')||
+      map.get('número de caja')||
+      ''
+    ).replace(/\D/g,'');
+    const fromTitle=String(row?.title||'').match(/#\s*(\d{3,5})\b/)?.[1]||'';
+    const pop=box||fromTitle;
+    if(pop)popNumbers.push(pop);
+    const productLine=normalize(
+      map.get('product line')||
+      map.get('linea de producto')||
+      map.get('línea de producto')||
+      map.get('features')||
+      ''
+    );
+    if(productLine.includes('premium'))categories.push('Pop! Premium');
+    else if(productLine.includes('rewind'))categories.push('REWIND');
+  }
+  const mostCommon=(values)=>{
+    const counts=new Map();
+    for(const value of values)counts.set(value,(counts.get(value)||0)+1);
+    return [...counts.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+  };
+  const popNumber=mostCommon(popNumbers);
+  const funkoCategory=mostCommon(categories);
+  if(!popNumber&&!funkoCategory)return null;
+  return {popNumber,funkoCategory};
+}
+
 function toListing(row,match){
   const value=Number(row?.price?.value);
   const currency=String(row?.price?.currency||'').toUpperCase();
@@ -419,7 +463,7 @@ function aggregate(rows){
   };
 }
 
-export {normalize,buildQueries,exactMatch,aggregate};
+export {normalize,buildQueries,exactMatch,aggregate,marketplaceOrder,funkoIdentityFromAccepted};
 
 export default async function handler(req,res){
   if(!applyCors(req,res))return json(res,403,{ok:false,error:'Origen no autorizado.'});
@@ -429,24 +473,43 @@ export default async function handler(req,res){
   if(!String(item.title||item.character||item.sku||item.barcode||item.isbn||'').trim()){
     return json(res,400,{ok:false,error:'Falta identidad del artículo.'});
   }
-  const marketplace=String(process.env.EBAY_MARKETPLACE_ID||'EBAY_ES').trim();
+  const primaryMarketplace=String(process.env.EBAY_MARKETPLACE_ID||'EBAY_ES').trim();
   try{
     const accessToken=await token();
-    const summaries=await search(accessToken,marketplace,item);
-    if(!summaries.length)return json(res,200,{ok:true,found:false,reason:'eBay no devolvió candidatos.',targetSample:TARGET_SAMPLE,minimumSample:MIN_SAMPLE,listings:[]});
-    const fullRows=await details(accessToken,marketplace,summaries);
-    const checked=fullRows.map(row=>({row,match:exactMatch(item,row)}));
-    const accepted=checked.filter(x=>x.match.ok).map(x=>toListing(x.row,x.match)).filter(Boolean);
-    const market=aggregate(accepted);
-    const rejected=checked.filter(x=>!x.match.ok).slice(0,10).map(x=>({title:String(x.row?.title||'').slice(0,180),reason:x.match.reason}));
-    if(!market||market.count<MIN_SAMPLE||market.average==null){
-      return json(res,200,{ok:true,found:false,reason:`Solo se encontraron ${market?.count||0} anuncios que pudieran verificarse como el artículo exacto; hacen falta al menos ${MIN_SAMPLE}.`,targetSample:TARGET_SAMPLE,minimumSample:MIN_SAMPLE,listings:market?.listings||[],rejected});
+    const attempts=[];
+    let bestFailure=null;
+    for(const marketplace of marketplaceOrder(primaryMarketplace,item)){
+      const summaries=await search(accessToken,marketplace,item);
+      if(!summaries.length){
+        attempts.push({marketplace,candidates:0,accepted:0});
+        continue;
+      }
+      const fullRows=await details(accessToken,marketplace,summaries);
+      const checked=fullRows.map(row=>({row,match:exactMatch(item,row)}));
+      const acceptedMatches=checked.filter(x=>x.match.ok);
+      const accepted=acceptedMatches.map(x=>toListing(x.row,x.match)).filter(Boolean);
+      const market=aggregate(accepted);
+      const resolvedIdentity=funkoIdentityFromAccepted(item,acceptedMatches);
+      const rejected=checked.filter(x=>!x.match.ok).slice(0,10).map(x=>({title:String(x.row?.title||'').slice(0,180),reason:x.match.reason}));
+      attempts.push({marketplace,candidates:summaries.length,accepted:market?.count||0});
+      if(!bestFailure||(market?.count||0)>(bestFailure.market?.count||0))bestFailure={market,rejected,marketplace};
+      if(market&&market.count>=MIN_SAMPLE&&market.average!=null){
+        return json(res,200,{
+          ok:true,found:true,source:'eBay Browse API',marketplace,attemptedMarketplaces:attempts.map(x=>x.marketplace),
+          targetSample:TARGET_SAMPLE,minimumSample:MIN_SAMPLE,
+          average:Number(market.average.toFixed(2)),min:Number(market.min.toFixed(2)),max:Number(market.max.toFixed(2)),
+          currency:market.currency,count:market.count,listings:market.listings,rejected,
+          resolvedIdentity:resolvedIdentity||undefined,
+          methodology:`Promedio de ${market.count} anuncios activos de eBay ${marketplace} verificados como la misma identidad; máximo ${TARGET_SAMPLE}. Se excluyen coincidencias parciales y precios extremos evidentes.`
+        });
+      }
     }
+    const best=bestFailure?.market;
     return json(res,200,{
-      ok:true,found:true,source:'eBay Browse API',marketplace,targetSample:TARGET_SAMPLE,minimumSample:MIN_SAMPLE,
-      average:Number(market.average.toFixed(2)),min:Number(market.min.toFixed(2)),max:Number(market.max.toFixed(2)),
-      currency:market.currency,count:market.count,listings:market.listings,rejected,
-      methodology:`Promedio de ${market.count} anuncios activos de eBay verificados como la misma identidad; máximo ${TARGET_SAMPLE}. Se excluyen coincidencias parciales y precios extremos evidentes.`
+      ok:true,found:false,
+      reason:`Solo se encontraron ${best?.count||0} anuncios que pudieran verificarse como el artículo exacto; hacen falta al menos ${MIN_SAMPLE}.`,
+      targetSample:TARGET_SAMPLE,minimumSample:MIN_SAMPLE,listings:best?.listings||[],
+      rejected:bestFailure?.rejected||[],attemptedMarketplaces:attempts.map(x=>x.marketplace)
     });
   }catch(error){
     return json(res,502,{ok:false,error:error instanceof Error?error.message:'No se pudo consultar eBay.'});

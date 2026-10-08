@@ -875,9 +875,14 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
           character: current.character || next.resolvedIdentity.character || '',
           franchise: current.franchise || next.resolvedIdentity.franchise || '',
           sku: current.sku || next.resolvedIdentity.sku || '',
-          barcode: current.barcode || next.resolvedIdentity.barcode || ''
+          barcode: current.barcode || next.resolvedIdentity.barcode || '',
+          popNumber: next.resolvedIdentity.popNumber || current.popNumber || '',
+          funkoCategory: next.resolvedIdentity.funkoCategory || current.funkoCategory || ''
         } : {}),
-        currentValue: next.asking.median != null ? Number(next.asking.median.toFixed(2)) : current.currentValue
+        currentValue: (() => {
+          const converted = displayedResearchValue(next, current.currency || 'EUR');
+          return converted != null ? Number(converted.toFixed(2)) : current.currentValue;
+        })()
       }));
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : 'No se pudo mejorar con IA.');
