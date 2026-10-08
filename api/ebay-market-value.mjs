@@ -45,6 +45,17 @@ function numericId(value){
   const raw=String(value||'').replace(/[^0-9]/g,'');
   return /^\d{8,14}$/.test(raw)?raw:'';
 }
+function validGtin(value){
+  const raw=String(value||'').replace(/[^0-9]/g,'');
+  if(![8,12,13,14].includes(raw.length))return'';
+  let sum=0,weight=3;
+  for(let i=raw.length-2;i>=0;i--){
+    sum+=Number(raw[i])*weight;
+    weight=weight===3?1:3;
+  }
+  const expected=String((10-(sum%10))%10);
+  return raw.at(-1)===expected?raw:'';
+}
 function cleanVariant(value){
   const raw=normalize(value);
   if(!raw||['classic','regular','standard','normal','base'].includes(raw))return'';
@@ -148,7 +159,7 @@ function exactMatch(item,row){
   let score=0;
   const strong=[];
   const softExact=[];
-  const barcode=numericId(item.barcode||item.isbn);
+  const barcode=validGtin(item.barcode)||numericId(item.isbn);
   const sku=compact(item.sku);
   const candidateGtins=uniq([
     row?._matchedGtin,
@@ -286,13 +297,19 @@ function exactMatch(item,row){
 }
 function buildQueries(item){
   const rows=[];
-  const barcode=numericId(item.barcode||item.isbn);
+  const barcode=validGtin(item.barcode)||numericId(item.isbn);
   if(barcode)rows.push({kind:'gtin',value:barcode});
   const pushText=(parts)=>{
     const q=uniq(parts.map(x=>String(x||'').trim())).join(' ').replace(/\s+/g,' ').trim();
     if(q&&q.length>=3&&!rows.some(r=>r.kind==='q'&&r.value===q))rows.push({kind:'q',value:q.slice(0,100)});
   };
   if(item.type==='funko'){
+    // Identificadores fuertes primero: un SKU/MPN exacto debe ganar a un nombre
+    // generado por visión y también permite recuperarnos de un popNumber mal leído.
+    if(item.sku){
+      pushText([item.sku,item.character||item.title,item.funkoVariant,item.funkoCategory]);
+      pushText([item.sku]);
+    }
     pushText([item.character||item.title,item.popNumber,item.funkoVariant,item.funkoCategory]);
     pushText([item.character||item.title,item.popNumber]);
   }else if(item.type==='figure'){
@@ -380,12 +397,21 @@ async function details(accessToken,marketplace,summaries){
 }
 function funkoIdentityFromAccepted(item,acceptedMatches){
   if(item?.type!=='funko')return null;
-  const exact=acceptedMatches.filter(x=>x.match?.matchedBy?.includes('GTIN/ISBN'));
+  const exact=acceptedMatches.filter(x=>{
+    const matched=x.match?.matchedBy||[];
+    return matched.includes('GTIN/ISBN')||matched.includes('SKU/MPN');
+  });
   if(!exact.length)return null;
   const popNumbers=[];
   const categories=[];
+  const barcodes=[];
   for(const {row} of exact){
     const map=aspectMap(row);
+    const rowBarcodes=uniq([
+      ...(Array.isArray(row?.gtin)?row.gtin:row?.gtin?[row.gtin]:[]),
+      map.get('ean'),map.get('upc'),map.get('gtin')
+    ].map(validGtin));
+    barcodes.push(...rowBarcodes);
     const box=String(
       map.get('box number')||
       map.get('box no')||
@@ -413,8 +439,9 @@ function funkoIdentityFromAccepted(item,acceptedMatches){
   };
   const popNumber=mostCommon(popNumbers);
   const funkoCategory=mostCommon(categories);
-  if(!popNumber&&!funkoCategory)return null;
-  return {popNumber,funkoCategory};
+  const barcode=mostCommon(barcodes);
+  if(!popNumber&&!funkoCategory&&!barcode)return null;
+  return {popNumber,funkoCategory,barcode};
 }
 
 function toListing(row,match){
@@ -469,7 +496,7 @@ function singleExactReferenceAllowed(item,market){
   return matched.includes('GTIN/ISBN')||matched.includes('SKU/MPN');
 }
 
-export {normalize,buildQueries,exactMatch,aggregate,marketplaceOrder,funkoIdentityFromAccepted,singleExactReferenceAllowed};
+export {normalize,validGtin,buildQueries,exactMatch,aggregate,marketplaceOrder,funkoIdentityFromAccepted,singleExactReferenceAllowed};
 
 export default async function handler(req,res){
   if(!applyCors(req,res))return json(res,403,{ok:false,error:'Origen no autorizado.'});
