@@ -59,7 +59,7 @@ import {
   uploadItemImage,
   maxCloudPhotos
 } from './lib/inventory';
-import { identifyPhoto, investigate } from './lib/api';
+import { identifyPhoto, investigate, preserveVerifiedResearch } from './lib/api';
 import { DirectAiSettings } from './components/DirectAiSettings';
 import { importDemo } from './lib/demo';
 import QRCode from 'qrcode';
@@ -137,6 +137,28 @@ function eurUsdMoney(research: ResearchResult, value?: number | null, sourceCurr
 
 function normalizeText(value: unknown) {
   return String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function valuationIdentityChanged(before: InventoryDraft, after: InventoryDraft) {
+  if (before.type !== after.type) return true;
+  const norm = (value: unknown) => normalizeText(value).replace(/[^a-z0-9]+/g, '');
+  for (const key of ['barcode','isbn','sku','popNumber','issueNumber','cardNumber'] as const) {
+    const a = norm(before[key]);
+    const b = norm(after[key]);
+    if (a && b && a !== b) return true;
+  }
+  if (after.type === 'funko') {
+    const a = norm(before.funkoVariant);
+    const b = norm(after.funkoVariant);
+    if ((a || b) && a !== b) return true;
+  }
+  const beforeTokens = new Set(normalizeText([before.manufacturer,before.line,before.character,before.title].filter(Boolean).join(' ')).split(/\s+/).filter((x) => x.length >= 3));
+  const afterTokens = new Set(normalizeText([after.manufacturer,after.line,after.character,after.title].filter(Boolean).join(' ')).split(/\s+/).filter((x) => x.length >= 3));
+  if (beforeTokens.size && afterTokens.size) {
+    const common = [...beforeTokens].filter((token) => afterTokens.has(token)).length;
+    if (common / Math.min(beforeTokens.size, afterTokens.size) < 0.4) return true;
+  }
+  return false;
 }
 
 function escapeHtml(value: string) {
@@ -840,7 +862,9 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         throw new Error('Añade una foto para que la IA pueda identificar el artículo.');
       }
 
-      const next = await investigate(working);
+      const freshResearch = await investigate(working);
+      const keepPrevious = !valuationIdentityChanged(draft, working);
+      const next = keepPrevious ? preserveVerifiedResearch(research, freshResearch) : freshResearch;
       setResearch(next);
       setDraft((current) => ({
         ...current,
@@ -938,8 +962,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
               {research.comparables.some((listing) => listing.sourceType === 'guide' || listing.sourceType === 'sold') && <div className="comparable-prices"><h4>{research.asking.kind === 'sold' ? 'Valor principal · ventas cerradas' : 'Referencia principal'}</h4>{research.comparables.filter((listing) => listing.sourceType === 'guide' || listing.sourceType === 'sold').slice(0,1).map((listing) => <a className="comparable-price primary-guide" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.sourceType === 'sold' ? 'Media de ventas cerradas · abrir fuente' : 'Precio público · abrir ficha'}</small></span><strong>{listing.originalPrice != null && listing.originalCurrency ? eurUsdMoney(research, listing.originalPrice, listing.originalCurrency) : eurUsdMoney(research, listing.price, listing.currency)}</strong></a>)}</div>}
               {research.comparables.some((listing) => listing.sourceType !== 'guide' && listing.sourceType !== 'sold') && <div className="comparable-prices"><h4>Otras referencias orientativas</h4>{research.comparables.filter((listing) => listing.sourceType !== 'guide' && listing.sourceType !== 'sold').slice(0,8).map((listing) => <a className="comparable-price" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.condition} · abrir enlace</small></span><strong>{eurUsdMoney(research, listing.price, listing.currency)}</strong></a>)}</div>}
               <div className="research-facts">{research.facts.slice(0, 8).map((fact) => <div key={`${fact.label}-${fact.sourceId}`}><b>{fact.label}</b><span>{fact.value}</span></div>)}</div>
-              <p className="source-routing-note"><b>Fuentes reales consultadas:</b> Para figuras no Funko, ActionFigure411 es la referencia principal y se consulta desde tu navegador mediante el puente local de FrikiVault, usando la media de ventas cerradas recientes como estimación de mercado. Si no existe una coincidencia segura o no hay ventas suficientes, FrikiVault recurre a LegendsVerse para Marvel Legends y después a otras fuentes verificables. Funko mantiene su flujo independiente con PriceCharting.</p>
-              <div className="source-list">{research.links.actionFigure411 && <a href={research.links.actionFigure411} target="_blank" rel="noreferrer">ActionFigure411 · ficha exacta</a>}{research.links.legendsVerse && <a href={research.links.legendsVerse} target="_blank" rel="noreferrer">LegendsVerse · ficha exacta</a>}<a href={research.links.ebay} target="_blank" rel="noreferrer">eBay · informativo</a><a href={research.links.sold} target="_blank" rel="noreferrer">eBay vendidos · comprobar</a>{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.filter((source) => ![research.links.actionFigure411,research.links.legendsVerse,research.links.priceCharting].filter(Boolean).includes(source.url)).slice(0,6).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div>
+              <p className="source-routing-note"><b>Fuentes reales consultadas:</b> Para figuras no Funko, ActionFigure411 sigue siendo la referencia principal y LegendsVerse el respaldo especializado para Marvel Legends. Para Funko, eBay exacto es la base automática; PriceCharting queda como respaldo opcional cuando responde. Una actualización fallida no sustituye una valoración verificada anterior.</p>
+              <div className="source-list">{research.links.actionFigure411 && <a href={research.links.actionFigure411} target="_blank" rel="noreferrer">ActionFigure411 · ficha exacta</a>}{research.links.legendsVerse && <a href={research.links.legendsVerse} target="_blank" rel="noreferrer">LegendsVerse · ficha exacta</a>}<a href={research.links.ebay} target="_blank" rel="noreferrer">eBay · informativo</a><a href={research.links.sold} target="_blank" rel="noreferrer">eBay vendidos · comprobar</a><a href="https://www.ebay.com/sh/research" target="_blank" rel="noreferrer">eBay Product Research · ventas reales</a>{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.filter((source) => ![research.links.actionFigure411,research.links.legendsVerse,research.links.priceCharting].filter(Boolean).includes(source.url)).slice(0,6).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div>
               {research.warnings.map((warning) => <small className="warning-line" key={warning}>{warning}</small>)}
             </div> : <p className="muted">Este artículo no tiene análisis unificado porque no se creó desde el escáner inteligente.</p>}
           </section>}

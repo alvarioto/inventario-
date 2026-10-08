@@ -317,6 +317,16 @@ function mergeResearchWarnings(research:ResearchResult,warnings:string[]):Resear
 function hasVerifiedValue(research:ResearchResult|null|undefined){
  return research?.asking?.median!=null&&Number.isFinite(research.asking.median);
 }
+export function preserveVerifiedResearch(previous:ResearchResult|undefined,next:ResearchResult):ResearchResult{
+ if(hasVerifiedValue(next)||!hasVerifiedValue(previous))return next;
+ const checked=previous?.checkedAt?new Date(previous.checkedAt):null;
+ const when=checked&&!Number.isNaN(checked.getTime())?checked.toLocaleString('es-ES'):'anteriormente';
+ const warning=`No se ha podido actualizar el precio ahora. Se mantiene la última valoración verificada (${when}).`;
+ return {
+  ...previous!,
+  warnings:[warning,...(next.warnings||[]),...(previous?.warnings||[])].filter((v,i,a)=>v&&a.indexOf(v)===i)
+ };
+}
 export async function investigate(item:Partial<InventoryDraft>):Promise<ResearchResult>{
  const baseResearch=freeResearchShell(item);
  const warnings:string[]=[];
@@ -403,9 +413,11 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
   return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
  }
 
- // Funkos keep PriceCharting first because that exact-guide behaviour already
- // works well; every other collectible uses the general engine first.
+ // Funkos: eBay exacto es la base automática. PriceCharting queda como
+ // respaldo opcional: un 403/Cloudflare nunca debe dejar el Funko sin valorar.
  if(item.type==='funko'){
+  const ebay=await tryEbayExact(null);
+  if(ebay)return ebay;
   try{return await tryPriceCharting();}
   catch(error){warnings.push(`PriceCharting: ${error instanceof Error?error.message:'no se pudo leer el precio público.'}`);}
   let general:ResearchResult|null=null;
@@ -415,8 +427,6 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
   }catch(error){
    warnings.push(`Fuentes generales: ${error instanceof Error?error.message:'no se pudo completar la búsqueda pública.'}`);
   }
-  const ebay=await tryEbayExact(general);
-  if(ebay)return ebay;
   return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
  }
 
