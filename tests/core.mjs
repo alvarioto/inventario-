@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify, isGenericProductTitle, buildResearchIdentity, applyFigurePackageAudit } from '../server/core.mjs';
-import { exactMatch as exactEbayMatch } from '../api/ebay-market-value.mjs';
+import { exactMatch as exactEbayMatch, marketplaceOrder } from '../api/ebay-market-value.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
@@ -46,6 +46,10 @@ const alienWrongPopWithoutGtin=exactEbayMatch({
 });
 assert.equal(alienWrongPopWithoutGtin.ok,false);
 assert.match(alienWrongPopWithoutGtin.reason,/número Pop/i);
+
+assert.deepEqual(marketplaceOrder('EBAY_ES',{type:'funko'}),['EBAY_ES','EBAY_US','EBAY_GB']);
+assert.deepEqual(marketplaceOrder('EBAY_US',{type:'funko'}),['EBAY_US','EBAY_GB']);
+assert.deepEqual(marketplaceOrder('EBAY_ES',{type:'figure'}),['EBAY_ES']);
 
 const market = summarizeListings([
   {price:10,currency:'EUR',shipping:2},
@@ -379,6 +383,7 @@ assert.doesNotMatch(appSource,/catalogSourceLinks/);
 assert.doesNotMatch(appSource,/site:figurerealm\.com|site:figurestash\.com|site:coleka\.com/);
 assert.match(appSource,/Otras referencias orientativas/);
 assert.match(appSource,/preserveVerifiedResearch\(research, freshResearch\)/);
+assert.match(appSource,/displayedResearchValue\(next, current\.currency \|\| 'EUR'\)/);
 assert.match(appSource,/function valuationIdentityChanged/);
 assert.match(appSource,/eBay Product Research · ventas reales/);
 assert.match(appSource,/>PriceCharting<\/a>/);
