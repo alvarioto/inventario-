@@ -343,6 +343,9 @@ assert.match(appSource,/País \/ mercado de la edición/);
 assert.match(appSource,/Idioma de la edición/);
 assert.match(appSource,/setTab\('home'\)/);
 assert.match(appSource,/valuation-highlight/);
+assert.match(appSource,/function eurUsdMoney/);
+assert.match(appSource,/eurUsdMoney\(research, research\.asking\.median/);
+assert.match(appSource,/eurUsdMoney\(research, listing\.price, listing\.currency\)/);
 assert.match(appSource,/Referencia principal/);
 assert.match(appSource,/Valor principal · ventas cerradas/);
 assert.doesNotMatch(appSource,/catalogSourceLinks/);
@@ -353,6 +356,8 @@ assert.match(appSource,/Analizar artículo/);
 assert.doesNotMatch(appSource,/Confirmar e investigar|Actualizar investigación/);
 const apiSource=readFileSync(new URL('../src/lib/api.ts',import.meta.url),'utf8');
 assert.match(apiSource,/runGeneralResearch/);
+assert.match(apiSource,/const withRates=await ensureUsdDisplayRates\(seed\)/);
+assert.match(apiSource,/Promedio eBay',value:dual\(average\)/);
 assert.match(apiSource,/researchDirect/);
 assert.match(apiSource,/ActionFigure411|actionFigure411/i);
 // Regresión: una figura no puede aceptar un fallback de PriceCharting solo por

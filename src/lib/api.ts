@@ -178,14 +178,22 @@ function applyEbayMarketValue(research:ResearchResult,market:EbayMarketValue):Re
   originalCurrency:row.currency
  }));
  const sourceId=sources[0]?.id||'ebay-exact-market';
+ const eurRate=Number(research.exchangeRates?.EUR);
+ const asUsd=(value:number)=>currency==='USD'?value:currency==='EUR'&&Number.isFinite(eurRate)&&eurRate>0?value/eurRate:null;
+ const asEur=(value:number)=>currency==='EUR'?value:currency==='USD'&&Number.isFinite(eurRate)&&eurRate>0?value*eurRate:null;
+ const dual=(value:number)=>{
+  const eur=asEur(value),usd=asUsd(value);
+  if(eur!=null&&usd!=null)return `${eur.toFixed(2)} EUR · ${usd.toFixed(2)} USD`;
+  return `${value.toFixed(2)} ${currency}`;
+ };
  const facts=[
   {label:'Anuncios exactos usados',value:String(market.count||listings.length),sourceId},
-  {label:'Promedio eBay',value:`${average.toFixed(2)} ${currency}`,sourceId},
-  {label:'Rango eBay',value:`${min.toFixed(2)}–${max.toFixed(2)} ${currency}`,sourceId}
+  {label:'Promedio eBay',value:dual(average),sourceId},
+  {label:'Rango eBay',value:`${dual(min)} – ${dual(max)}`,sourceId}
  ];
  return {
   ...research,
-  summary:`eBay: promedio de ${market.count||listings.length} anuncios activos verificados como exactamente el mismo artículo: ${average.toFixed(2)} ${currency}. No se incluyen coincidencias parciales.`,
+  summary:`eBay: promedio de ${market.count||listings.length} anuncios activos verificados como exactamente el mismo artículo: ${dual(average)}. No se incluyen coincidencias parciales.`,
   facts:[...facts,...research.facts.filter(f=>!f.label.toLowerCase().includes('ebay'))],
   sources:[...sources,...research.sources.filter(x=>!x.url.includes('ebay.'))],
   listings:[...comparables,...research.listings.filter(x=>!x.url.includes('ebay.'))],
@@ -323,7 +331,8 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
    const market=await readEbayMarketValue(item);
    if(market?.found&&market.average!=null&&market.min!=null&&market.max!=null){
     const seed=previous?mergeResearchWarnings(previous,warnings):{...baseResearch,warnings:[...warnings]};
-    return applyEbayMarketValue(seed,market);
+    const withRates=await ensureUsdDisplayRates(seed);
+    return applyEbayMarketValue(withRates,market);
    }
    if(market?.reason)warnings.push(`eBay: ${market.reason}`);
   }catch(error){
