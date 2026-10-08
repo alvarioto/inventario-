@@ -378,6 +378,45 @@ async function details(accessToken,marketplace,summaries){
   }
   return result;
 }
+function funkoIdentityFromAccepted(item,acceptedMatches){
+  if(item?.type!=='funko')return null;
+  const exact=acceptedMatches.filter(x=>x.match?.matchedBy?.includes('GTIN/ISBN'));
+  if(!exact.length)return null;
+  const popNumbers=[];
+  const categories=[];
+  for(const {row} of exact){
+    const map=aspectMap(row);
+    const box=String(
+      map.get('box number')||
+      map.get('box no')||
+      map.get('numero de caja')||
+      map.get('número de caja')||
+      ''
+    ).replace(/\D/g,'');
+    const fromTitle=String(row?.title||'').match(/#\s*(\d{3,5})\b/)?.[1]||'';
+    const pop=box||fromTitle;
+    if(pop)popNumbers.push(pop);
+    const productLine=normalize(
+      map.get('product line')||
+      map.get('linea de producto')||
+      map.get('línea de producto')||
+      map.get('features')||
+      ''
+    );
+    if(productLine.includes('premium'))categories.push('Pop! Premium');
+    else if(productLine.includes('rewind'))categories.push('REWIND');
+  }
+  const mostCommon=(values)=>{
+    const counts=new Map();
+    for(const value of values)counts.set(value,(counts.get(value)||0)+1);
+    return [...counts.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+  };
+  const popNumber=mostCommon(popNumbers);
+  const funkoCategory=mostCommon(categories);
+  if(!popNumber&&!funkoCategory)return null;
+  return {popNumber,funkoCategory};
+}
+
 function toListing(row,match){
   const value=Number(row?.price?.value);
   const currency=String(row?.price?.currency||'').toUpperCase();
@@ -424,7 +463,7 @@ function aggregate(rows){
   };
 }
 
-export {normalize,buildQueries,exactMatch,aggregate,marketplaceOrder};
+export {normalize,buildQueries,exactMatch,aggregate,marketplaceOrder,funkoIdentityFromAccepted};
 
 export default async function handler(req,res){
   if(!applyCors(req,res))return json(res,403,{ok:false,error:'Origen no autorizado.'});
@@ -447,8 +486,10 @@ export default async function handler(req,res){
       }
       const fullRows=await details(accessToken,marketplace,summaries);
       const checked=fullRows.map(row=>({row,match:exactMatch(item,row)}));
-      const accepted=checked.filter(x=>x.match.ok).map(x=>toListing(x.row,x.match)).filter(Boolean);
+      const acceptedMatches=checked.filter(x=>x.match.ok);
+      const accepted=acceptedMatches.map(x=>toListing(x.row,x.match)).filter(Boolean);
       const market=aggregate(accepted);
+      const resolvedIdentity=funkoIdentityFromAccepted(item,acceptedMatches);
       const rejected=checked.filter(x=>!x.match.ok).slice(0,10).map(x=>({title:String(x.row?.title||'').slice(0,180),reason:x.match.reason}));
       attempts.push({marketplace,candidates:summaries.length,accepted:market?.count||0});
       if(!bestFailure||(market?.count||0)>(bestFailure.market?.count||0))bestFailure={market,rejected,marketplace};
@@ -458,6 +499,7 @@ export default async function handler(req,res){
           targetSample:TARGET_SAMPLE,minimumSample:MIN_SAMPLE,
           average:Number(market.average.toFixed(2)),min:Number(market.min.toFixed(2)),max:Number(market.max.toFixed(2)),
           currency:market.currency,count:market.count,listings:market.listings,rejected,
+          resolvedIdentity:resolvedIdentity||undefined,
           methodology:`Promedio de ${market.count} anuncios activos de eBay ${marketplace} verificados como la misma identidad; máximo ${TARGET_SAMPLE}. Se excluyen coincidencias parciales y precios extremos evidentes.`
         });
       }
