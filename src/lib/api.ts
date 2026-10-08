@@ -323,7 +323,8 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
    const market=await readEbayMarketValue(item);
    if(market?.found&&market.average!=null&&market.min!=null&&market.max!=null){
     const seed=previous?mergeResearchWarnings(previous,warnings):{...baseResearch,warnings:[...warnings]};
-    return applyEbayMarketValue(seed,market);
+    const withRates=await ensureUsdDisplayRates(seed);
+    return applyEbayMarketValue(withRates,market);
    }
    if(market?.reason)warnings.push(`eBay: ${market.reason}`);
   }catch(error){
