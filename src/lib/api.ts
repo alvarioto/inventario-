@@ -450,6 +450,7 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
 
   try{
    const guide=await readPriceChartingValue(item);
+   if(!guide)throw new Error('PriceCharting no devolvió un precio verificable.');
    const withRates=await ensureUsdDisplayRates({...baseResearch,warnings:[...warnings]});
    const priced=applyPriceChartingValue(withRates,guide);
    return ebayMarket?.resolvedIdentity
