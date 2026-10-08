@@ -7,7 +7,8 @@ export type ApiStatus={deepseek:boolean;model:string;webSearch:boolean;publicSea
 const base=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');
 const priceChartingValueUrl=(import.meta.env.VITE_PRICECHARTING_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/pricecharting-value').replace(/\/$/,'');
 const legendsVerseValueUrl=(import.meta.env.VITE_LEGENDSVERSE_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/legendsverse-value').replace(/\/$/,'');
-const ebayMarketValueUrl=(import.meta.env.VITE_EBAY_MARKET_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/ebay-market-value').replace(/\/$/,'');\nconst exchangeRatesUrl=(import.meta.env.VITE_EXCHANGE_RATES_URL||'https://frikivault-hobbydb-api.vercel.app/api/exchange-rates').replace(/\/$/,'');
+const ebayMarketValueUrl=(import.meta.env.VITE_EBAY_MARKET_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/ebay-market-value').replace(/\/$/,'');
+const exchangeRatesUrl=(import.meta.env.VITE_EXCHANGE_RATES_URL||'https://frikivault-hobbydb-api.vercel.app/api/exchange-rates').replace(/\/$/,'');
 export async function getApiStatus():Promise<ApiStatus>{await keyReady.catch(()=>{});if(getPersonalKey())return {deepseek:true,model:'deepseek-flash',webSearch:true,publicSearch:true,mode:'direct'};const r=await fetch(base+'/api/status');if(!r.ok||!r.headers.get('content-type')?.includes('application/json'))throw new Error('Configura IA directa en Ajustes para analizar fotos con tu clave de DeepSeek.');return r.json()}
 async function post<T>(route:string,payload:unknown):Promise<T>{
  const status=await getApiStatus();const token=await auth?.currentUser?.getIdToken();
