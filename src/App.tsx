@@ -182,6 +182,8 @@ function valuationIdentityChanged(before: InventoryDraft, after: InventoryDraft)
     const b = norm(after.funkoVariant);
     if ((a || b) && a !== b) return true;
   }
+  if (Boolean(before.signed) !== Boolean(after.signed)) return true;
+  if (norm(before.signedBy) !== norm(after.signedBy)) return true;
   const beforeTokens = new Set(normalizeText([before.manufacturer,before.line,before.character,before.title].filter(Boolean).join(' ')).split(/\s+/).filter((x) => x.length >= 3));
   const afterTokens = new Set(normalizeText([after.manufacturer,after.line,after.character,after.title].filter(Boolean).join(' ')).split(/\s+/).filter((x) => x.length >= 3));
   if (beforeTokens.size && afterTokens.size) {
@@ -565,6 +567,7 @@ function Scanner({ onCreate, showToast }: { onCreate: (seed?: Partial<InventoryD
       hasBox: result.hasBox ?? false,
       sealed: result.sealed ?? false,
       signed: result.signed ?? false,
+      signedBy: result.signedBy || '',
       graded: result.graded ?? false,
       gradingCompany: result.gradingCompany,
       grade: result.grade,
@@ -889,6 +892,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
           hasBox: identified.hasBox ?? working.hasBox,
           sealed: identified.sealed ?? working.sealed,
           signed: identified.signed ?? working.signed,
+          signedBy: identified.signedBy || working.signedBy,
           graded: identified.graded ?? working.graded,
           gradingCompany: identified.gradingCompany || working.gradingCompany,
           grade: identified.grade || working.grade,
@@ -986,7 +990,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
             {draft.graded && draft.type !== 'card' && <Field label="Grado"><input value={draft.grade || ''} onChange={(e)=>set('grade',e.target.value)} placeholder="9.8, 9.5…"/></Field>}
             <Field label="Estado físico"><select value={draft.condition || 'like-new'} onChange={(e)=>set('condition',e.target.value as InventoryDraft['condition'])}>{Object.entries(CONDITION_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>
             <Field label="Etiquetas"><input value={(draft.tags || []).join(', ')} onChange={(e)=>set('tags',e.target.value.split(','))} placeholder="pokemon, japon, edición limitada"/></Field>
-            <div className="checks wide"><Toggle label="Con caja" checked={!!draft.hasBox} onChange={(v)=>set('hasBox',v)}/><Toggle label="Precintado" checked={!!draft.sealed} onChange={(v)=>set('sealed',v)}/><Toggle label="Firmado" checked={!!draft.signed} onChange={(v)=>set('signed',v)}/><Toggle label="Graduado" checked={!!draft.graded} onChange={(v)=>set('graded',v)}/><Toggle label="Favorito" checked={!!draft.favorite} onChange={(v)=>set('favorite',v)}/><Toggle label="Identificación confirmada" checked={!!draft.identificationConfirmed} onChange={(v)=>set('identificationConfirmed',v)}/></div>
+            <div className="checks wide"><Toggle label="Con caja" checked={!!draft.hasBox} onChange={(v)=>set('hasBox',v)}/><Toggle label="Precintado" checked={!!draft.sealed} onChange={(v)=>set('sealed',v)}/><Toggle label="Firmado" checked={!!draft.signed} onChange={(v)=>{set('signed',v);if(!v)set('signedBy','');}}/><Toggle label="Graduado" checked={!!draft.graded} onChange={(v)=>set('graded',v)}/><Toggle label="Favorito" checked={!!draft.favorite} onChange={(v)=>set('favorite',v)}/><Toggle label="Identificación confirmada" checked={!!draft.identificationConfirmed} onChange={(v)=>set('identificationConfirmed',v)}/></div>{draft.signed&&<Field label="Firmado por" wide><input value={draft.signedBy || ''} onChange={(e)=>set('signedBy',e.target.value)} placeholder="Ej. Jeff Goldblum"/><small className="muted">Se usa para buscar comparables firmados por la misma persona.</small></Field>}
           </div>}
 
           <h3 className="form-section-title"><CircleDollarSign/> Dinero</h3>
