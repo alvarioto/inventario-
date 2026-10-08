@@ -11,6 +11,17 @@ function json(res,status,body){
 function normalize(value){
  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/&amp;/g,' and ').replace(/[^a-z0-9]+/g,' ').trim();
 }
+function validGtin(value){
+ const raw=String(value||'').replace(/[^0-9]/g,'');
+ if(![8,12,13,14].includes(raw.length))return'';
+ let sum=0,weight=3;
+ for(let i=raw.length-2;i>=0;i--){
+  sum+=Number(raw[i])*weight;
+  weight=weight===3?1:3;
+ }
+ const expected=String((10-(sum%10))%10);
+ return raw.at(-1)===expected?raw:'';
+}
 function decodeHtml(value){
  return String(value||'').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;|&#160;/g,' ');
 }
@@ -65,8 +76,12 @@ function rowVariant(value){
 function buildSearchQuery(item){
  const isFunko=item?.type==='funko'||normalize(item?.manufacturer)==='funko';
  const parts=[];
- if(item?.barcode)parts.push(String(item.barcode).trim());
+ const barcode=validGtin(item?.barcode);
+ if(barcode)parts.push(barcode);
  if(isFunko){
+  // SKU y GTIN van delante del texto libre: son más fiables que un nombre
+  // o número Pop leído por visión.
+  if(item?.sku)parts.push(String(item.sku).trim());
   const name=String(item.character||item.title||'').trim();
   if(name)parts.push(name);
   if(item.popNumber)parts.push(String(item.popNumber).trim());
@@ -159,7 +174,7 @@ function exactScore(item,row){
  const isFunko=item?.type==='funko'||normalize(item?.manufacturer)==='funko';
  if(incompatibleCategory(item,row))return -1;
  const hay=normalize(row.title+' '+row.console+' '+row.url);
- const strongIds=[item?.barcode,item?.sku].filter(Boolean).map(normalize).filter(x=>x.length>=5);
+ const strongIds=[validGtin(item?.barcode),item?.sku].filter(Boolean).map(normalize).filter(x=>x.length>=5);
  if(strongIds.some(id=>hay.includes(id)))return 1000;
  const name=String(item?.character||item?.title||'').trim();
  const stop=new Set(['funko','pop','figure','figura','vinyl','movies','movie','television','animation','games','game','disney','marvel','heroes','the','and','with']);
@@ -282,7 +297,7 @@ async function resolvePriceCharting(item){
  }
  return value;
 }
-export {buildSearchQuery,parseSearchRows,parseProductPage,chooseBest,choosePrice,resolvePriceCharting};
+export {validGtin,buildSearchQuery,parseSearchRows,parseProductPage,chooseBest,choosePrice,resolvePriceCharting};
 
 export default async function handler(req,res){
  if(!applyCors(req,res))return json(res,403,{error:'Origen no autorizado.'});
