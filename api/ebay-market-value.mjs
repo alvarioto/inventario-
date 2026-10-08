@@ -337,7 +337,7 @@ function headers(accessToken,marketplace){
 function marketplaceOrder(primary,item){
   const first=String(primary||'EBAY_ES').trim()||'EBAY_ES';
   if(item?.type!=='funko')return [first];
-  return uniq([first,'EBAY_US','EBAY_GB']);
+  return uniq([first,'EBAY_US','EBAY_GB','EBAY_DE','EBAY_FR','EBAY_IT','EBAY_CA','EBAY_AU']);
 }
 async function search(accessToken,marketplace,item){
   const out=new Map();
@@ -396,13 +396,13 @@ function funkoIdentityFromAccepted(item,acceptedMatches){
     const fromTitle=String(row?.title||'').match(/#\s*(\d{3,5})\b/)?.[1]||'';
     const pop=box||fromTitle;
     if(pop)popNumbers.push(pop);
-    const productLine=normalize(
-      map.get('product line')||
-      map.get('linea de producto')||
-      map.get('línea de producto')||
-      map.get('features')||
-      ''
-    );
+    const productLine=normalize([
+      map.get('product line'),
+      map.get('linea de producto'),
+      map.get('línea de producto'),
+      map.get('features'),
+      row?.title
+    ].filter(Boolean).join(' '));
     if(productLine.includes('premium'))categories.push('Pop! Premium');
     else if(productLine.includes('rewind'))categories.push('REWIND');
   }
@@ -463,7 +463,13 @@ function aggregate(rows){
   };
 }
 
-export {normalize,buildQueries,exactMatch,aggregate,marketplaceOrder,funkoIdentityFromAccepted};
+function singleExactReferenceAllowed(item,market){
+  if(item?.type!=='funko'||!market||market.count!==1||!market.listings?.length)return false;
+  const matched=market.listings[0]?.matchedBy||[];
+  return matched.includes('GTIN/ISBN')||matched.includes('SKU/MPN');
+}
+
+export {normalize,buildQueries,exactMatch,aggregate,marketplaceOrder,funkoIdentityFromAccepted,singleExactReferenceAllowed};
 
 export default async function handler(req,res){
   if(!applyCors(req,res))return json(res,403,{ok:false,error:'Origen no autorizado.'});
@@ -492,7 +498,7 @@ export default async function handler(req,res){
       const resolvedIdentity=funkoIdentityFromAccepted(item,acceptedMatches);
       const rejected=checked.filter(x=>!x.match.ok).slice(0,10).map(x=>({title:String(x.row?.title||'').slice(0,180),reason:x.match.reason}));
       attempts.push({marketplace,candidates:summaries.length,accepted:market?.count||0});
-      if(!bestFailure||(market?.count||0)>(bestFailure.market?.count||0))bestFailure={market,rejected,marketplace};
+      if(!bestFailure||(market?.count||0)>(bestFailure.market?.count||0))bestFailure={market,rejected,marketplace,resolvedIdentity};
       if(market&&market.count>=MIN_SAMPLE&&market.average!=null){
         return json(res,200,{
           ok:true,found:true,source:'eBay Browse API',marketplace,attemptedMarketplaces:attempts.map(x=>x.marketplace),
@@ -505,11 +511,23 @@ export default async function handler(req,res){
       }
     }
     const best=bestFailure?.market;
+    if(singleExactReferenceAllowed(item,best)){
+      const listing=best.listings[0];
+      return json(res,200,{
+        ok:true,found:true,source:'eBay Browse API',marketplace:bestFailure?.marketplace||primaryMarketplace,
+        attemptedMarketplaces:attempts.map(x=>x.marketplace),targetSample:TARGET_SAMPLE,minimumSample:MIN_SAMPLE,
+        average:Number(listing.price.toFixed(2)),min:Number(listing.price.toFixed(2)),max:Number(listing.price.toFixed(2)),
+        currency:listing.currency,count:1,listings:[listing],rejected:bestFailure?.rejected||[],
+        resolvedIdentity:bestFailure?.resolvedIdentity||undefined,singleReference:true,
+        methodology:'Referencia orientativa basada en 1 anuncio activo de eBay verificado mediante GTIN/UPC/EAN o SKU/MPN exacto. No es un promedio ni una venta cerrada.'
+      });
+    }
     return json(res,200,{
       ok:true,found:false,
       reason:`Solo se encontraron ${best?.count||0} anuncios que pudieran verificarse como el artículo exacto; hacen falta al menos ${MIN_SAMPLE}.`,
       targetSample:TARGET_SAMPLE,minimumSample:MIN_SAMPLE,listings:best?.listings||[],
-      rejected:bestFailure?.rejected||[],attemptedMarketplaces:attempts.map(x=>x.marketplace)
+      rejected:bestFailure?.rejected||[],attemptedMarketplaces:attempts.map(x=>x.marketplace),
+      resolvedIdentity:bestFailure?.resolvedIdentity||undefined
     });
   }catch(error){
     return json(res,502,{ok:false,error:error instanceof Error?error.message:'No se pudo consultar eBay.'});

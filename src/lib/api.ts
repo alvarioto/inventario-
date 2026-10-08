@@ -8,6 +8,7 @@ const base=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');
 const priceChartingValueUrl=(import.meta.env.VITE_PRICECHARTING_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/pricecharting-value').replace(/\/$/,'');
 const legendsVerseValueUrl=(import.meta.env.VITE_LEGENDSVERSE_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/legendsverse-value').replace(/\/$/,'');
 const ebayMarketValueUrl=(import.meta.env.VITE_EBAY_MARKET_VALUE_URL||'https://frikivault-hobbydb-api.vercel.app/api/ebay-market-value').replace(/\/$/,'');
+const exchangeRatesUrl=(import.meta.env.VITE_EXCHANGE_RATES_URL||'https://frikivault-hobbydb-api.vercel.app/api/exchange-rates').replace(/\/$/,'');
 export async function getApiStatus():Promise<ApiStatus>{await keyReady.catch(()=>{});if(getPersonalKey())return {deepseek:true,model:'deepseek-flash',webSearch:true,publicSearch:true,mode:'direct'};const r=await fetch(base+'/api/status');if(!r.ok||!r.headers.get('content-type')?.includes('application/json'))throw new Error('Configura IA directa en Ajustes para analizar fotos con tu clave de DeepSeek.');return r.json()}
 async function post<T>(route:string,payload:unknown):Promise<T>{
  const status=await getApiStatus();const token=await auth?.currentUser?.getIdToken();
@@ -138,7 +139,7 @@ type EbayExactListing={
 type EbayMarketValue={
  ok:boolean;found:boolean;source?:string;marketplace?:string;targetSample?:number;minimumSample?:number;
  average?:number;min?:number;max?:number;currency?:string;count?:number;listings?:EbayExactListing[];
- methodology?:string;reason?:string;
+ methodology?:string;reason?:string;singleReference?:boolean;
  resolvedIdentity?:{popNumber?:string;funkoCategory?:string};
 };
 async function readEbayMarketValue(item:Partial<InventoryDraft>):Promise<EbayMarketValue|null>{
@@ -187,27 +188,31 @@ function applyEbayMarketValue(research:ResearchResult,market:EbayMarketValue):Re
   if(eur!=null&&usd!=null)return `${eur.toFixed(2)} EUR · ${usd.toFixed(2)} USD`;
   return `${value.toFixed(2)} ${currency}`;
  };
+ const single=Boolean(market.singleReference||(market.count||listings.length)===1);
  const facts=[
   {label:'Anuncios exactos usados',value:String(market.count||listings.length),sourceId},
-  {label:'Promedio eBay',value:dual(average),sourceId},
-  {label:'Rango eBay',value:`${dual(min)} – ${dual(max)}`,sourceId}
+  {label:single?'Referencia eBay exacta':'Promedio eBay',value:dual(average),sourceId},
+  ...(!single?[{label:'Rango eBay',value:`${dual(min)} – ${dual(max)}`,sourceId}]:[])
  ];
  return {
   ...research,
-  summary:`eBay: promedio de ${market.count||listings.length} anuncios activos verificados como exactamente el mismo artículo: ${dual(average)}. No se incluyen coincidencias parciales.`,
+  summary:single
+    ?`eBay: 1 anuncio activo verificado mediante identificador exacto para el mismo artículo: ${dual(average)}. Es una referencia orientativa, no un promedio ni una venta cerrada.`
+    :`eBay: promedio de ${market.count||listings.length} anuncios activos verificados como exactamente el mismo artículo: ${dual(average)}. No se incluyen coincidencias parciales.`,
   facts:[...facts,...research.facts.filter(f=>!f.label.toLowerCase().includes('ebay'))],
   sources:[...sources,...research.sources.filter(x=>!x.url.includes('ebay.'))],
   listings:[...comparables,...research.listings.filter(x=>!x.url.includes('ebay.'))],
   comparables:[...comparables,...research.comparables.filter(x=>!x.url.includes('ebay.'))],
-  asking:{kind:'market',currency,count:market.count||listings.length,min,max,median:average,label:`Promedio eBay · ${market.count||listings.length} anuncios exactos`,originalCurrency:currency,originalMedian:average},
-  sold:{available:false,count:0,median:null,reason:'La Browse API de eBay aporta anuncios activos; este promedio no representa ventas cerradas.'},
+  asking:{kind:'market',currency,count:market.count||listings.length,min,max,median:average,label:single?'Referencia eBay · 1 anuncio exacto':`Promedio eBay · ${market.count||listings.length} anuncios exactos`,originalCurrency:currency,originalMedian:average},
+  sold:{available:false,count:0,median:null,reason:'La Browse API de eBay aporta anuncios activos; este valor no representa ventas cerradas.'},
   resolvedIdentity:market.resolvedIdentity?{...(research.resolvedIdentity||{}),...market.resolvedIdentity}:research.resolvedIdentity,
-  warnings:[...(research.warnings||[]),'eBay: valoración basada en precios solicitados de anuncios activos exactos, no en ventas cerradas.'].filter((v,i,a)=>a.indexOf(v)===i)
+  warnings:[...(research.warnings||[]),single?'eBay: referencia basada en 1 anuncio activo exacto; úsala como orientación, no como valor de venta confirmado.':'eBay: valoración basada en precios solicitados de anuncios activos exactos, no en ventas cerradas.'].filter((v,i,a)=>a.indexOf(v)===i)
  };
-}async function ensureUsdDisplayRates(research:ResearchResult):Promise<ResearchResult>{
+}
+async function ensureUsdDisplayRates(research:ResearchResult):Promise<ResearchResult>{
  if(research.exchangeRates?.EUR)return research;
  try{
-  const response=await fetch('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY,CAD,AUD,CHF,CNY,MXN,KRW',{signal:AbortSignal.timeout(10000)});
+  const response=await fetch(exchangeRatesUrl,{signal:AbortSignal.timeout(15000)});
   if(!response.ok)return research;
   const data=await response.json();
   const rates:Record<string,number>={...(research.exchangeRates||{}),USD:1};
