@@ -10,6 +10,7 @@ assert.equal(identification.hasBox,null);
 assert.equal(identificationSchema.parse({title:'Test mint',type:'funko',condition:'mint',confidence:.9,explanation:'x'}).condition,'new');
 assert.equal(identificationSchema.parse({title:'Test used',type:'funko',condition:'used',confidence:.9,explanation:'x'}).condition,'good');
 assert.equal(identificationSchema.parse({title:'Test unknown',type:'funko',condition:'unknown',confidence:.9,explanation:'x'}).condition,null);
+assert.equal(identificationSchema.parse({title:'Signed Funko',type:'funko',signed:true,signedBy:'Jeff Goldblum',confidence:.9,explanation:'x'}).signedBy,'Jeff Goldblum');
 assert.equal(safeUrl('javascript:alert(1)'),null);
 
 
@@ -20,6 +21,7 @@ assert.equal(cleanIdentity,'Funko 90310');
 assert.doesNotMatch(cleanIdentity,/889698903105/);
 assert.equal(buildResearchIdentity({title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',sku:'90310',barcode:'889698903105'}),'Éomer 1982');
 assert.equal(buildResearchIdentity({title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982 Chase',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',funkoVariant:'Chase'}),'Éomer 1982 Chase');
+assert.equal(buildResearchIdentity({title:'Funko Rewind Jurassic Park Ian Malcolm',type:'funko',manufacturer:'Funko',character:'Ian Malcolm',funkoCategory:'REWIND',signed:true,signedBy:'Jeff Goldblum'}),'Ian Malcolm REWIND Jeff Goldblum Signed Autographed');
 
 // Regresión: si el UPC/EAN coincide exactamente, un número Pop mal leído por visión
 // no puede descartar el anuncio correcto. Caso real: Alien Chestburster 90318 es #1988,
@@ -421,6 +423,9 @@ assert.match(appSource,/submitInFlightRef\.current/);
 assert.match(appSource,/function duplicateIdentityKey/);
 assert.match(appSource,/function duplicateGroups/);
 assert.match(appSource,/Auditoría de duplicados/);
+assert.match(appSource,/label="Firmado por"/);
+assert.match(appSource,/signedBy/);
+assert.match(appSource,/Boolean\(before\.signed\) !== Boolean\(after\.signed\)/);
 assert.match(appSource,/eBay Product Research · ventas reales/);
 assert.match(appSource,/>PriceCharting<\/a>/);
 assert.match(appSource,/Analizar artículo/);
@@ -440,6 +445,9 @@ assert.match(funkoRoute,/\['sold','guide'\]\.includes\(general\.asking\.kind\)/)
 assert.match(apiSource,/const withRates=await ensureUsdDisplayRates\(seed\)/);
 assert.match(apiSource,/VITE_EXCHANGE_RATES_URL/);
 assert.match(apiSource,/Referencia eBay · 1 anuncio exacto/);
+assert.match(apiSource,/signed:Boolean\(item\.signed\),signedBy:item\.signedBy\|\|''/);
+assert.match(apiSource,/if\(item\.signed===true\)/);
+assert.match(apiSource,/No se encontró una valoración firmada verificable/);
 assert.doesNotMatch(apiSource,/api\.frankfurter\.app\/latest\?from=USD/);
 assert.match(apiSource,/Promedio eBay',value:dual\(average\)/);
 assert.match(apiSource,/researchDirect/);
