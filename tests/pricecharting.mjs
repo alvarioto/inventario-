@@ -1,8 +1,19 @@
 import assert from 'node:assert/strict';
-import {buildSearchQuery,parseSearchRows,parseProductPage,chooseBest,choosePrice} from '../api/pricecharting-value.mjs';
+import {validGtin,buildSearchQuery,parseSearchRows,parseProductPage,chooseBest,choosePrice} from '../api/pricecharting-value.mjs';
 
 const chase={type:'funko',manufacturer:'Funko',character:'Cruella De Vil',popNumber:'1663',funkoVariant:'Chase',hasBox:true};
 assert.equal(buildSearchQuery(chase),'Cruella De Vil 1663 Chase Funko');
+assert.equal(validGtin('889698903189'),'889698903189');
+assert.equal(validGtin('889698710010'),'');
+const rewindWithBadBarcode={
+ type:'funko',manufacturer:'Funko',character:'Ian Malcolm',funkoCategory:'REWIND',
+ funkoVariant:'Chase',popNumber:'1982',sku:'71001',barcode:'889698710010'
+};
+const rewindQuery=buildSearchQuery(rewindWithBadBarcode);
+assert.ok(rewindQuery.startsWith('71001 '));
+assert.doesNotMatch(rewindQuery,/889698710010/);
+assert.match(rewindQuery,/Ian Malcolm/i);
+assert.match(rewindQuery,/Chase/i);
 
 const html=`
 <row id="product-1" data-product="1">
