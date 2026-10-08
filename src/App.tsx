@@ -668,7 +668,7 @@ function SettingsPage({ items, user, showToast }: { items: InventoryItem[]; user
       else {
         for (const item of parsed) {
           const { id, createdAt: _createdAt, updatedAt: _updatedAt, ...draft } = item;
-          await saveItem(draft);
+          await saveItem(draft, id || undefined);
         }
       }
       showToast(`Importados ${parsed.length} objetos`);
@@ -700,6 +700,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [photoError, setPhotoError] = useState('');
   const [saveErrorModal, setSaveErrorModal] = useState('');
   const initialPhotosHandled = useRef(false);
+  const submitInFlightRef = useRef(false);
   const [research, setResearch] = useState<ResearchResult | undefined>(item?.research || seed?.research);
   const [displayCurrency, setDisplayCurrency] = useState((item?.currency || seed?.currency || 'EUR').toUpperCase());
   const [researchBusy, setResearchBusy] = useState(false);
@@ -777,7 +778,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!draft.title.trim()) return;
+    if (!draft.title.trim() || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setBusy(true);
     try {
       const baseDraft: InventoryDraft = {
@@ -804,7 +806,10 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       const message = error instanceof Error ? error.message : 'No se pudo guardar el artículo.';
       setPhotoError(message);
       setSaveErrorModal(message);
-    } finally { setBusy(false); }
+    } finally {
+      submitInFlightRef.current = false;
+      setBusy(false);
+    }
   }
 
 
