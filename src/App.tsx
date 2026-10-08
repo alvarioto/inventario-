@@ -139,6 +139,36 @@ function normalizeText(value: unknown) {
   return String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+function duplicateIdentityKey(item: InventoryItem) {
+  const norm = (value: unknown) => normalizeText(value).replace(/[^a-z0-9]+/g, '');
+  const sku = norm(item.sku);
+  const barcode = String(item.barcode || item.isbn || '').replace(/\D/g, '');
+  if (sku) return `${item.type}|sku|${norm(item.manufacturer)}|${sku}`;
+  if (/^\d{8,14}$/.test(barcode)) return `${item.type}|code|${barcode}`;
+  if (item.type === 'funko') {
+    const pop = norm(item.popNumber);
+    const character = norm(item.character || item.title);
+    const variant = norm(item.funkoVariant);
+    const category = norm(item.funkoCategory);
+    if (character && (pop || variant || category)) return `funko|${character}|${pop}|${variant}|${category}`;
+  }
+  const title = norm(item.title);
+  const line = norm(item.line);
+  const character = norm(item.character);
+  return title ? `${item.type}|text|${title}|${line}|${character}` : `id|${item.id}`;
+}
+
+function duplicateGroups(items: InventoryItem[]) {
+  const groups = new Map<string, InventoryItem[]>();
+  for (const item of items) {
+    const key = duplicateIdentityKey(item);
+    const rows = groups.get(key) || [];
+    rows.push(item);
+    groups.set(key, rows);
+  }
+  return [...groups.values()].filter((rows) => rows.length > 1).sort((a,b) => b.length - a.length);
+}
+
 function valuationIdentityChanged(before: InventoryDraft, after: InventoryDraft) {
   if (before.type !== after.type) return true;
   const norm = (value: unknown) => normalizeText(value).replace(/[^a-z0-9]+/g, '');
@@ -256,7 +286,7 @@ function App() {
           )}
           {tab === 'scan' && <Scanner onCreate={openNew} showToast={showToast} />}
           {tab === 'stats' && <Stats items={items} />}
-          {tab === 'settings' && <SettingsPage items={items} user={user} showToast={showToast} />}
+          {tab === 'settings' && <SettingsPage items={items} user={user} showToast={showToast} onEdit={(item) => setFormItem(item)} />}
         </main>
         <MobileNav tab={tab} setTab={setTab} onScan={() => setTab('scan')} />
       </div>
@@ -647,8 +677,10 @@ function Stats({ items }: { items: InventoryItem[] }) {
   );
 }
 
-function SettingsPage({ items, user, showToast }: { items: InventoryItem[]; user: User | null; showToast: (m: string) => void }) {
+function SettingsPage({ items, user, showToast, onEdit }: { items: InventoryItem[]; user: User | null; showToast: (m: string) => void; onEdit: (item: InventoryItem) => void }) {
   const importRef = useRef<HTMLInputElement | null>(null);
+  const duplicates = duplicateGroups(items);
+  const duplicateRecords = duplicates.reduce((sum, group) => sum + Math.max(0, group.length - 1), 0);
   function download(filename: string, text: string, type: string) {
     const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
@@ -668,7 +700,7 @@ function SettingsPage({ items, user, showToast }: { items: InventoryItem[]; user
       else {
         for (const item of parsed) {
           const { id, createdAt: _createdAt, updatedAt: _updatedAt, ...draft } = item;
-          await saveItem(draft);
+          await saveItem(draft, id || undefined);
         }
       }
       showToast(`Importados ${parsed.length} objetos`);
@@ -679,6 +711,7 @@ function SettingsPage({ items, user, showToast }: { items: InventoryItem[]; user
       <div className="settings-grid">
         <div className="panel account-panel"><div className="user-block">{user?.photoURL ? <img src={user.photoURL}/> : <div className="user-fallback"><UserRound/></div>}<div><b>{user?.displayName || (demoMode ? 'Modo local' : 'Usuario')}</b><small>{user?.email || (demoMode ? 'Sin cuenta Firebase todavía' : '')}</small></div></div>{!demoMode && auth && <button className="danger-link" onClick={() => signOut(auth!)}><LogOut size={17}/> Cerrar sesión</button>}</div>
         <div className="panel"><PanelHeader title="Copia de seguridad"/><p className="muted">JSON conserva todos los campos. CSV abre bien en Excel.</p><div className="button-stack"><button className="secondary wide" onClick={exportJson}><FileJson size={18}/> Exportar JSON</button><button className="secondary wide" onClick={exportCsv}><Download size={18}/> Exportar CSV</button><button className="secondary wide" onClick={() => importRef.current?.click()}><Upload size={18}/> Importar JSON</button><input ref={importRef} hidden type="file" accept="application/json" onChange={(e)=>importJson(e.target.files?.[0])}/></div></div>
+        <div className="panel"><PanelHeader title="Auditoría de duplicados"/><p className="muted">Firestore tiene <b>{items.length}</b> registros. {duplicateRecords ? <>He detectado <b>{duplicateRecords}</b> posibles copias repetidas en {duplicates.length} grupos. No se borra nada automáticamente.</> : <>No se detectan copias repetidas por identificadores fuertes.</>}</p>{duplicates.length>0&&<div className="button-stack">{duplicates.slice(0,12).map((group,index)=><button key={group[0].id || index} type="button" className="secondary wide" onClick={()=>onEdit(group[0])}><span>{group[0].title}</span><b>×{group.length}</b></button>)}</div>}</div>
         <DirectAiSettings/>
         <div className="panel"><PanelHeader title="Estado Firebase"/><div className="status-list"><div><span className={isFirebaseConfigured ? 'dot ok':'dot warn'}/><b>Configuración web</b><em>{isFirebaseConfigured ? 'Conectada' : 'Pendiente'}</em></div><div><span className={demoMode ? 'dot warn':'dot ok'}/><b>Base de datos</b><em>{demoMode ? 'Local demo' : 'Cloud Firestore'}</em></div></div></div>
         <div className="panel"><PanelHeader title="Privacidad"/><p className="muted">Authentication y Firestore limitan la colección a tu usuario. Las fotos se comprimen y se guardan dentro de Firestore; en modo directo, tu clave se guarda en este navegador y se envía únicamente a DeepSeek. eBay se consulta mediante fuentes públicas, sin iniciar sesión.</p><div className="secure-note"><ShieldCheck size={17}/> IA directa funciona desde este dispositivo sin un servidor propio. Firebase sirve la web, autentica tu cuenta y sincroniza tus objetos.</div></div>
@@ -700,6 +733,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [photoError, setPhotoError] = useState('');
   const [saveErrorModal, setSaveErrorModal] = useState('');
   const initialPhotosHandled = useRef(false);
+  const submitInFlightRef = useRef(false);
   const [research, setResearch] = useState<ResearchResult | undefined>(item?.research || seed?.research);
   const [displayCurrency, setDisplayCurrency] = useState((item?.currency || seed?.currency || 'EUR').toUpperCase());
   const [researchBusy, setResearchBusy] = useState(false);
@@ -777,7 +811,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!draft.title.trim()) return;
+    if (!draft.title.trim() || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setBusy(true);
     try {
       const baseDraft: InventoryDraft = {
@@ -804,7 +839,10 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       const message = error instanceof Error ? error.message : 'No se pudo guardar el artículo.';
       setPhotoError(message);
       setSaveErrorModal(message);
-    } finally { setBusy(false); }
+    } finally {
+      submitInFlightRef.current = false;
+      setBusy(false);
+    }
   }
 
 
