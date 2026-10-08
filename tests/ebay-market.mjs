@@ -115,6 +115,43 @@ const exactChase={
 assert.equal(exactMatch(chase,regular).ok,false);
 assert.equal(exactMatch(chase,exactChase).ok,true);
 
+const signedFunko={
+  type:'funko',
+  title:'Funko Pop Jurassic Park Ian Malcolm',
+  character:'Ian Malcolm',
+  manufacturer:'Funko',
+  sku:'71001',
+  signed:true,
+  signedBy:'Jeff Goldblum'
+};
+const signedGoldblum={
+  title:'Funko Jurassic Park Ian Malcolm Signed Autographed by Jeff Goldblum',
+  mpn:'71001',
+  categoryPath:'Collectibles > Funko',
+  price:{value:'199.99',currency:'USD'},
+  localizedAspects:[{name:'Brand',value:'Funko'},{name:'Signed By',value:'Jeff Goldblum'}]
+};
+const unsignedIan={
+  ...signedGoldblum,
+  title:'Funko Jurassic Park Ian Malcolm',
+  localizedAspects:[{name:'Brand',value:'Funko'}]
+};
+const wrongSigner={
+  ...signedGoldblum,
+  title:'Funko Jurassic Park Ian Malcolm Signed by Sam Neill',
+  localizedAspects:[{name:'Brand',value:'Funko'},{name:'Signed By',value:'Sam Neill'}]
+};
+assert.equal(exactMatch(signedFunko,signedGoldblum).ok,true);
+assert.ok(exactMatch(signedFunko,signedGoldblum).matchedBy.includes('firma'));
+assert.equal(exactMatch(signedFunko,unsignedIan).ok,false);
+assert.equal(exactMatch(signedFunko,wrongSigner).ok,false);
+
+const normalIan={...signedFunko,signed:false,signedBy:''};
+assert.equal(exactMatch(normalIan,signedGoldblum).ok,false);
+
+const signedQueries=buildQueries(signedFunko);
+assert.ok(signedQueries.some(q=>q.kind==='q'&&/Jeff Goldblum/i.test(q.value)&&/signed/i.test(q.value)));
+
 // Los GTIN inválidos se descartan y el SKU pasa a ser la identidad fuerte.
 assert.equal(validGtin('889698903189'),'889698903189');
 assert.equal(validGtin('889698710010'),'');
