@@ -45,6 +45,7 @@ export interface InventoryItem {
   sealed?: boolean;
   hasBox?: boolean;
   signed?: boolean;
+  signedBy?: string;
   graded?: boolean;
   gradingCompany?: string;
   grade?: string;
@@ -108,6 +109,7 @@ export interface AiIdentification {
   hasBox: boolean | null;
   sealed: boolean | null;
   signed: boolean | null;
+  signedBy: string;
   graded: boolean | null;
   gradingCompany: string;
   grade: string;
