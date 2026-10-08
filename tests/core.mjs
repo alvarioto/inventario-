@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify, isGenericProductTitle, buildResearchIdentity, applyFigurePackageAudit } from '../server/core.mjs';
+import { exactMatch as exactEbayMatch } from '../api/ebay-market-value.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
@@ -19,6 +20,32 @@ assert.equal(cleanIdentity,'Funko 90310');
 assert.doesNotMatch(cleanIdentity,/889698903105/);
 assert.equal(buildResearchIdentity({title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',sku:'90310',barcode:'889698903105'}),'Éomer 1982');
 assert.equal(buildResearchIdentity({title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982 Chase',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982',funkoVariant:'Chase'}),'Éomer 1982 Chase');
+
+// Regresión: si el UPC/EAN coincide exactamente, un número Pop mal leído por visión
+// no puede descartar el anuncio correcto. Caso real: Alien Chestburster 90318 es #1988,
+// aunque una lectura anterior guardó 1982.
+const alienGtinMatch=exactEbayMatch({
+ type:'funko',title:'Pop! Movies: Alien - Chestburster (Lights Up)',manufacturer:'Funko',
+ character:'Chestburster',line:'Pop! Movies',popNumber:'1982',funkoCategory:'Pop! Regular',
+ barcode:'889698903189',sku:'90318'
+},{
+ itemId:'v1|alien|0',title:'Funko Pop! Premium Alien Chestburster Light Up #1988',
+ gtin:['889698903189'],mpn:'90318',price:{value:'29.99',currency:'EUR'},
+ itemWebUrl:'https://www.ebay.es/itm/alien',condition:'Nuevo'
+});
+assert.equal(alienGtinMatch.ok,true);
+assert.ok(alienGtinMatch.matchedBy.includes('GTIN/ISBN'));
+
+// Sin GTIN verificable, el número Pop sigue siendo estricto.
+const alienWrongPopWithoutGtin=exactEbayMatch({
+ type:'funko',title:'Alien Chestburster',manufacturer:'Funko',character:'Chestburster',
+ line:'Pop! Movies',popNumber:'1982'
+},{
+ itemId:'v1|alien-no-gtin|0',title:'Funko Pop Alien Chestburster #1988',
+ price:{value:'29.99',currency:'EUR'},itemWebUrl:'https://www.ebay.es/itm/alien2'
+});
+assert.equal(alienWrongPopWithoutGtin.ok,false);
+assert.match(alienWrongPopWithoutGtin.reason,/número Pop/i);
 
 const market = summarizeListings([
   {price:10,currency:'EUR',shipping:2},

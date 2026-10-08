@@ -207,8 +207,12 @@ function exactMatch(item,row){
 
   if(item.type==='funko'){
     const pop=String(item.popNumber||'').replace(/\D/g,'');
-    if(pop&&!standalone(hay,pop))return {ok:false,score:0,reason:'número Pop distinto o ausente'};
-    if(pop){score+=70;strong.push('número Pop');}
+    const popMatches=pop&&standalone(hay,pop);
+    // El GTIN/EAN/UPC exacto es más fiable que un número de caja leído por visión.
+    // Si el código de barras coincide, no rechazamos el anuncio solo porque el
+    // popNumber guardado esté mal. Las variantes (Chase, Glow, etc.) siguen siendo estrictas.
+    if(pop&&!popMatches&&!hasStrongProductId)return {ok:false,score:0,reason:'número Pop distinto o ausente'};
+    if(popMatches){score+=70;strong.push('número Pop');}
     const variant=cleanVariant(item.funkoVariant);
     if(variant){
       if(!normalize(hay).includes(variant))return {ok:false,score:0,reason:'variante Funko distinta'};
