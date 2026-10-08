@@ -659,14 +659,31 @@ async function resolveCanonicalResearchIdentity(item,config){
 }
 
 
+function signedTextMatches(item,raw){
+ const hay=normalizeComparableText(raw);
+ const hasSignature=/\b(signed|autograph(?:ed)?|signature|autografo|autógrafo|firmad[oa])\b/i.test(hay);
+ if(item?.signed===true){
+  if(!hasSignature)return false;
+  const signer=normalizeComparableText(item?.signedBy||'');
+  const tokens=signer.split(' ').filter(token=>token.length>=2);
+  if(tokens.length){
+   const hits=tokens.filter(token=>hay.includes(token)).length;
+   if(hits<Math.max(1,Math.ceil(tokens.length*.8)))return false;
+  }
+ }else if(item?.signed===false&&hasSignature)return false;
+ return true;
+}
+
 function relevantSourcesForItem(item,rows){
  const isFunko=item?.type==='funko'||/\bfunko\b|\bpop!?\b/i.test(`${item?.title||''} ${item?.manufacturer||''} ${item?.line||''}`);
- if(isFunko)return rows.filter(source=>funkoTextMatches({...item,type:'funko'},`${source.title||''} ${source.snippet||''}`)).slice(0,6);
+ if(isFunko)return rows.filter(source=>{const raw=`${source.title||''} ${source.snippet||''}`;return signedTextMatches(item,raw)&&funkoTextMatches({...item,type:'funko'},raw);}).slice(0,6);
  const stop=new Set(['the','and','for','with','from','funko','pop','movies','movie','figure','figura','edition','edicion','price','prices','buy','shop']);
  const titleTokens=normalizeComparableText(!isGenericProductTitle(item?.title)?item.title:`${item?.manufacturer||''} ${item?.line||''} ${item?.character||''}`).split(' ').filter(x=>x.length>=3&&!stop.has(x)&&!/^\d+$/.test(x));
  const ids=[item?.sku,item?.barcode,item?.isbn,item?.cardNumber,item?.issueNumber,...(String(item?.title||'').match(/\d{2,}/g)||[])].filter(Boolean).map(normalizeComparableText);
  return rows.filter(source=>{
-  const hay=normalizeComparableText(`${source.title||''} ${source.snippet||''}`);
+  const raw=`${source.title||''} ${source.snippet||''}`;
+  if(!signedTextMatches(item,raw))return false;
+  const hay=normalizeComparableText(raw);
   if(ids.some(id=>id&&hay.includes(id)))return true;
   const hits=titleTokens.filter(token=>hay.includes(token)).length;
   return titleTokens.length<=1?hits===titleTokens.length&&hits>0:hits>=2&&hits/titleTokens.length>=.45;
@@ -695,6 +712,7 @@ function conservativeFallbackComparables(item,listings,sources){
    const source=sources.find(x=>x.url===listing.url||x.id===listing.id);
    const raw=String(listing.title||'')+' '+String(source?.snippet||'');
    if(/\b(lote|lot|bundle|protector|protective|case only|empty box|caja vacia|box only|reproduction|repro|keychain|llavero|sticker|pegatina)\b/i.test(normalizeComparableText(raw)))return false;
+   if(!signedTextMatches(item,raw))return false;
    return funkoTextMatches({...item,type:'funko'},raw);
   });
  }
@@ -707,6 +725,7 @@ function conservativeFallbackComparables(item,listings,sources){
   const source=sources.find(x=>x.url===listing.url||x.id===listing.id);
   const raw=String(listing.title||'')+' '+String(source?.snippet||'');
   if(bad.test(normalizeComparableText(raw)))return false;
+  if(!signedTextMatches(item,raw))return false;
   const hay=normalizeComparableText(raw);
   const idHits=identifiers.filter(id=>hay.includes(id)).length;
   const tokenHits=tokens.filter(token=>hay.includes(token)).length;
