@@ -361,7 +361,9 @@ const apiSource=readFileSync(new URL('../src/lib/api.ts',import.meta.url),'utf8'
 assert.match(apiSource,/runGeneralResearch/);
 assert.match(apiSource,/export function preserveVerifiedResearch/);
 assert.match(apiSource,/Se mantiene la última valoración verificada/);
-const funkoRoute=apiSource.slice(apiSource.indexOf("if(item.type==='funko')"),apiSource.indexOf("let general:ResearchResult|null=null",apiSource.indexOf("if(item.type==='funko')")));
+const investigateStart=apiSource.indexOf('export async function investigate');
+const funkoStart=apiSource.indexOf("if(item.type==='funko')",investigateStart);
+const funkoRoute=apiSource.slice(funkoStart,apiSource.indexOf("\n }\n\n let general:ResearchResult|null=null",funkoStart));
 assert.ok(funkoRoute.indexOf('tryEbayExact(null)')>=0);
 assert.ok(funkoRoute.indexOf('tryEbayExact(null)')<funkoRoute.indexOf('tryPriceCharting()'));
 assert.match(apiSource,/const withRates=await ensureUsdDisplayRates\(seed\)/);
