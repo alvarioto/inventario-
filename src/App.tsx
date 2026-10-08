@@ -877,7 +877,10 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
           sku: current.sku || next.resolvedIdentity.sku || '',
           barcode: current.barcode || next.resolvedIdentity.barcode || ''
         } : {}),
-        currentValue: next.asking.median != null ? Number(next.asking.median.toFixed(2)) : current.currentValue
+        currentValue: (() => {
+          const converted = displayedResearchValue(next, current.currency || 'EUR');
+          return converted != null ? Number(converted.toFixed(2)) : current.currentValue;
+        })()
       }));
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : 'No se pudo mejorar con IA.');
