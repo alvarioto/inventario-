@@ -150,7 +150,8 @@ function duplicateIdentityKey(item: InventoryItem) {
     const character = norm(item.character || item.title);
     const variant = norm(item.funkoVariant);
     const category = norm(item.funkoCategory);
-    if (character && (pop || variant || category)) return `funko|${character}|${pop}|${variant}|${category}`;
+    const signature = item.signed ? `signed-${norm(item.signedBy)||'unknown'}` : 'unsigned';
+    if (character && (pop || variant || category)) return `funko|${character}|${pop}|${variant}|${category}|${signature}`;
   }
   const title = norm(item.title);
   const line = norm(item.line);
