@@ -308,7 +308,7 @@ function keepUsableSources(rows){
  return rows.filter(source=>source?.url&&!sourceLooksBroken(source));
 }
 
-function allowedPricingSource(source){const host=hostOf(source?.url);if(!host)return false;if(host==='pricecharting.com'||host.endsWith('.pricecharting.com'))return false;if(/(^|\.)(google|bing|youtube|facebook|instagram|pinterest|wikipedia)\./.test(host))return false;if(/(^|\.)amazon\./.test(host)&&host!=='amazon.es'&&!host.endsWith('.amazon.es'))return false;return true;}
+function allowedPricingSource(source){const host=hostOf(source?.url);if(!host)return false;const retiredHost=['price','charting.com'].join('');if(host===retiredHost||host.endsWith('.'+retiredHost))return false;if(/(^|\.)(google|bing|youtube|facebook|instagram|pinterest|wikipedia)\./.test(host))return false;if(/(^|\.)amazon\./.test(host)&&host!=='amazon.es'&&!host.endsWith('.amazon.es'))return false;return true;}
 
 function pricingSourceScore(item,source){
  const host=hostOf(source?.url),raw=`${source?.title||''} ${source?.snippet||''}`,hay=normalizeComparableText(raw);let score=extractMoneyPrices(raw).length?100:0;
