@@ -399,6 +399,9 @@ assert.ok(funkoResearch.comparables.some(row=>row.url.includes('ebay.es')));
 // Regresión: las fotos se convierten a datos persistentes antes de pulsar Guardar.
 const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta.url),'utf8');
+assert.match(inventorySource,/deleteField/);
+assert.match(inventorySource,/forbiddenPriceChartingForItem\(item\)/);
+assert.match(inventorySource,/research:deleteField\(\)/);
 const aiCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 assert.doesNotMatch(aiCoreSource,/eBay vendidos\/completados y tiendas públicas/);
 assert.match(aiCoreSource,/PriceCharting es la referencia principal/);
@@ -455,6 +458,9 @@ assert.match(appSource,/Auditoría de duplicados/);
 assert.match(appSource,/label="Firmado por"/);
 assert.match(appSource,/label="Corregir identificación"/);
 assert.match(appSource,/function legacyComicPriceCharting/);
+assert.match(appSource,/forbiddenPriceChartingForItem/);
+assert.match(appSource,/setResearch\(undefined\)/);
+assert.match(appSource,/safeResearch=forbiddenPriceChartingForItem/);
 assert.match(appSource,/function effectiveCurrentValue/);
 assert.match(appSource,/staleComicGuide \? undefined/);
 assert.match(appSource,/stalePreviousComicGuide/);
@@ -472,6 +478,7 @@ const apiSource=readFileSync(new URL('../src/lib/api.ts',import.meta.url),'utf8'
 assert.match(apiSource,/runGeneralResearch/);
 assert.match(apiSource,/export function preserveVerifiedResearch/);
 assert.match(apiSource,/export function researchUsesPriceCharting/);
+assert.match(apiSource,/export function forbiddenPriceChartingForItem/);
 assert.match(apiSource,/itemType==='comic'\|\|itemType==='manga'/);
 assert.match(apiSource,/researchUsesPriceCharting\(previous\)/);
 assert.match(apiSource,/Se mantiene la última valoración verificada/);
