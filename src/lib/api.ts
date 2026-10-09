@@ -2,6 +2,7 @@ import { auth } from './firebase';
 import { getPersonalKey, identifyDirect, inspectFunkoStickersDirect, keyReady, researchDirect } from './direct-ai';
 import { detectAllFunkoStickers, FUNKO_STICKERS } from './funko-stickers';
 import { lookupActionFigure411InBrowser, type ActionFigure411BrowserValue } from './actionfigure411-browser';
+import { priceChartingIdentityMatches, priceChartingResearchMatchesItem, researchUsesPriceChartingData } from './pricecharting-identity.mjs';
 import type { AiIdentification, InventoryDraft, ResearchResult } from '../types';
 export type ApiStatus={deepseek:boolean;model:string;webSearch:boolean;publicSearch:boolean;mode:string;session?:string};
 const base=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');
@@ -99,13 +100,7 @@ function validGtin(value:unknown){
  return raw.at(-1)===expected?raw:'';
 }
 function priceChartingMatchesExactFigure(item:Partial<InventoryDraft>,guide:{url?:string;title?:string;evidence?:string}){
- if(item.type!=='figure')return true;
- const strongIds=[item.barcode,item.sku]
-  .map(normalizeStrongId)
-  .filter(id=>id.length>=5);
- if(!strongIds.length)return false;
- const hay=normalizeStrongId(`${guide.title||''} ${guide.evidence||''} ${guide.url||''}`);
- return strongIds.some(id=>hay.includes(id));
+ return priceChartingIdentityMatches(item,guide);
 }
 
 async function readPriceChartingValue(item:Partial<InventoryDraft>){
@@ -117,7 +112,7 @@ async function readPriceChartingValue(item:Partial<InventoryDraft>){
  if(result.status==='completed'&&result.value){
   const value=result.value as {amount:number;currency:'USD';url:string;evidence:string;variant:string;title:string;condition:string;prices?:{outOfBox:number|null;inBox:number|null;new:number|null}};
   if(!priceChartingMatchesExactFigure(item,value)){
-   throw new Error('PriceCharting devolvió una ficha que no comparte UPC/EAN/SKU con esta figura; se descarta para evitar falsos positivos.');
+   throw new Error('PriceCharting devolvió una ficha cuya identidad no coincide con este artículo; se descarta para evitar falsos positivos.');
   }
   return value;
  }
@@ -340,16 +335,12 @@ function hasVerifiedValue(research:ResearchResult|null|undefined){
  return research?.asking?.median!=null&&Number.isFinite(research.asking.median);
 }
 export function researchUsesPriceCharting(research:ResearchResult|null|undefined){
- if(!research)return false;
- if(String(research.summary||'').toLowerCase().includes('pricecharting'))return true;
- if(String(research.asking?.label||'').toLowerCase().includes('pricecharting'))return true;
- if(Boolean(research.links?.priceCharting))return true;
- if((research.sources||[]).some(source=>String(source.url||'').toLowerCase().includes('pricecharting.com')))return true;
- if((research.comparables||[]).some(row=>String(row.url||'').toLowerCase().includes('pricecharting.com')))return true;
- return (research.facts||[]).some(fact=>`${fact.label||''} ${fact.value||''}`.toLowerCase().includes('pricecharting'));
+ return researchUsesPriceChartingData(research);
 }
-export function forbiddenPriceChartingForItem(item:{type?:string;research?:ResearchResult|null}){
- return (item.type==='comic'||item.type==='manga')&&researchUsesPriceCharting(item.research);
+export function forbiddenPriceChartingForItem(item:Partial<InventoryDraft>&{research?:ResearchResult|null}){
+ if(!researchUsesPriceCharting(item.research))return false;
+ if(item.type==='comic'||item.type==='manga')return true;
+ return !priceChartingResearchMatchesItem(item,item.research);
 }
 export function preserveVerifiedResearch(previous:ResearchResult|undefined,next:ResearchResult,itemType?:string):ResearchResult{
  if(forbiddenPriceChartingForItem({type:itemType,research:previous}))return next;
