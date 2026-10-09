@@ -95,12 +95,12 @@ function money(value?: number | null, currency = 'EUR') {
   catch { return `${value.toFixed(2)} ${currency}`; }
 }
 
-function legacyComicPriceCharting(item: Pick<InventoryItem,'type'|'research'> | Pick<InventoryDraft,'type'|'research'>) {
+function invalidPriceChartingResearch(item: Pick<InventoryItem,'type'|'title'|'character'|'franchise'|'manufacturer'|'line'|'barcode'|'isbn'|'sku'|'research'> | Pick<InventoryDraft,'type'|'title'|'character'|'franchise'|'manufacturer'|'line'|'barcode'|'isbn'|'sku'|'research'>) {
   return forbiddenPriceChartingForItem(item);
 }
 
 function effectiveCurrentValue(item: InventoryItem) {
-  return legacyComicPriceCharting(item) ? null : item.currentValue;
+  return invalidPriceChartingResearch(item) ? null : item.currentValue;
 }
 
 const DISPLAY_CURRENCIES = ['USD','EUR','GBP','JPY','CAD','AUD','CHF','CNY','MXN','KRW'];
@@ -733,10 +733,10 @@ function SettingsPage({ items, user, showToast, onEdit }: { items: InventoryItem
 }
 
 function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted }: { item: InventoryItem | null; seed?: Partial<InventoryDraft>; initialPhotos?: File[]; onClose: () => void; onSaved: () => void; onDeleted: () => void }) {
-  const staleComicGuide = Boolean(item && legacyComicPriceCharting(item));
+  const stalePriceCharting = Boolean(item && invalidPriceChartingResearch(item));
   const itemDraft: Partial<InventoryDraft> = item ? (() => {
     const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = item;
-    if (staleComicGuide) {
+    if (stalePriceCharting) {
       rest.currentValue = null;
       delete rest.research;
     }
@@ -751,10 +751,10 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [saveErrorModal, setSaveErrorModal] = useState('');
   const initialPhotosHandled = useRef(false);
   const submitInFlightRef = useRef(false);
-  const [research, setResearch] = useState<ResearchResult | undefined>(staleComicGuide ? undefined : (item?.research || seed?.research));
+  const [research, setResearch] = useState<ResearchResult | undefined>(stalePriceCharting ? undefined : (item?.research || seed?.research));
   const [displayCurrency, setDisplayCurrency] = useState((item?.currency || seed?.currency || 'EUR').toUpperCase());
   useEffect(() => {
-    if (!forbiddenPriceChartingForItem({type:draft.type,research})) return;
+    if (!forbiddenPriceChartingForItem({...draft,research})) return;
     setResearch(undefined);
     setDraft((current)=>({...current,currentValue:null,research:undefined}));
   }, [draft.type, research]);
@@ -844,11 +844,12 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         tags: (draft.tags || []).map((x) => x.trim()).filter(Boolean)
       };
       if (photoPreparing) throw new Error('Espera a que terminen de prepararse las fotos.');
-      const safeResearch=forbiddenPriceChartingForItem({type:baseDraft.type,research})?undefined:research;
+      const invalidStoredResearch=forbiddenPriceChartingForItem({...baseDraft,research});
+      const safeResearch=invalidStoredResearch?undefined:research;
       let finalDraft: InventoryDraft = {
         ...baseDraft,
         research:safeResearch,
-        ...(!safeResearch&&(baseDraft.type==='comic'||baseDraft.type==='manga')?{currentValue:null}:{})
+        ...(invalidStoredResearch?{currentValue:null}:{})
       };
       if (pendingPhotos.length) {
         setPhotoError('');
@@ -934,10 +935,10 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       }
 
       const freshResearch = await investigate(working);
-      const stalePreviousComicGuide = (working.type === 'comic' || working.type === 'manga') && researchUsesPriceCharting(research);
+      const stalePreviousPriceCharting = forbiddenPriceChartingForItem({...working,research});
       // Una guía PriceCharting antigua de cómic/manga se invalida: no se rescata
       // aunque la búsqueda nueva no encuentre precio.
-      const keepPrevious = !stalePreviousComicGuide && !aiCorrection.trim() && !valuationIdentityChanged(draft, working);
+      const keepPrevious = !stalePreviousPriceCharting && !aiCorrection.trim() && !valuationIdentityChanged(draft, working);
       const next = keepPrevious ? preserveVerifiedResearch(research, freshResearch, working.type) : freshResearch;
       setResearch(next);
       setDraft((current) => ({
@@ -956,7 +957,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         currentValue: (() => {
           const converted = displayedResearchValue(next, current.currency || 'EUR');
           if (converted != null) return Number(converted.toFixed(2));
-          if ((working.type === 'comic' || working.type === 'manga') && (stalePreviousComicGuide || researchUsesPriceCharting(current.research))) return null;
+          if (stalePreviousPriceCharting || forbiddenPriceChartingForItem({...current,research:current.research})) return null;
           return current.currentValue;
         })()
       }));
@@ -992,7 +993,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
 
           <div className="form-grid">
             <Field label="Nombre *" wide><input required value={draft.title} onChange={(e)=>set('title',e.target.value)} placeholder="Ej. S.H.Figuarts Son Goku"/></Field>
-            <Field label="Tipo"><select value={draft.type} onChange={(e)=>{const nextType=e.target.value as ItemType;setDraft((current)=>{const mustClear=(nextType==='comic'||nextType==='manga')&&researchUsesPriceCharting(research);if(mustClear)setResearch(undefined);return {...current,type:nextType,...(mustClear?{currentValue:null,research:undefined}:{})};});}}> {Object.entries(ITEM_TYPE_LABELS).map(([k,v])=><option key={k} value={k}>{TYPE_ICONS[k as ItemType]} {v}</option>)}</select></Field>
+            <Field label="Tipo"><select value={draft.type} onChange={(e)=>{const nextType=e.target.value as ItemType;setDraft((current)=>{const mustClear=forbiddenPriceChartingForItem({...current,type:nextType,research});if(mustClear)setResearch(undefined);return {...current,type:nextType,...(mustClear?{currentValue:null,research:undefined}:{})};});}}> {Object.entries(ITEM_TYPE_LABELS).map(([k,v])=><option key={k} value={k}>{TYPE_ICONS[k as ItemType]} {v}</option>)}</select></Field>
             <Field label="Estado"><select value={draft.status} onChange={(e)=>set('status',e.target.value as ItemStatus)}>{Object.entries(STATUS_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>
             <Field label="Franquicia"><input value={draft.franchise || ''} onChange={(e)=>set('franchise',e.target.value)} placeholder="Pokémon, Marvel…"/></Field>
             <Field label="Personaje"><input value={draft.character || ''} onChange={(e)=>set('character',e.target.value)} placeholder="Pikachu, Batman…"/></Field>
