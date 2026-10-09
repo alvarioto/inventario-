@@ -59,7 +59,7 @@ import {
   uploadItemImage,
   maxCloudPhotos
 } from './lib/inventory';
-import { identifyPhoto, investigate, preserveVerifiedResearch } from './lib/api';
+import { identifyPhoto, investigate, preserveVerifiedResearch, researchUsesPriceCharting } from './lib/api';
 import { DirectAiSettings } from './components/DirectAiSettings';
 import { importDemo } from './lib/demo';
 import QRCode from 'qrcode';
@@ -93,6 +93,14 @@ function money(value?: number | null, currency = 'EUR') {
   if (value == null || Number.isNaN(value)) return '—';
   try { return new Intl.NumberFormat('es-ES', { style: 'currency', currency }).format(value); }
   catch { return `${value.toFixed(2)} ${currency}`; }
+}
+
+function legacyComicPriceCharting(item: Pick<InventoryItem,'type'|'research'> | Pick<InventoryDraft,'type'|'research'>) {
+  return (item.type === 'comic' || item.type === 'manga') && researchUsesPriceCharting(item.research);
+}
+
+function effectiveCurrentValue(item: InventoryItem) {
+  return legacyComicPriceCharting(item) ? null : item.currentValue;
 }
 
 const DISPLAY_CURRENCIES = ['USD','EUR','GBP','JPY','CAD','AUD','CHF','CNY','MXN','KRW'];
@@ -375,7 +383,7 @@ function Dashboard({ items, setTab, onEdit, onAdd }: { items: InventoryItem[]; s
   const collection = items.filter((x) => x.status === 'collection');
   const wishlist = items.filter((x) => x.status === 'wishlist');
   const invested = collection.reduce((s, x) => s + (x.purchasePrice || 0), 0);
-  const value = collection.reduce((s, x) => s + (x.currentValue || 0), 0);
+  const value = collection.reduce((s, x) => s + (effectiveCurrentValue(x) || 0), 0);
   const recent = collection.slice(0, 6);
   const franchises = topGroups(collection, 'franchise').slice(0, 5);
   return (
@@ -424,7 +432,7 @@ function Collection({ items, query, typeFilter, setTypeFilter, onEdit, onAdd, ti
       return (!q || haystack.includes(q)) && (typeFilter === 'all' || item.type === typeFilter);
     });
     if (statusSort === 'name') rows = [...rows].sort((a, b) => a.title.localeCompare(b.title));
-    if (statusSort === 'value') rows = [...rows].sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0));
+    if (statusSort === 'value') rows = [...rows].sort((a, b) => (effectiveCurrentValue(b) || 0) - (effectiveCurrentValue(a) || 0));
     return rows;
   }, [items, query, typeFilter, statusSort]);
 
@@ -444,7 +452,7 @@ function ItemCard({ item, onClick, compact = false }: { item: InventoryItem; onC
   return (
     <button className={`item-card ${compact ? 'compact' : ''}`} onClick={onClick}>
       <div className="item-media">{item.imageUrls?.[0] ? <img src={item.imageUrls[0]} alt=""/> : <span>{TYPE_ICONS[item.type]}</span>}{item.favorite && <i className="favorite"><Star size={13} fill="currentColor"/></i>}<em>{ITEM_TYPE_LABELS[item.type]}</em></div>
-      <div className="item-body"><small>{item.franchise || item.manufacturer || 'Sin franquicia'}</small><h3>{item.title}</h3>{!compact && <div className="item-meta"><span>{item.character || item.line || item.edition || '—'}</span><b>{money(item.currentValue ?? item.purchasePrice, item.currency)}</b></div>}</div>
+      <div className="item-body"><small>{item.franchise || item.manufacturer || 'Sin franquicia'}</small><h3>{item.title}</h3>{!compact && <div className="item-meta"><span>{item.character || item.line || item.edition || '—'}</span><b>{money(effectiveCurrentValue(item) ?? item.purchasePrice, item.currency)}</b></div>}</div>
     </button>
   );
 }
@@ -669,7 +677,7 @@ function Stats({ items }: { items: InventoryItem[] }) {
   const collection = items.filter((x) => x.status === 'collection');
   const sold = items.filter((x) => x.status === 'sold');
   const invested = collection.reduce((s, x) => s + (x.purchasePrice || 0), 0);
-  const value = collection.reduce((s, x) => s + (x.currentValue || 0), 0);
+  const value = collection.reduce((s, x) => s + (effectiveCurrentValue(x) || 0), 0);
   const groups = topGroups(collection, 'type');
   const franchises = topGroups(collection, 'franchise').slice(0, 10);
   const max = Math.max(...groups.map(([, n]) => n), 1);
@@ -725,8 +733,13 @@ function SettingsPage({ items, user, showToast, onEdit }: { items: InventoryItem
 }
 
 function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted }: { item: InventoryItem | null; seed?: Partial<InventoryDraft>; initialPhotos?: File[]; onClose: () => void; onSaved: () => void; onDeleted: () => void }) {
+  const staleComicGuide = Boolean(item && legacyComicPriceCharting(item));
   const itemDraft: Partial<InventoryDraft> = item ? (() => {
     const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = item;
+    if (staleComicGuide) {
+      rest.currentValue = null;
+      delete rest.research;
+    }
     return rest;
   })() : {};
   const initial: InventoryDraft = { ...EMPTY_DRAFT, ...itemDraft, ...(seed || {}), tags: item?.tags || seed?.tags || [], imageUrls: item?.imageUrls || seed?.imageUrls || [], imagePaths: item?.imagePaths || seed?.imagePaths || [] };
@@ -738,7 +751,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [saveErrorModal, setSaveErrorModal] = useState('');
   const initialPhotosHandled = useRef(false);
   const submitInFlightRef = useRef(false);
-  const [research, setResearch] = useState<ResearchResult | undefined>(item?.research || seed?.research);
+  const [research, setResearch] = useState<ResearchResult | undefined>(staleComicGuide ? undefined : (item?.research || seed?.research));
   const [displayCurrency, setDisplayCurrency] = useState((item?.currency || seed?.currency || 'EUR').toUpperCase());
   const [researchBusy, setResearchBusy] = useState(false);
   const [aiCorrection, setAiCorrection] = useState('');
@@ -911,10 +924,11 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       }
 
       const freshResearch = await investigate(working);
-      // Si el usuario está corrigiendo una identificación, no conservamos una
-      // valoración anterior asociada precisamente a la identidad que está rechazando.
-      const keepPrevious = !aiCorrection.trim() && !valuationIdentityChanged(draft, working);
-      const next = keepPrevious ? preserveVerifiedResearch(research, freshResearch) : freshResearch;
+      const stalePreviousComicGuide = (working.type === 'comic' || working.type === 'manga') && researchUsesPriceCharting(research);
+      // Una guía PriceCharting antigua de cómic/manga se invalida: no se rescata
+      // aunque la búsqueda nueva no encuentre precio.
+      const keepPrevious = !stalePreviousComicGuide && !aiCorrection.trim() && !valuationIdentityChanged(draft, working);
+      const next = keepPrevious ? preserveVerifiedResearch(research, freshResearch, working.type) : freshResearch;
       setResearch(next);
       setDraft((current) => ({
         ...current,
@@ -931,7 +945,9 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         } : {}),
         currentValue: (() => {
           const converted = displayedResearchValue(next, current.currency || 'EUR');
-          return converted != null ? Number(converted.toFixed(2)) : current.currentValue;
+          if (converted != null) return Number(converted.toFixed(2));
+          if ((working.type === 'comic' || working.type === 'manga') && (stalePreviousComicGuide || researchUsesPriceCharting(current.research))) return null;
+          return current.currentValue;
         })()
       }));
     } catch (error) {
