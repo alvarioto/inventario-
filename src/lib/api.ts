@@ -342,7 +342,7 @@ export function forbiddenPriceChartingForItem(item:Partial<InventoryDraft>&{rese
  if(item.type==='comic'||item.type==='manga')return true;
  return !priceChartingResearchMatchesItem(item,item.research);
 }
-export function preserveVerifiedResearch(previous:ResearchResult|undefined,next:ResearchResult,itemType?:string):ResearchResult{
+export function preserveVerifiedResearch(previous:ResearchResult|undefined,next:ResearchResult,itemType?:InventoryDraft['type']):ResearchResult{
  if(forbiddenPriceChartingForItem({type:itemType,research:previous}))return next;
  if(hasVerifiedValue(next)||!hasVerifiedValue(previous))return next;
  const checked=previous?.checkedAt?new Date(previous.checkedAt):null;
