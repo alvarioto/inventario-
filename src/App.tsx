@@ -59,7 +59,7 @@ import {
   uploadItemImage,
   maxCloudPhotos
 } from './lib/inventory';
-import { identifyPhoto, investigate, preserveVerifiedResearch, researchUsesPriceCharting } from './lib/api';
+import { forbiddenPriceChartingForItem, identifyPhoto, investigate, preserveVerifiedResearch, researchUsesPriceCharting } from './lib/api';
 import { DirectAiSettings } from './components/DirectAiSettings';
 import { importDemo } from './lib/demo';
 import QRCode from 'qrcode';
@@ -96,7 +96,7 @@ function money(value?: number | null, currency = 'EUR') {
 }
 
 function legacyComicPriceCharting(item: Pick<InventoryItem,'type'|'research'> | Pick<InventoryDraft,'type'|'research'>) {
-  return (item.type === 'comic' || item.type === 'manga') && researchUsesPriceCharting(item.research);
+  return forbiddenPriceChartingForItem(item);
 }
 
 function effectiveCurrentValue(item: InventoryItem) {
@@ -753,6 +753,11 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const submitInFlightRef = useRef(false);
   const [research, setResearch] = useState<ResearchResult | undefined>(staleComicGuide ? undefined : (item?.research || seed?.research));
   const [displayCurrency, setDisplayCurrency] = useState((item?.currency || seed?.currency || 'EUR').toUpperCase());
+  useEffect(() => {
+    if (!forbiddenPriceChartingForItem({type:draft.type,research})) return;
+    setResearch(undefined);
+    setDraft((current)=>({...current,currentValue:null,research:undefined}));
+  }, [draft.type, research]);
   const [researchBusy, setResearchBusy] = useState(false);
   const [aiCorrection, setAiCorrection] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -839,7 +844,12 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         tags: (draft.tags || []).map((x) => x.trim()).filter(Boolean)
       };
       if (photoPreparing) throw new Error('Espera a que terminen de prepararse las fotos.');
-      let finalDraft: InventoryDraft = { ...baseDraft, research };
+      const safeResearch=forbiddenPriceChartingForItem({type:baseDraft.type,research})?undefined:research;
+      let finalDraft: InventoryDraft = {
+        ...baseDraft,
+        research:safeResearch,
+        ...(!safeResearch&&(baseDraft.type==='comic'||baseDraft.type==='manga')?{currentValue:null}:{})
+      };
       if (pendingPhotos.length) {
         setPhotoError('');
         const room = Math.max(0, maxCloudPhotos() - (baseDraft.imageUrls || []).length);
@@ -982,7 +992,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
 
           <div className="form-grid">
             <Field label="Nombre *" wide><input required value={draft.title} onChange={(e)=>set('title',e.target.value)} placeholder="Ej. S.H.Figuarts Son Goku"/></Field>
-            <Field label="Tipo"><select value={draft.type} onChange={(e)=>set('type',e.target.value as ItemType)}>{Object.entries(ITEM_TYPE_LABELS).map(([k,v])=><option key={k} value={k}>{TYPE_ICONS[k as ItemType]} {v}</option>)}</select></Field>
+            <Field label="Tipo"><select value={draft.type} onChange={(e)=>{const nextType=e.target.value as ItemType;setDraft((current)=>{const mustClear=(nextType==='comic'||nextType==='manga')&&researchUsesPriceCharting(research);if(mustClear)setResearch(undefined);return {...current,type:nextType,...(mustClear?{currentValue:null,research:undefined}:{})};});}}> {Object.entries(ITEM_TYPE_LABELS).map(([k,v])=><option key={k} value={k}>{TYPE_ICONS[k as ItemType]} {v}</option>)}</select></Field>
             <Field label="Estado"><select value={draft.status} onChange={(e)=>set('status',e.target.value as ItemStatus)}>{Object.entries(STATUS_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>
             <Field label="Franquicia"><input value={draft.franchise || ''} onChange={(e)=>set('franchise',e.target.value)} placeholder="Pokémon, Marvel…"/></Field>
             <Field label="Personaje"><input value={draft.character || ''} onChange={(e)=>set('character',e.target.value)} placeholder="Pikachu, Batman…"/></Field>

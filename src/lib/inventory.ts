@@ -3,6 +3,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   onSnapshot,
   orderBy,
@@ -11,7 +12,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { auth, db, demoMode } from './firebase';
-import { identifyPhoto } from './api';
+import { forbiddenPriceChartingForItem, identifyPhoto } from './api';
 import { deleteDemo, saveDemo, subscribeDemo } from './demo';
 import type { AiIdentification, InventoryDraft, InventoryItem } from '../types';
 
@@ -21,10 +22,22 @@ const TARGET_PHOTO_BYTES = 92 * 1024;
 export function subscribeItems(callback: (items: InventoryItem[]) => void, onError?: (e: Error) => void) {
   if (demoMode || !db || !auth?.currentUser) return subscribeDemo(callback);
   const uid = auth.currentUser.uid;
-  const q = query(collection(db, 'users', uid, 'items'), orderBy('createdAt', 'desc'));
+  const firestore=db;
+  const q = query(collection(firestore, 'users', uid, 'items'), orderBy('createdAt', 'desc'));
   return onSnapshot(
     q,
-    (snapshot) => callback(snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryItem))),
+    (snapshot) => {
+      const rows=snapshot.docs.map((d)=>({id:d.id,...d.data()} as InventoryItem));
+      const stale=rows.filter((item)=>forbiddenPriceChartingForItem(item));
+      callback(rows.map((item)=>forbiddenPriceChartingForItem(item)?{...item,currentValue:null,research:undefined}:item));
+      for(const item of stale){
+        void setDoc(doc(firestore,'users',uid,'items',item.id),{
+          research:deleteField(),
+          currentValue:null,
+          updatedAt:serverTimestamp()
+        },{merge:true}).catch(()=>{});
+      }
+    },
     (error) => onError?.(error)
   );
 }
@@ -32,10 +45,16 @@ export function subscribeItems(callback: (items: InventoryItem[]) => void, onErr
 export async function saveItem(draft: InventoryDraft, id?: string) {
   if (demoMode || !db || !auth?.currentUser) return saveDemo(draft, id).id;
   const uid = auth.currentUser.uid;
-  const payload = { ...draft, updatedAt: serverTimestamp() };
+  const cleanDraft={...draft};
+  if(cleanDraft.research===undefined)delete cleanDraft.research;
+  const payload = { ...cleanDraft, updatedAt: serverTimestamp() };
   let savedId = id;
   if (savedId) {
-    await setDoc(doc(db, 'users', uid, 'items', savedId), payload, { merge: true });
+    await setDoc(doc(db, 'users', uid, 'items', savedId), {
+      ...payload,
+      ...(draft.research===undefined?{research:deleteField()}:{}),
+      ...((draft.type==='comic'||draft.type==='manga')&&draft.currentValue==null?{currentValue:null}:{})
+    }, { merge: true });
   } else {
     const created = await addDoc(collection(db, 'users', uid, 'items'), {
       ...payload,
