@@ -339,7 +339,17 @@ function mergeResearchWarnings(research:ResearchResult,warnings:string[]):Resear
 function hasVerifiedValue(research:ResearchResult|null|undefined){
  return research?.asking?.median!=null&&Number.isFinite(research.asking.median);
 }
-export function preserveVerifiedResearch(previous:ResearchResult|undefined,next:ResearchResult):ResearchResult{
+export function researchUsesPriceCharting(research:ResearchResult|null|undefined){
+ if(!research)return false;
+ if(String(research.summary||'').toLowerCase().includes('pricecharting'))return true;
+ if(String(research.asking?.label||'').toLowerCase().includes('pricecharting'))return true;
+ if(Boolean(research.links?.priceCharting))return true;
+ if((research.sources||[]).some(source=>String(source.url||'').toLowerCase().includes('pricecharting.com')))return true;
+ if((research.comparables||[]).some(row=>String(row.url||'').toLowerCase().includes('pricecharting.com')))return true;
+ return (research.facts||[]).some(fact=>`${fact.label||''} ${fact.value||''}`.toLowerCase().includes('pricecharting'));
+}
+export function preserveVerifiedResearch(previous:ResearchResult|undefined,next:ResearchResult,itemType?:string):ResearchResult{
+ if((itemType==='comic'||itemType==='manga')&&researchUsesPriceCharting(previous))return next;
  if(hasVerifiedValue(next)||!hasVerifiedValue(previous))return next;
  const checked=previous?.checkedAt?new Date(previous.checkedAt):null;
  const when=checked&&!Number.isNaN(checked.getTime())?checked.toLocaleString('es-ES'):'anteriormente';
