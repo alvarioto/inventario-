@@ -480,7 +480,7 @@ assert.match(apiSource,/export function preserveVerifiedResearch/);
 assert.match(apiSource,/export function researchUsesPriceCharting/);
 assert.match(apiSource,/export function forbiddenPriceChartingForItem/);
 assert.match(apiSource,/forbiddenPriceChartingForItem\(\{type:itemType,research:previous\}\)/);
-assert.match(apiSource,/researchUsesPriceCharting\(previous\)/);
+assert.match(apiSource,/forbiddenPriceChartingForItem\(\{type:itemType,research:previous\}\)/);
 assert.match(apiSource,/Se mantiene la última valoración verificada/);
 const investigateStart=apiSource.indexOf('export async function investigate');
 const funkoStart=apiSource.indexOf("if(item.type==='funko')",investigateStart);
