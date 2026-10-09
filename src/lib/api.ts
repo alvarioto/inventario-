@@ -450,6 +450,12 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
   return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
  }
 
+ // Cómics y manga usan exactamente las mismas fuentes públicas + eBay,
+ // pero dejamos la rama explícita para mantener su política separada.
+ if(item.type==='comic'||item.type==='manga'){
+  // Sin fuente de guía retirada: continúa con fuentes públicas exactas.
+ }
+
  // Cómics, manga y resto: fuentes públicas exactas + eBay.
  let general:ResearchResult|null=null;
  try{
