@@ -22,7 +22,8 @@ const TARGET_PHOTO_BYTES = 92 * 1024;
 export function subscribeItems(callback: (items: InventoryItem[]) => void, onError?: (e: Error) => void) {
   if (demoMode || !db || !auth?.currentUser) return subscribeDemo(callback);
   const uid = auth.currentUser.uid;
-  const q = query(collection(db, 'users', uid, 'items'), orderBy('createdAt', 'desc'));
+  const firestore=db;
+  const q = query(collection(firestore, 'users', uid, 'items'), orderBy('createdAt', 'desc'));
   return onSnapshot(
     q,
     (snapshot) => {
@@ -30,7 +31,7 @@ export function subscribeItems(callback: (items: InventoryItem[]) => void, onErr
       const stale=rows.filter((item)=>forbiddenPriceChartingForItem(item));
       callback(rows.map((item)=>forbiddenPriceChartingForItem(item)?{...item,currentValue:null,research:undefined}:item));
       for(const item of stale){
-        void setDoc(doc(db,'users',uid,'items',item.id),{
+        void setDoc(doc(firestore,'users',uid,'items',item.id),{
           research:deleteField(),
           currentValue:null,
           updatedAt:serverTimestamp()
