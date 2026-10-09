@@ -412,7 +412,7 @@ assert.match(appSource,/scale: result\.scale/);
 assert.match(appSource,/wave: result\.wave/);
 assert.match(appSource,/exclusive: result\.exclusive/);
 assert.match(appSource,/Mejorar con IA/);
-assert.match(appSource,/identifyPhoto\(analyzableImages\)/);
+assert.match(appSource,/identifyPhoto\(analyzableImages, aiCorrection\)/);
 assert.match(appSource,/url\.startsWith\('data:image\/'\)/);
 assert.match(appSource,/tryReadBarcodeWithTimeout/);
 assert.match(inventorySource,/export async function tryReadBarcodeWithTimeout/);
