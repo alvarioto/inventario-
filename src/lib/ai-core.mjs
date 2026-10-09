@@ -209,7 +209,7 @@ function marketplaceName(url){
 function sourceTypeFor(source){
  const host=hostOf(source?.url),searchable=`${source?.title||''} ${source?.snippet||''}`.toLowerCase();
  if((host.startsWith('ebay.')||host.includes('.ebay.'))&&(/\bsold\b|vendid[oa]s?|completed|final price|precio final/.test(searchable)||String(source?.kind||'').includes('sold')))return 'sold';
- if(host==='pricecharting.com'||host.endsWith('.pricecharting.com')||host==='coleka.com'||host.endsWith('.coleka.com')||host==='legendsverse.com'||host.endsWith('.legendsverse.com'))return 'guide';
+ if(host==='coleka.com'||host.endsWith('.coleka.com')||host==='legendsverse.com'||host.endsWith('.legendsverse.com'))return 'guide';
  if(host.includes('stockx.com')||host.includes('cardmarket.com')||host.includes('bricklink.com'))return 'market';
  return marketplaceName(source?.url)?'market':'shop';
 }
@@ -308,12 +308,12 @@ function keepUsableSources(rows){
  return rows.filter(source=>source?.url&&!sourceLooksBroken(source));
 }
 
-function allowedPricingSource(source){const host=hostOf(source?.url);if(!host)return false;if(/(^|\.)(google|bing|youtube|facebook|instagram|pinterest|wikipedia)\./.test(host))return false;if(/(^|\.)amazon\./.test(host)&&host!=='amazon.es'&&!host.endsWith('.amazon.es'))return false;return true;}
+function allowedPricingSource(source){const host=hostOf(source?.url);if(!host)return false;if(host==='pricecharting.com'||host.endsWith('.pricecharting.com'))return false;if(/(^|\.)(google|bing|youtube|facebook|instagram|pinterest|wikipedia)\./.test(host))return false;if(/(^|\.)amazon\./.test(host)&&host!=='amazon.es'&&!host.endsWith('.amazon.es'))return false;return true;}
 
 function pricingSourceScore(item,source){
  const host=hostOf(source?.url),raw=`${source?.title||''} ${source?.snippet||''}`,hay=normalizeComparableText(raw);let score=extractMoneyPrices(raw).length?100:0;
  const ids=[item?.sku,item?.barcode,item?.isbn,item?.cardNumber,item?.issueNumber].filter(Boolean).map(x=>normalizeComparableText(x));if(ids.some(id=>id&&hay.includes(id)))score+=90;if(item?.type==='funko'&&funkoTextMatches(item,raw))score+=80;
- let path='';try{path=new URL(source.url).pathname.toLowerCase()}catch{}if(host.includes('pricecharting.com')&&/\/game\/[^/?]+\/[^/?]+/.test(path))score+=60;if(host.includes('legendsverse.com'))score+=70;if(host.includes('coleka.com'))score+=55;if(host.includes('figurerealm.com'))score+=12;if(host.includes('icollecteverything.com')||host.includes('figurestash.com'))score+=10;if(host.includes('ebay.')&&/\/itm\//.test(path))score+=25;if(/idealo|cardmarket|bricklink|todocoleccion|catawiki|cex|webuy/.test(host))score+=20;return score;
+ let path='';try{path=new URL(source.url).pathname.toLowerCase()}catch{}if(host.includes('legendsverse.com'))score+=70;if(host.includes('coleka.com'))score+=55;if(host.includes('figurerealm.com'))score+=12;if(host.includes('icollecteverything.com')||host.includes('figurestash.com'))score+=10;if(host.includes('ebay.')&&/\/itm\//.test(path))score+=25;if(/idealo|cardmarket|bricklink|todocoleccion|catawiki|cex|webuy/.test(host))score+=20;return score;
 }
 
 function prioritizePricingSources(item,rows){
@@ -367,7 +367,7 @@ export async function deepseekWebSearch(query,{key,model='deepseek-flash',fetche
  const signedSearch=/\b(signed|autograph(?:ed)?|autografo|autógrafo|firmad[oa])\b/i.test(exact);
  const instruction=signedSearch
   ?'ARTÍCULO FIRMADO: busca únicamente el mismo objeto físico firmado/autografiado. Exige coincidencia del firmante cuando se indique y del SKU/EAN/UPC/ISBN, variante, número, edición y formato del producto. Prioriza anuncios/ventas firmadas exactas de eBay; NO uses el precio de una unidad normal sin firma como valoración de la firmada.'
-  :({identity:'Localiza el PRODUCTO EXACTO por SKU/EAN/UPC/ISBN, fabricante y nombre. No tasar todavía.',funko:'FUNKO: PriceCharting es la referencia principal. Busca la ficha pública EXACTA por personaje, número Pop y variante. Exige que una petición Chase, Flocked, Glow, Diamond u otra variante coincida exactamente y descarta Classic/Regular/Standard incompatibles. Lee los precios públicos Out of Box, In Box y New de PriceCharting. No inventes importes ni uses una ficha de otro número. eBay/StockX son solo contraste.',figure:'FIGURA/ESTATUA: identifica primero la pieza exacta por SKU/EAN/UPC + fabricante + línea + personaje + wave/escala/exclusiva. Para Marvel Legends, LegendsVerse es la fuente especializada preferente si hay ficha exacta y Market Value. Para figuras generales, prioriza páginas INDIVIDUALES de Coleka cuando muestren estimate/last price y coincidencia exacta; usa FigureRealm para confirmar identidad/serie/variantes, no como precio; iCollect Everything y FigureStash solo como apoyo si exponen datos públicos de la pieza; PriceCharting solo cuando exista ficha exacta. Contrasta con ventas cerradas de eBay cuando sean claramente el mismo artículo. No uses ActionFigure411. Descarta cómics/libros/accesorios y páginas de categoría o búsqueda genérica.',card:'CARTA: set+número+rareza+grading. Prioriza Cardmarket y eBay.',comic:'CÓMIC: título+issue+edición/ISBN. Prioriza eBay, TodoColeccion y Catawiki.',manga:'MANGA: título+tomo+edición/ISBN. Prioriza eBay, TodoColeccion y librerías con esa edición.',game:'VIDEOJUEGO: título+plataforma+edición+SKU/EAN. Prioriza eBay, CeX y tiendas exactas.',lego:'LEGO: número de set/SKU primero. Prioriza BrickLink y eBay.',plush:'PELUCHE: fabricante+personaje+línea+SKU/EAN. Prioriza eBay/Idealo.',replica:'RÉPLICA: fabricante+objeto+escala/edición+SKU/EAN. Prioriza eBay/Idealo.',movie:'AUDIOVISUAL: título+formato+edición+EAN. Prioriza eBay y tiendas exactas.',merch:'MERCH: fabricante+producto+franquicia+SKU/EAN. Prioriza eBay/Idealo.',general:'COLECCIONABLE: usa naturaleza física, códigos, fabricante y línea; no mezcles tipos de objeto.'}[searchMode]||'Busca el producto físico exacto.');
+  :({identity:'Localiza el PRODUCTO EXACTO por SKU/EAN/UPC/ISBN, fabricante y nombre. No tasar todavía.',funko:'FUNKO: busca el producto exacto por personaje, número Pop, variante, UPC/EAN/SKU y formato. Prioriza eBay y otras fuentes públicas del artículo exacto; StockX puede servir de contraste cuando corresponda. Exige que Chase, Flocked, Glow, Diamond u otra variante coincida exactamente y descarta Classic/Regular/Standard incompatibles. No inventes importes ni uses una ficha de otro número.',figure:'FIGURA/ESTATUA: identifica primero la pieza exacta por SKU/EAN/UPC + fabricante + línea + personaje + wave/escala/exclusiva. Para Marvel Legends, LegendsVerse es la fuente especializada preferente si hay ficha exacta y Market Value. Para figuras generales, prioriza páginas INDIVIDUALES de Coleka cuando muestren estimate/last price y coincidencia exacta; usa FigureRealm para confirmar identidad/serie/variantes, no como precio; iCollect Everything y FigureStash solo como apoyo si exponen datos públicos de la pieza. Contrasta con ventas cerradas de eBay cuando sean claramente el mismo artículo. No uses ActionFigure411. Descarta cómics/libros/accesorios y páginas de categoría o búsqueda genérica.',card:'CARTA: set+número+rareza+grading. Prioriza Cardmarket y eBay.',comic:'CÓMIC: título+issue+edición/ISBN. Prioriza eBay, TodoColeccion y Catawiki.',manga:'MANGA: título+tomo+edición/ISBN. Prioriza eBay, TodoColeccion y librerías con esa edición.',game:'VIDEOJUEGO: título+plataforma+edición+SKU/EAN. Prioriza eBay, CeX y tiendas exactas.',lego:'LEGO: número de set/SKU primero. Prioriza BrickLink y eBay.',plush:'PELUCHE: fabricante+personaje+línea+SKU/EAN. Prioriza eBay/Idealo.',replica:'RÉPLICA: fabricante+objeto+escala/edición+SKU/EAN. Prioriza eBay/Idealo.',movie:'AUDIOVISUAL: título+formato+edición+EAN. Prioriza eBay y tiendas exactas.',merch:'MERCH: fabricante+producto+franquicia+SKU/EAN. Prioriza eBay/Idealo.',general:'COLECCIONABLE: usa naturaleza física, códigos, fabricante y línea; no mezcles tipos de objeto.'}[searchMode]||'Busca el producto físico exacto.');
  const request=`${instruction}\n\nProducto: ${exact}. Usa máximo 4 búsquedas. Devuelve solo el mismo objeto físico, con importe, moneda, título y URL. Los identificadores fuertes deben coincidir. No inventes precios.`;
  const response=await fetcher('https://api.deepseek.com/anthropic/v1/messages',{method:'POST',headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:1400,messages:[{role:'user',content:request}],tools:[{type:'web_search_20250305',name:'web_search',max_uses:4,user_location:{type:'approximate',country:'ES',timezone:'Europe/Madrid'}}],tool_choice:{type:'auto'},stream:false}),signal:AbortSignal.timeout(28000)});
  if(!response.ok){const body=await response.text().catch(()=> '');throw new Error(`Búsqueda pública HTTP ${response.status}${body?`: ${body.slice(0,220)}`:''}`);}return webSearchSources(await response.json());
@@ -970,10 +970,7 @@ export async function research(input,config){
    const query=(isFunko?identity.normalize('NFD').replace(/[\u0300-\u036f]/g,''):identity).trim();
    const mode=isFunko?'funko':(['figure','card','comic','manga','game','lego','plush','replica','movie','merch'].includes(item.type)?item.type:'general');
    const found=normalizeSources(await deepseekWebSearch(query,{...config,searchMode:mode}),'price-search');
-   const usable=keepUsableSources(found).filter(allowedPricingSource).filter(source=>{
-    if(!['comic','manga'].includes(item.type))return true;
-    return !hostOf(source.url).includes('pricecharting.com');
-   });
+   const usable=keepUsableSources(found).filter(allowedPricingSource);
    webSources=limitPricingSources(uniqueSources(prioritizePricingSources(item,relevantSourcesForItem(item,usable))),item);
   }catch(error){
    warnings.push(error instanceof Error?`Búsqueda de precios: ${error.message}`:'No se pudo completar la búsqueda de precios.');
@@ -1006,12 +1003,12 @@ export async function research(input,config){
   const range=asking.min===asking.max?euro(asking.min):`${euro(asking.min)} – ${euro(asking.max)}`;
   const baremo=`${range}; mediana ${euro(asking.median)} con ${asking.count} comparable${asking.count===1?'':'s'} exacto${asking.count===1?'':'s'}.`;
   summary=asking.kind==='guide'
-   ?`Referencia principal encontrada en PriceCharting.${fallback?' Conversión USD/EUR orientativa.':''} ${baremo}`
+   ?`Referencia principal encontrada en una guía pública exacta.${fallback?' Conversión USD/EUR orientativa.':''} ${baremo}`
    :asking.kind==='sold'
     ?`Valor de mercado calculado con ventas cerradas comparables verificadas.${fallback?' Conversión USD/EUR orientativa.':''} ${baremo}`
     :`Referencia orientativa calculada a partir de precios públicos del producto físico exacto; no se presenta como una venta cerrada.${fallback?' Conversión USD/EUR orientativa.':''} ${baremo}`;
   facts=[
-   {label:asking.kind==='guide'?'PriceCharting':asking.kind==='sold'?'Ventas cerradas verificadas':'Referencia de mercado',value:baremo,sourceId:sources[0]?.id||comparables[0].id},
+   {label:asking.kind==='guide'?'Guía pública exacta':asking.kind==='sold'?'Ventas cerradas verificadas':'Referencia de mercado',value:baremo,sourceId:sources[0]?.id||comparables[0].id},
    ...comparables.map(row=>({label:row.sourceType==='guide'?'Valor principal':row.sourceType==='sold'?'Venta cerrada':'Referencia orientativa',value:`${euro(row.price)} · ${row.condition}`,sourceId:sources[0]?.id||row.id}))
   ];
  }else summary=`Se buscaron precios usando una única identidad: “${identity}”. ${sources.length} página${sources.length===1?'':'s'} útil${sources.length===1?'':'es'} y ${listings.length} precio${listings.length===1?'':'s'} detectado${listings.length===1?'':'s'}; ninguno permite todavía un baremo suficientemente exacto.`;
@@ -1024,7 +1021,6 @@ export async function research(input,config){
   links:{
    ebay:'https://www.ebay.es/sch/i.html?_nkw='+encodeURIComponent(identity),
    sold:'https://www.ebay.es/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw='+encodeURIComponent(identity),
-   ...(!['comic','manga'].includes(item.type)?{priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity)}:{}),
    web:'https://www.google.com/search?q='+encodeURIComponent(identity+' precio'),
    ...(isFunko?{stockx:'https://stockx.com/search?s='+encodeURIComponent(identity)}:{})
   }
