@@ -83,6 +83,15 @@ assert.equal(singleExactReferenceAllowed(
   {count:1,listings:[{matchedBy:['GTIN/ISBN'],price:29.99,currency:'USD'}]}
 ),false);
 
+assert.equal(singleExactReferenceAllowed(
+  {type:'comic'},
+  {count:1,listings:[{matchedBy:['edición','exclusiva'],price:45,currency:'EUR'}]}
+),true);
+assert.equal(singleExactReferenceAllowed(
+  {type:'comic'},
+  {count:1,listings:[{matchedBy:['edición'],price:45,currency:'EUR'}]}
+),false);
+
 const market = summarizeListings([
   {price:10,currency:'EUR',shipping:2},
   {price:20,currency:'EUR',shipping:0}
