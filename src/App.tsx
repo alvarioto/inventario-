@@ -911,7 +911,9 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       }
 
       const freshResearch = await investigate(working);
-      const keepPrevious = !valuationIdentityChanged(draft, working);
+      // Si el usuario está corrigiendo una identificación, no conservamos una
+      // valoración anterior asociada precisamente a la identidad que está rechazando.
+      const keepPrevious = !aiCorrection.trim() && !valuationIdentityChanged(draft, working);
       const next = keepPrevious ? preserveVerifiedResearch(research, freshResearch) : freshResearch;
       setResearch(next);
       setDraft((current) => ({
