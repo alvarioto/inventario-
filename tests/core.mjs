@@ -529,7 +529,7 @@ assert.match(apiSource,/Referencia eBay · 1 anuncio exacto/);
 assert.match(apiSource,/signed:Boolean\(item\.signed\),signedBy:item\.signedBy\|\|''/);
 assert.match(apiSource,/if\(item\.signed===true\)/);
 assert.match(apiSource,/if\(item\.type==='comic'\|\|item\.type==='manga'\)/);
-const comicRouteStart=apiSource.indexOf("if(item.type==='comic'||item.type==='manga')");
+const comicRouteStart=apiSource.indexOf("if(item.type==='comic'||item.type==='manga')",investigateStart);
 const comicRouteEnd=apiSource.indexOf("\n let general:ResearchResult|null=null;",comicRouteStart);
 const comicRoute=apiSource.slice(comicRouteStart,comicRouteEnd);
 assert.doesNotMatch(comicRoute,/tryPriceCharting/);
