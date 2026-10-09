@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify, isGenericProductTitle, buildResearchIdentity, applyFigurePackageAudit } from '../server/core.mjs';
 import { exactMatch as exactEbayMatch, marketplaceOrder, funkoIdentityFromAccepted, singleExactReferenceAllowed } from '../api/ebay-market-value.mjs';
-import { priceChartingIdentityMatches, priceChartingResearchMatchesItem } from '../src/lib/pricecharting-identity.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
@@ -13,36 +12,6 @@ assert.equal(identificationSchema.parse({title:'Test used',type:'funko',conditio
 assert.equal(identificationSchema.parse({title:'Test unknown',type:'funko',condition:'unknown',confidence:.9,explanation:'x'}).condition,null);
 assert.equal(identificationSchema.parse({title:'Signed Funko',type:'funko',signed:true,signedBy:'Jeff Goldblum',confidence:.9,explanation:'x'}).signedBy,'Jeff Goldblum');
 assert.equal(safeUrl('javascript:alert(1)'),null);
-
-// Regresión real: Sombra de Maul nunca puede aceptar Nintendo Power / Super Mario como referencia.
-const sombraItem={
-  type:'other',
-  title:'Star Wars: Sombra de Maul',
-  franchise:'Star Wars',
-  manufacturer:'Planeta Cómic',
-  edition:'Edición Limitada 001 Variant Cover'
-};
-const marioGuide={
-  title:'[Volume 77] Super Mario World 2 Nintendo Power',
-  evidence:'Nintendo Power Volume 77 Super Mario World 2',
-  url:'https://www.pricecharting.com/game/nintendo-power/volume-77-super-mario-world-2'
-};
-assert.equal(priceChartingIdentityMatches(sombraItem,marioGuide),false);
-assert.equal(priceChartingResearchMatchesItem(sombraItem,{
-  summary:'PriceCharting publica Out of Box 10.88 · In Box 19.70.',
-  asking:{label:'Valor PriceCharting · In Box'},
-  links:{priceCharting:marioGuide.url},
-  sources:[{title:'PriceCharting',url:marioGuide.url,snippet:marioGuide.evidence}],
-  comparables:[{title:'PriceCharting · [Volume 77] Super Mario World 2 Nintendo Power',url:marioGuide.url,sourceType:'guide'}],
-  facts:[]
-}),false);
-
-// Una referencia PriceCharting realmente compatible sigue permitida fuera de cómic/manga.
-assert.equal(priceChartingIdentityMatches(
-  {type:'funko',title:'Funko Pop! Éomer #1982',character:'Éomer',manufacturer:'Funko',popNumber:'1982'},
-  {title:'Éomer #1982 Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982'}
-),true);
-
 
 assert.equal(isGenericProductTitle('Funko caja – dorso con código de barras e Item No. 90310 Funko'),true);
 const cleanIdentity=buildResearchIdentity({title:'Funko caja – dorso con código de barras e Item No. 90310 Funko',type:'funko',manufacturer:'Funko',sku:'90310',barcode:'889698903105'});
@@ -322,24 +291,23 @@ assert.equal(noSources.sources.length,0);
 assert.equal(noSources.warnings.length,1);
 assert.equal(noSources.sold.available,false);
 
-// Cómics/manga: PriceCharting no participa aunque aparezca en la búsqueda.
-const comicNoPriceChartingFetch=async(url,init)=>{
+// La fuente retirada no participa en ningún tipo de objeto aunque aparezca en la búsqueda web.
+const removedSourceFetch=async(url,init)=>{
   if(String(url).includes('/anthropic/v1/messages')){
     return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
-      {type:'web_search_result',title:'Sombra de Maul Variant Cover 001 35,00 €',url:'https://www.pricecharting.com/game/comics/sombra-de-maul',cited_text:'35,00 €'},
-      {type:'web_search_result',title:'Star Wars Sombra de Maul Edición Limitada 001 Variant Cover 45,00 €',url:'https://www.todocoleccion.net/comics-planeta/star-wars-sombra-maul-edicion-limitada-001-variant-cover~x1',cited_text:'Planeta Cómic · Edición Limitada 001 · Variant Cover · 45,00 €'}
+      {type:'web_search_result',title:'Fuente retirada Éomer #1982 22 USD',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982',cited_text:'22 USD'},
+      {type:'web_search_result',title:'Funko Pop Éomer #1982 - 29,95 EUR',url:'https://www.ebay.es/itm/eomer1982',cited_text:'Éomer #1982 · 29,95 EUR'}
     ]}]}),{status:200,headers:{'content-type':'application/json'}});
   }
   if(String(url).includes('frankfurter'))return new Response(JSON.stringify(String(url).includes('latest')?{rates:{EUR:.9}}:{rate:.9}),{status:200,headers:{'content-type':'application/json'}});
   return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
 };
-const comicNoPriceCharting=await research({confirmed:true,item:{
-  title:'Star Wars Sombra de Maul',type:'comic',manufacturer:'Planeta Cómic',
-  edition:'Edición Limitada 001 Variant Cover',exclusive:'Málaga Comic Con'
-}},{key:'test',fetcher:comicNoPriceChartingFetch});
-assert.ok(!comicNoPriceCharting.sources.some(source=>source.url.includes('pricecharting.com')));
-assert.equal(comicNoPriceCharting.links.priceCharting,undefined);
-assert.ok(comicNoPriceCharting.sources.some(source=>source.url.includes('todocoleccion.net')));
+const removedSourceResearch=await research({confirmed:true,item:{
+  title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',popNumber:'1982'
+}},{key:'test',fetcher:removedSourceFetch});
+assert.ok(!removedSourceResearch.sources.some(source=>source.url.includes('pricecharting.com')));
+assert.equal(removedSourceResearch.links.priceCharting,undefined);
+assert.ok(removedSourceResearch.sources.some(source=>source.url.includes('ebay.es')));
 
 let fallbackChatCalls=0;
 const fallbackFetch=async(url,init)=>{
@@ -359,56 +327,6 @@ assert.equal(fallbackChatCalls,0);
 assert.equal(fallbackResearch.listings.length,1);
 assert.equal(fallbackResearch.asking.count,1);
 assert.match(fallbackResearch.summary,/Referencia orientativa calculada|única identidad/i);
-
-// Funko: PriceCharting es la referencia principal; eBay/StockX son orientación.
-let pricePrompts=[];
-const priceMarketFetch=async(url,init)=>{
- if(String(url).includes('frankfurter.dev'))return new Response(JSON.stringify({rate:.9}),{status:200,headers:{'content-type':'application/json'}});
- if(String(url).includes('/anthropic/v1/messages')){
-  const prompt=String(JSON.parse(init.body).messages?.[0]?.content||'');
-  pricePrompts.push(prompt);
-  return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
-   {type:'web_search_result',title:'Eomer #1982 Prices | Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982',cited_text:'Full Price Guide: Eomer #1982. Out of Box $15.00. In Box $22.00. New $25.00.'},
-   {type:'web_search_result',title:'Funko Pop Éomer #1982 - 29,95 EUR',url:'https://www.ebay.es/itm/eomer1982',cited_text:'Éomer #1982 · 29,95 EUR'},
-   {type:'web_search_result',title:'Funko Pop Eomer 1982',url:'https://stockx.com/funko-pop-eomer-1982',cited_text:'Eomer #1982'}
-  ]}]}),{status:200,headers:{'content-type':'application/json'}});
- }
- if(String(url).includes('frankfurter.app'))return new Response(JSON.stringify({rates:{EUR:.9,GBP:.8}}),{status:200,headers:{'content-type':'application/json'}});
- return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
-};
-const priceResearch=await research({confirmed:true,item:{title:'Funko Pop! Movies: The Lord of the Rings - Éomer #1982',type:'funko',manufacturer:'Funko',character:'Éomer',line:'Pop! Movies',popNumber:'1982',hasBox:true}},{key:'test',fetcher:priceMarketFetch});
-assert.equal(pricePrompts.length,1);
-assert.equal(priceResearch.searchIdentity,'Éomer 1982');
-assert.match(pricePrompts[0],/PriceCharting/i);
-assert.match(pricePrompts[0],/Out of Box/i);
-assert.match(pricePrompts[0],/In Box/i);
-assert.match(pricePrompts[0],/New/i);
-assert.equal(priceResearch.asking.kind,'guide');
-assert.ok(priceResearch.asking.median>0);
-assert.ok(priceResearch.sources.some(source=>source.url.includes('pricecharting.com/game/')));
-assert.ok(priceResearch.comparables.some(row=>row.url.includes('pricecharting.com/game/')));
-assert.match(priceResearch.links.priceCharting,/pricecharting\.com\/search-products/);
-assert.match(priceResearch.links.priceCharting,/type=prices/);
-
-// Dos tarjetas con el mismo personaje/número: la variante de la foto manda.
-const chaseFetch=async(url,init)=>{
- if(String(url).includes('/anthropic/v1/messages')){
-  const prompt=String(JSON.parse(init.body).messages?.[0]?.content||'');
-  assert.match(prompt,/PriceCharting/i);
-  assert.match(prompt,/descarta Classic\/Regular\/Standard/i);
-  return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
-   {type:'web_search_result',title:'Cruella De Vil [Chase] #1663 Prices | Funko POP Disney',url:'https://www.pricecharting.com/game/funko-pop-disney/cruella-de-vil-chase-1663',cited_text:'Cruella De Vil [Chase] #1663 Out of Box $9.04 In Box $12.00 New $15.06'},
-   {type:'web_search_result',title:'Cruella De Vil #1663 Prices | Funko POP Disney',url:'https://www.pricecharting.com/game/funko-pop-disney/cruella-de-vil-1663',cited_text:'Cruella De Vil #1663 Out of Box $5.00 In Box $7.00 New $9.00'}
-  ]}]}),{status:200,headers:{'content-type':'application/json'}});
- }
- if(String(url).includes('frankfurter'))return new Response(JSON.stringify(String(url).includes('latest')?{rates:{EUR:.9}}:{rate:.9}),{status:200,headers:{'content-type':'application/json'}});
- return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
-};
-const chaseResearch=await research({confirmed:true,item:{title:'Funko Pop! Disney Cruella De Vil #1663 Chase',type:'funko',manufacturer:'Funko',character:'Cruella De Vil',line:'Pop! Disney',popNumber:'1663',funkoVariant:'Chase',hasBox:true}},{key:'test',fetcher:chaseFetch});
-assert.equal(chaseResearch.searchIdentity,'Cruella De Vil 1663 Chase');
-assert.ok(chaseResearch.sources.some(source=>source.url.includes('cruella-de-vil-chase-1663')));
-assert.ok(!chaseResearch.sources.some(source=>source.url.endsWith('cruella-de-vil-1663')));
-
 
 // Regresión: una respuesta JSON imperfecta del modelo no debe tumbar toda la investigación.
 
@@ -430,11 +348,12 @@ assert.ok(funkoResearch.comparables.some(row=>row.url.includes('ebay.es')));
 const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta.url),'utf8');
 assert.match(inventorySource,/deleteField/);
-assert.match(inventorySource,/forbiddenPriceChartingForItem\(item\)/);
 assert.match(inventorySource,/research:deleteField\(\)/);
 const aiCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
+assert.doesNotMatch(appSource,/>PriceCharting<\/a>/);
+assert.doesNotMatch(aiCoreSource,/pricecharting/i);
 assert.doesNotMatch(aiCoreSource,/eBay vendidos\/completados y tiendas públicas/);
-assert.match(aiCoreSource,/PriceCharting es la referencia principal/);
+assert.doesNotMatch(aiCoreSource,/pricecharting/i);
 assert.match(appSource,/initialPhotos\.slice\(0, maxCloudPhotos\(\)\)\.map\(\(file\) => uploadItemImage\(file\)\)/);
 assert.match(appSource,/Leer código de barras/);
 assert.match(appSource,/lector es propio de FrikiVault/i);
@@ -475,7 +394,7 @@ assert.match(appSource,/Valor principal · ventas cerradas/);
 assert.doesNotMatch(appSource,/catalogSourceLinks/);
 assert.doesNotMatch(appSource,/site:figurerealm\.com|site:figurestash\.com|site:coleka\.com/);
 assert.match(appSource,/Otras referencias orientativas/);
-assert.match(appSource,/preserveVerifiedResearch\(research, freshResearch, working\.type\)/);
+assert.match(appSource,/preserveVerifiedResearch\(cleanPrevious, freshResearch, working\.type\)/);
 assert.match(appSource,/displayedResearchValue\(next, current\.currency \|\| 'EUR'\)/);
 assert.match(appSource,/popNumber: next\.resolvedIdentity\.popNumber \|\| current\.popNumber/);
 assert.match(appSource,/funkoCategory: next\.resolvedIdentity\.funkoCategory \|\| current\.funkoCategory/);
@@ -487,13 +406,7 @@ assert.match(appSource,/function duplicateGroups/);
 assert.match(appSource,/Auditoría de duplicados/);
 assert.match(appSource,/label="Firmado por"/);
 assert.match(appSource,/label="Corregir identificación"/);
-assert.match(appSource,/function invalidPriceChartingResearch/);
-assert.match(appSource,/forbiddenPriceChartingForItem/);
-assert.match(appSource,/setResearch\(undefined\)/);
-assert.match(appSource,/invalidStoredResearch=forbiddenPriceChartingForItem/);
 assert.match(appSource,/function effectiveCurrentValue/);
-assert.match(appSource,/stalePriceCharting \? undefined/);
-assert.match(appSource,/stalePreviousPriceCharting/);
 assert.match(appSource,/return null;/);
 assert.match(appSource,/effectiveCurrentValue\(x\)/);
 assert.match(appSource,/identifyPhoto\(analyzableImages, aiCorrection\)/);
@@ -501,27 +414,18 @@ assert.match(appSource,/!aiCorrection\.trim\(\) && !valuationIdentityChanged/);
 assert.match(appSource,/signedBy/);
 assert.match(appSource,/Boolean\(before\.signed\) !== Boolean\(after\.signed\)/);
 assert.match(appSource,/eBay Product Research · ventas reales/);
-assert.match(appSource,/>PriceCharting<\/a>/);
+assert.doesNotMatch(appSource,/>PriceCharting<\/a>/);
 assert.match(appSource,/Analizar artículo/);
 assert.doesNotMatch(appSource,/Confirmar e investigar|Actualizar investigación/);
 const apiSource=readFileSync(new URL('../src/lib/api.ts',import.meta.url),'utf8');
 assert.match(apiSource,/runGeneralResearch/);
 assert.match(apiSource,/export function preserveVerifiedResearch/);
 assert.match(apiSource,/export function researchUsesPriceCharting/);
-assert.match(apiSource,/export function forbiddenPriceChartingForItem/);
-assert.match(apiSource,/priceChartingIdentityMatches/);
-assert.match(apiSource,/priceChartingResearchMatchesItem/);
-assert.match(apiSource,/cuya identidad no coincide con este artículo/);
-assert.match(apiSource,/forbiddenPriceChartingForItem\(\{type:itemType,research:previous\}\)/);
-assert.match(apiSource,/forbiddenPriceChartingForItem\(\{type:itemType,research:previous\}\)/);
 assert.match(apiSource,/Se mantiene la última valoración verificada/);
 const investigateStart=apiSource.indexOf('export async function investigate');
 const funkoStart=apiSource.indexOf("if(item.type==='funko')",investigateStart);
 const funkoRoute=apiSource.slice(funkoStart,apiSource.indexOf("\n }\n\n let general:ResearchResult|null=null",funkoStart));
 assert.ok(funkoRoute.indexOf('readEbayMarketValue(item)')>=0);
-assert.ok(funkoRoute.indexOf('readPriceChartingValue(item)')>=0);
-assert.ok(funkoRoute.indexOf('readEbayMarketValue(item)')<funkoRoute.indexOf('readPriceChartingValue(item)'));
-assert.ok(funkoRoute.indexOf('readPriceChartingValue(item)')<funkoRoute.indexOf('applyEbayMarketValue(withRates,ebayMarket)'));
 assert.match(funkoRoute,/\['sold','guide'\]\.includes\(general\.asking\.kind\)/);
 assert.match(apiSource,/const withRates=await ensureUsdDisplayRates\(seed\)/);
 assert.match(apiSource,/VITE_EXCHANGE_RATES_URL/);
@@ -532,16 +436,11 @@ assert.match(apiSource,/if\(item\.type==='comic'\|\|item\.type==='manga'\)/);
 const comicRouteStart=apiSource.indexOf("if(item.type==='comic'||item.type==='manga')",investigateStart);
 const comicRouteEnd=apiSource.indexOf("\n let general:ResearchResult|null=null;",comicRouteStart);
 const comicRoute=apiSource.slice(comicRouteStart,comicRouteEnd);
-assert.doesNotMatch(comicRoute,/tryPriceCharting/);
 assert.match(apiSource,/No se encontró una valoración firmada verificable/);
 assert.doesNotMatch(apiSource,/api\.frankfurter\.app\/latest\?from=USD/);
 assert.match(apiSource,/Promedio eBay',value:dual\(average\)/);
 assert.match(apiSource,/researchDirect/);
 assert.match(apiSource,/ActionFigure411|actionFigure411/i);
-// Regresión: una figura no puede aceptar un fallback de PriceCharting solo por
-// coincidir en "Batman"/"Action Figure". Debe compartir UPC/EAN/SKU fuerte.
-assert.match(apiSource,/priceChartingMatchesExactFigure/);
-assert.match(apiSource,/cuya identidad no coincide con este artículo/i);
 assert.match(aiCoreSource,/Coleka/);
 assert.match(aiCoreSource,/LegendsVerse/);
 assert.match(aiCoreSource,/FigureRealm/);
@@ -550,7 +449,7 @@ assert.match(aiCoreSource,/FigureStash/);
 const directAiSource=readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8');
 const coreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 assert.doesNotMatch(directAiSource,/pricecharting/i);
-assert.match(coreSource,/pricecharting\.com\/search-products/);
+assert.doesNotMatch(coreSource,/pricecharting/i);
 assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 
 
@@ -558,9 +457,8 @@ assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 // Regresión: las fuentes de mercado y los botones conservan su estilo original.
 const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
-assert.match(currentCoreSource,/PriceCharting es la referencia principal/);
+assert.doesNotMatch(currentCoreSource,/pricecharting/i);
 assert.match(currentCoreSource,/CORRECCIÓN DEL PROPIETARIO/);
-assert.match(currentCoreSource,/\['comic','manga'\]\.includes\(item\.type\)/);
 
 assert.doesNotMatch(currentCoreSource,/reasoning:\{effort:'none'\}/);
 assert.match(currentCoreSource,/limitPricingSources/);
@@ -592,6 +490,6 @@ assert.equal(guaranteedFunko.asking.median,null);
 
 console.log('core tests ok');
 
-assert.match(readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8'),/pricecharting\.com\/search-products/);
+assert.doesNotMatch(readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8'),/pricecharting/i);
 assert.doesNotMatch(readFileSync(new URL('../src/lib/direct-ai.ts',import.meta.url),'utf8'),/pricecharting/i);
 assert.doesNotMatch(readFileSync(new URL('../src/components/DirectAiSettings.tsx',import.meta.url),'utf8'),/pricecharting/i);
