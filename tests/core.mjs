@@ -442,7 +442,7 @@ assert.match(appSource,/Valor principal · ventas cerradas/);
 assert.doesNotMatch(appSource,/catalogSourceLinks/);
 assert.doesNotMatch(appSource,/site:figurerealm\.com|site:figurestash\.com|site:coleka\.com/);
 assert.match(appSource,/Otras referencias orientativas/);
-assert.match(appSource,/preserveVerifiedResearch\(research, freshResearch\)/);
+assert.match(appSource,/preserveVerifiedResearch\(research, freshResearch, working\.type\)/);
 assert.match(appSource,/displayedResearchValue\(next, current\.currency \|\| 'EUR'\)/);
 assert.match(appSource,/popNumber: next\.resolvedIdentity\.popNumber \|\| current\.popNumber/);
 assert.match(appSource,/funkoCategory: next\.resolvedIdentity\.funkoCategory \|\| current\.funkoCategory/);
