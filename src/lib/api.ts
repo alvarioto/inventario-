@@ -298,17 +298,46 @@ function mergeResearchWarnings(research:ResearchResult,warnings:string[]):Resear
 function hasVerifiedValue(research:ResearchResult|null|undefined){
  return research?.asking?.median!=null&&Number.isFinite(research.asking.median);
 }
+function isLegacyPriceChartingSource(value:unknown){
+ return /pricecharting/i.test(String(value||''));
+}
 export function researchUsesPriceCharting(research:ResearchResult|null|undefined){
  if(!research)return false;
- if(String(research.summary||'').toLowerCase().includes('pricecharting'))return true;
- if(String(research.asking?.label||'').toLowerCase().includes('pricecharting'))return true;
+ if(isLegacyPriceChartingSource(research.summary)||isLegacyPriceChartingSource(research.asking?.label))return true;
  if(Boolean(research.links?.priceCharting))return true;
- if((research.sources||[]).some(source=>/pricecharting/i.test(`${source.title||''} ${source.url||''}`)))return true;
- if((research.comparables||[]).some(row=>/pricecharting/i.test(`${row.title||''} ${row.url||''}`)))return true;
- return (research.facts||[]).some(fact=>/pricecharting/i.test(`${fact.label||''} ${fact.value||''}`));
+ if((research.sources||[]).some(source=>isLegacyPriceChartingSource(`${source.title||''} ${source.url||''}`)))return true;
+ if((research.listings||[]).some(row=>isLegacyPriceChartingSource(`${row.title||''} ${row.url||''}`)))return true;
+ if((research.comparables||[]).some(row=>isLegacyPriceChartingSource(`${row.title||''} ${row.url||''}`)))return true;
+ if((research.facts||[]).some(fact=>isLegacyPriceChartingSource(`${fact.label||''} ${fact.value||''}`)))return true;
+ return (research.warnings||[]).some(warning=>isLegacyPriceChartingSource(warning));
+}
+export function primaryValueUsesPriceCharting(research:ResearchResult|null|undefined){
+ if(!research)return false;
+ if(isLegacyPriceChartingSource(research.asking?.label))return true;
+ if(/^pricecharting\b/i.test(String(research.summary||'').trim()))return true;
+ const primary=(research.comparables||[]).find(row=>row.sourceType==='guide'||row.sourceType==='sold');
+ return Boolean(primary&&isLegacyPriceChartingSource(`${primary.title||''} ${primary.url||''}`));
+}
+export function stripPriceChartingResearch(research:ResearchResult|undefined):ResearchResult|undefined{
+ if(!research||!researchUsesPriceCharting(research))return research;
+ const primary=primaryValueUsesPriceCharting(research);
+ const isPcRow=(row:{title?:string;url?:string})=>isLegacyPriceChartingSource(`${row.title||''} ${row.url||''}`);
+ const sources=(research.sources||[]).filter(row=>!isPcRow(row));
+ const listings=(research.listings||[]).filter(row=>!isPcRow(row));
+ const comparables=(research.comparables||[]).filter(row=>!isPcRow(row));
+ const links={...research.links};
+ delete links.priceCharting;
+ const facts=(research.facts||[]).filter(fact=>!isLegacyPriceChartingSource(`${fact.label||''} ${fact.value||''}`));
+ const warnings=(research.warnings||[]).filter(warning=>!isLegacyPriceChartingSource(warning));
+ return {
+  ...research,
+  summary:primary?'La valoración anterior se ha retirado. Vuelve a analizar para buscar fuentes alternativas.':research.summary.replace(/[^.]*pricecharting[^.]*\.?/ig,'').replace(/\s+/g,' ').trim(),
+  sources,listings,comparables,facts,warnings,links,
+  asking:primary?{...research.asking,kind:'none',count:0,min:null,max:null,median:null,label:'Sin valoración verificada',originalCurrency:null,originalMedian:null}:research.asking
+ };
 }
 export function forbiddenPriceChartingForItem(item:Partial<InventoryDraft>&{research?:ResearchResult|null}){
- return researchUsesPriceCharting(item.research);
+ return primaryValueUsesPriceCharting(item.research);
 }
 export function preserveVerifiedResearch(previous:ResearchResult|undefined,next:ResearchResult,itemType?:InventoryDraft['type']):ResearchResult{
  if(researchUsesPriceCharting(previous))return next;
