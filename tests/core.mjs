@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { identificationSchema, summarizeListings, safeUrl, deepseek, deepseekWebSearch, parsePublicListings, research, identify, isGenericProductTitle, buildResearchIdentity, applyFigurePackageAudit } from '../server/core.mjs';
 import { exactMatch as exactEbayMatch, marketplaceOrder, funkoIdentityFromAccepted, singleExactReferenceAllowed } from '../api/ebay-market-value.mjs';
+import { priceChartingIdentityMatches, priceChartingResearchMatchesItem } from '../src/lib/pricecharting-identity.mjs';
 
 const identification = identificationSchema.parse({title:'Batman #125',type:'comic',confidence:.8,explanation:'Texto visible'});
 assert.equal(identification.franchise,'');
@@ -12,6 +13,35 @@ assert.equal(identificationSchema.parse({title:'Test used',type:'funko',conditio
 assert.equal(identificationSchema.parse({title:'Test unknown',type:'funko',condition:'unknown',confidence:.9,explanation:'x'}).condition,null);
 assert.equal(identificationSchema.parse({title:'Signed Funko',type:'funko',signed:true,signedBy:'Jeff Goldblum',confidence:.9,explanation:'x'}).signedBy,'Jeff Goldblum');
 assert.equal(safeUrl('javascript:alert(1)'),null);
+
+// Regresión real: Sombra de Maul nunca puede aceptar Nintendo Power / Super Mario como referencia.
+const sombraItem={
+  type:'other',
+  title:'Star Wars: Sombra de Maul',
+  franchise:'Star Wars',
+  manufacturer:'Planeta Cómic',
+  edition:'Edición Limitada 001 Variant Cover'
+};
+const marioGuide={
+  title:'[Volume 77] Super Mario World 2 Nintendo Power',
+  evidence:'Nintendo Power Volume 77 Super Mario World 2',
+  url:'https://www.pricecharting.com/game/nintendo-power/volume-77-super-mario-world-2'
+};
+assert.equal(priceChartingIdentityMatches(sombraItem,marioGuide),false);
+assert.equal(priceChartingResearchMatchesItem(sombraItem,{
+  summary:'PriceCharting publica Out of Box 10.88 · In Box 19.70.',
+  asking:{label:'Valor PriceCharting · In Box'},
+  links:{priceCharting:marioGuide.url},
+  sources:[{title:'PriceCharting',url:marioGuide.url,snippet:marioGuide.evidence}],
+  comparables:[{title:'PriceCharting · [Volume 77] Super Mario World 2 Nintendo Power',url:marioGuide.url,sourceType:'guide'}],
+  facts:[]
+}),false);
+
+// Una referencia PriceCharting realmente compatible sigue permitida fuera de cómic/manga.
+assert.equal(priceChartingIdentityMatches(
+  {type:'funko',title:'Funko Pop! Éomer #1982',character:'Éomer',manufacturer:'Funko',popNumber:'1982'},
+  {title:'Éomer #1982 Funko POP Movies',url:'https://www.pricecharting.com/game/funko-pop-movies/eomer-1982'}
+),true);
 
 
 assert.equal(isGenericProductTitle('Funko caja – dorso con código de barras e Item No. 90310 Funko'),true);
@@ -457,13 +487,13 @@ assert.match(appSource,/function duplicateGroups/);
 assert.match(appSource,/Auditoría de duplicados/);
 assert.match(appSource,/label="Firmado por"/);
 assert.match(appSource,/label="Corregir identificación"/);
-assert.match(appSource,/function legacyComicPriceCharting/);
+assert.match(appSource,/function invalidPriceChartingResearch/);
 assert.match(appSource,/forbiddenPriceChartingForItem/);
 assert.match(appSource,/setResearch\(undefined\)/);
-assert.match(appSource,/safeResearch=forbiddenPriceChartingForItem/);
+assert.match(appSource,/invalidStoredResearch=forbiddenPriceChartingForItem/);
 assert.match(appSource,/function effectiveCurrentValue/);
-assert.match(appSource,/staleComicGuide \? undefined/);
-assert.match(appSource,/stalePreviousComicGuide/);
+assert.match(appSource,/stalePriceCharting \? undefined/);
+assert.match(appSource,/stalePreviousPriceCharting/);
 assert.match(appSource,/return null;/);
 assert.match(appSource,/effectiveCurrentValue\(x\)/);
 assert.match(appSource,/identifyPhoto\(analyzableImages, aiCorrection\)/);
@@ -479,6 +509,9 @@ assert.match(apiSource,/runGeneralResearch/);
 assert.match(apiSource,/export function preserveVerifiedResearch/);
 assert.match(apiSource,/export function researchUsesPriceCharting/);
 assert.match(apiSource,/export function forbiddenPriceChartingForItem/);
+assert.match(apiSource,/priceChartingIdentityMatches/);
+assert.match(apiSource,/priceChartingResearchMatchesItem/);
+assert.match(apiSource,/cuya identidad no coincide con este artículo/);
 assert.match(apiSource,/forbiddenPriceChartingForItem\(\{type:itemType,research:previous\}\)/);
 assert.match(apiSource,/forbiddenPriceChartingForItem\(\{type:itemType,research:previous\}\)/);
 assert.match(apiSource,/Se mantiene la última valoración verificada/);
@@ -508,8 +541,7 @@ assert.match(apiSource,/ActionFigure411|actionFigure411/i);
 // Regresión: una figura no puede aceptar un fallback de PriceCharting solo por
 // coincidir en "Batman"/"Action Figure". Debe compartir UPC/EAN/SKU fuerte.
 assert.match(apiSource,/priceChartingMatchesExactFigure/);
-assert.match(apiSource,/no comparte UPC\/EAN\/SKU con esta figura/i);
-assert.match(apiSource,/strongIds\.some\(id=>hay\.includes\(id\)\)/);
+assert.match(apiSource,/cuya identidad no coincide con este artículo/i);
 assert.match(aiCoreSource,/Coleka/);
 assert.match(aiCoreSource,/LegendsVerse/);
 assert.match(aiCoreSource,/FigureRealm/);
