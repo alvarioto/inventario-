@@ -349,7 +349,9 @@ function buildQueries(item){
     pushText([item.manufacturer,item.character||item.title,yearHint]);
     pushText([item.manufacturer,item.character||item.title]);
   }else if(item.type==='comic'||item.type==='manga'){
-    pushText([item.title,item.issueNumber?('#'+item.issueNumber):'',item.edition,item.isbn]);
+    pushText([item.manufacturer,item.title,item.issueNumber?('#'+item.issueNumber):'',item.edition,item.exclusive,item.year,item.isbn]);
+    pushText([item.title,item.edition,item.exclusive,item.issueNumber?('#'+item.issueNumber):'']);
+    pushText([item.title,item.issueNumber?('#'+item.issueNumber):'',item.isbn]);
   }else if(item.type==='card'){
     pushText([item.setName,item.title||item.character,item.cardNumber,item.rarity]);
   }else if(item.type==='game'){
@@ -380,8 +382,9 @@ function headers(accessToken,marketplace){
 }
 function marketplaceOrder(primary,item){
   const first=String(primary||'EBAY_ES').trim()||'EBAY_ES';
-  if(item?.type!=='funko')return [first];
-  return uniq([first,'EBAY_US','EBAY_GB','EBAY_DE','EBAY_FR','EBAY_IT','EBAY_CA','EBAY_AU']);
+  if(item?.type==='funko')return uniq([first,'EBAY_US','EBAY_GB','EBAY_DE','EBAY_FR','EBAY_IT','EBAY_CA','EBAY_AU']);
+  if(item?.type==='comic'||item?.type==='manga')return uniq([first,'EBAY_ES','EBAY_FR','EBAY_IT','EBAY_DE','EBAY_GB']);
+  return [first];
 }
 async function search(accessToken,marketplace,item){
   const out=new Map();
@@ -520,9 +523,14 @@ function aggregate(rows){
 function singleExactReferenceAllowed(item,market){
   if(!market||market.count!==1||!market.listings?.length)return false;
   const matched=market.listings[0]?.matchedBy||[];
-  const strongId=matched.includes('GTIN/ISBN')||matched.includes('SKU/MPN');
+  const strongId=matched.includes('GTIN/ISBN')||matched.includes('ISBN')||matched.includes('SKU/MPN');
   if(item?.signed===true&&String(item?.signedBy||'').trim())return strongId&&matched.includes('firma');
   if(item?.type==='funko')return strongId;
+  if(item?.type==='comic'||item?.type==='manga'){
+    if(strongId)return true;
+    const editionSignals=['número','edición','exclusiva'].filter(label=>matched.includes(label)).length;
+    return editionSignals>=2;
+  }
   return false;
 }
 
@@ -576,7 +584,7 @@ export default async function handler(req,res){
         average:Number(listing.price.toFixed(2)),min:Number(listing.price.toFixed(2)),max:Number(listing.price.toFixed(2)),
         currency:listing.currency,count:1,listings:[listing],rejected:bestFailure?.rejected||[],
         resolvedIdentity:bestFailure?.resolvedIdentity||undefined,singleReference:true,
-        methodology:'Referencia orientativa basada en 1 anuncio activo de eBay verificado mediante GTIN/UPC/EAN o SKU/MPN exacto. No es un promedio ni una venta cerrada.'
+        methodology:'Referencia orientativa basada en 1 anuncio activo de eBay verificado con identificadores o rasgos de edición suficientemente fuertes. No es un promedio ni una venta cerrada.'
       });
     }
     return json(res,200,{
