@@ -12,7 +12,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { auth, db, demoMode } from './firebase';
-import { forbiddenPriceChartingForItem, identifyPhoto } from './api';
+import { identifyPhoto, primaryValueUsesPriceCharting, researchUsesPriceCharting, stripPriceChartingResearch } from './api';
 import { deleteDemo, saveDemo, subscribeDemo } from './demo';
 import type { AiIdentification, InventoryDraft, InventoryItem } from '../types';
 
@@ -28,12 +28,20 @@ export function subscribeItems(callback: (items: InventoryItem[]) => void, onErr
     q,
     (snapshot) => {
       const rows=snapshot.docs.map((d)=>({id:d.id,...d.data()} as InventoryItem));
-      const stale=rows.filter((item)=>forbiddenPriceChartingForItem(item));
-      callback(rows.map((item)=>forbiddenPriceChartingForItem(item)?{...item,currentValue:null,research:undefined}:item));
-      for(const item of stale){
-        void setDoc(doc(firestore,'users',uid,'items',item.id),{
-          research:deleteField(),
-          currentValue:null,
+      const cleaned=rows.map((item)=>{
+        if(!researchUsesPriceCharting(item.research))return item;
+        const primary=primaryValueUsesPriceCharting(item.research);
+        const research=stripPriceChartingResearch(item.research);
+        return {...item,research,currentValue:primary?null:item.currentValue};
+      });
+      callback(cleaned);
+      for(const original of rows){
+        if(!researchUsesPriceCharting(original.research))continue;
+        const primary=primaryValueUsesPriceCharting(original.research);
+        const research=stripPriceChartingResearch(original.research);
+        void setDoc(doc(firestore,'users',uid,'items',original.id),{
+          ...(research?{research}:{research:deleteField()}),
+          ...(primary?{currentValue:null}:{}),
           updatedAt:serverTimestamp()
         },{merge:true}).catch(()=>{});
       }
@@ -46,6 +54,9 @@ export async function saveItem(draft: InventoryDraft, id?: string) {
   if (demoMode || !db || !auth?.currentUser) return saveDemo(draft, id).id;
   const uid = auth.currentUser.uid;
   const cleanDraft={...draft};
+  const legacyPrimary=primaryValueUsesPriceCharting(cleanDraft.research);
+  cleanDraft.research=stripPriceChartingResearch(cleanDraft.research);
+  if(legacyPrimary)cleanDraft.currentValue=null;
   if(cleanDraft.research===undefined)delete cleanDraft.research;
   const payload = { ...cleanDraft, updatedAt: serverTimestamp() };
   let savedId = id;
@@ -53,7 +64,7 @@ export async function saveItem(draft: InventoryDraft, id?: string) {
     await setDoc(doc(db, 'users', uid, 'items', savedId), {
       ...payload,
       ...(draft.research===undefined?{research:deleteField()}:{}),
-      ...((draft.type==='comic'||draft.type==='manga')&&draft.currentValue==null?{currentValue:null}:{})
+      ...(legacyPrimary?{currentValue:null}:{})
     }, { merge: true });
   } else {
     const created = await addDoc(collection(db, 'users', uid, 'items'), {
