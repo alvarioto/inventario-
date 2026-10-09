@@ -632,7 +632,7 @@ async function resolveCanonicalResearchIdentity(item,config){
   const evidence=normalizeSources(await deepseekWebSearch(lookup||base,{...config,searchMode:'identity'}),'identity-resolution');
   if(!evidence.length)return {item,searchIdentity:base||String(item?.title||'').trim(),sources:[],resolvedIdentity:null};
   const raw=await deepseek([
-   {role:'system',content:'Resuelve la identidad comercial EXACTA de un objeto usando SOLO las evidencias web adjuntas y los códigos de la ficha. Devuelve JSON: {"canonicalTitle":"","manufacturer":"","line":"","character":"","franchise":"","sku":"","barcode":"","confidence":0}. canonicalTitle debe ser el nombre real del producto que una persona buscaría en PriceCharting/eBay/StockX. NUNCA describas la fotografía, el dorso, la caja, la etiqueta ni el código de barras como título. Para Funko, Item No. pertenece a sku/referencia, no al título; conserva el número Pop # solo si está respaldado por la evidencia. Si no puedes resolverlo con seguridad, canonicalTitle vacío.'},
+   {role:'system',content:'Resuelve la identidad comercial EXACTA de un objeto usando SOLO las evidencias web adjuntas y los códigos de la ficha. Devuelve JSON: {"canonicalTitle":"","manufacturer":"","line":"","character":"","franchise":"","sku":"","barcode":"","confidence":0}. canonicalTitle debe ser el nombre real del producto que una persona buscaría en eBay/StockX. NUNCA describas la fotografía, el dorso, la caja, la etiqueta ni el código de barras como título. Para Funko, Item No. pertenece a sku/referencia, no al título; conserva el número Pop # solo si está respaldado por la evidencia. Si no puedes resolverlo con seguridad, canonicalTitle vacío.'},
    {role:'user',content:JSON.stringify({current:item,evidence:evidence.slice(0,10).map(x=>({title:x.title,url:x.url,snippet:x.snippet}))})}
   ],{...config,maxTokens:700,timeoutMs:25000,retries:1});
   const resolved=z.object({
@@ -694,7 +694,7 @@ function canonicalTitleFromSources(item,sources){
  if(!isGenericProductTitle(item?.title))return String(item.title).trim();
  const ids=[item?.sku,item?.barcode,item?.isbn].filter(Boolean).map(normalizeComparableText);
  const candidates=sources.map(source=>{
-  const title=String(source.title||'').replace(/\s*[|–—-]\s*(PriceCharting|eBay|StockX|Amazon|Wallapop|Cardmarket|BrickLink|Idealo).*$/i,'').replace(/\s+/g,' ').trim();
+  const title=String(source.title||'').replace(/\s*[|–—-]\s*(eBay|StockX|Amazon|Wallapop|Cardmarket|BrickLink|Idealo).*$/i,'').replace(/\s+/g,' ').trim();
   const hay=normalizeComparableText(`${source.title||''} ${source.snippet||''}`);
   let score=specificTitleScore(title);
   if(ids.some(id=>id&&hay.includes(id)))score+=12;
