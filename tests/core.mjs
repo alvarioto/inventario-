@@ -52,6 +52,7 @@ assert.match(alienWrongPopWithoutGtin.reason,/número Pop/i);
 assert.deepEqual(marketplaceOrder('EBAY_ES',{type:'funko'}),['EBAY_ES','EBAY_US','EBAY_GB','EBAY_DE','EBAY_FR','EBAY_IT','EBAY_CA','EBAY_AU']);
 assert.deepEqual(marketplaceOrder('EBAY_US',{type:'funko'}),['EBAY_US','EBAY_GB','EBAY_DE','EBAY_FR','EBAY_IT','EBAY_CA','EBAY_AU']);
 assert.deepEqual(marketplaceOrder('EBAY_ES',{type:'figure'}),['EBAY_ES']);
+assert.deepEqual(marketplaceOrder('EBAY_ES',{type:'comic'}),['EBAY_ES','EBAY_FR','EBAY_IT','EBAY_DE','EBAY_GB']);
 
 const resolvedAlien=funkoIdentityFromAccepted(
   {type:'funko',barcode:'889698903189'},
@@ -80,6 +81,15 @@ assert.equal(singleExactReferenceAllowed(
 assert.equal(singleExactReferenceAllowed(
   {type:'figure'},
   {count:1,listings:[{matchedBy:['GTIN/ISBN'],price:29.99,currency:'USD'}]}
+),false);
+
+assert.equal(singleExactReferenceAllowed(
+  {type:'comic'},
+  {count:1,listings:[{matchedBy:['edición','exclusiva'],price:45,currency:'EUR'}]}
+),true);
+assert.equal(singleExactReferenceAllowed(
+  {type:'comic'},
+  {count:1,listings:[{matchedBy:['edición'],price:45,currency:'EUR'}]}
 ),false);
 
 const market = summarizeListings([
@@ -282,6 +292,25 @@ assert.equal(noSources.sources.length,0);
 assert.equal(noSources.warnings.length,1);
 assert.equal(noSources.sold.available,false);
 
+// Cómics/manga: PriceCharting no participa aunque aparezca en la búsqueda.
+const comicNoPriceChartingFetch=async(url,init)=>{
+  if(String(url).includes('/anthropic/v1/messages')){
+    return new Response(JSON.stringify({content:[{type:'web_search_tool_result',content:[
+      {type:'web_search_result',title:'Sombra de Maul Variant Cover 001 35,00 €',url:'https://www.pricecharting.com/game/comics/sombra-de-maul',cited_text:'35,00 €'},
+      {type:'web_search_result',title:'Star Wars Sombra de Maul Edición Limitada 001 Variant Cover 45,00 €',url:'https://www.todocoleccion.net/comics-planeta/star-wars-sombra-maul-edicion-limitada-001-variant-cover~x1',cited_text:'Planeta Cómic · Edición Limitada 001 · Variant Cover · 45,00 €'}
+    ]}]}),{status:200,headers:{'content-type':'application/json'}});
+  }
+  if(String(url).includes('frankfurter'))return new Response(JSON.stringify(String(url).includes('latest')?{rates:{EUR:.9}}:{rate:.9}),{status:200,headers:{'content-type':'application/json'}});
+  return new Response('{}',{status:404,headers:{'content-type':'application/json'}});
+};
+const comicNoPriceCharting=await research({confirmed:true,item:{
+  title:'Star Wars Sombra de Maul',type:'comic',manufacturer:'Planeta Cómic',
+  edition:'Edición Limitada 001 Variant Cover',exclusive:'Málaga Comic Con'
+}},{key:'test',fetcher:comicNoPriceChartingFetch});
+assert.ok(!comicNoPriceCharting.sources.some(source=>source.url.includes('pricecharting.com')));
+assert.equal(comicNoPriceCharting.links.priceCharting,undefined);
+assert.ok(comicNoPriceCharting.sources.some(source=>source.url.includes('todocoleccion.net')));
+
 let fallbackChatCalls=0;
 const fallbackFetch=async(url,init)=>{
   if(String(url).includes('/anthropic/v1/messages')){
@@ -383,7 +412,7 @@ assert.match(appSource,/scale: result\.scale/);
 assert.match(appSource,/wave: result\.wave/);
 assert.match(appSource,/exclusive: result\.exclusive/);
 assert.match(appSource,/Mejorar con IA/);
-assert.match(appSource,/identifyPhoto\(analyzableImages\)/);
+assert.match(appSource,/identifyPhoto\(analyzableImages, aiCorrection\)/);
 assert.match(appSource,/url\.startsWith\('data:image\/'\)/);
 assert.match(appSource,/tryReadBarcodeWithTimeout/);
 assert.match(inventorySource,/export async function tryReadBarcodeWithTimeout/);
@@ -424,6 +453,9 @@ assert.match(appSource,/function duplicateIdentityKey/);
 assert.match(appSource,/function duplicateGroups/);
 assert.match(appSource,/Auditoría de duplicados/);
 assert.match(appSource,/label="Firmado por"/);
+assert.match(appSource,/label="Corregir identificación"/);
+assert.match(appSource,/identifyPhoto\(analyzableImages, aiCorrection\)/);
+assert.match(appSource,/!aiCorrection\.trim\(\) && !valuationIdentityChanged/);
 assert.match(appSource,/signedBy/);
 assert.match(appSource,/Boolean\(before\.signed\) !== Boolean\(after\.signed\)/);
 assert.match(appSource,/eBay Product Research · ventas reales/);
@@ -447,6 +479,11 @@ assert.match(apiSource,/VITE_EXCHANGE_RATES_URL/);
 assert.match(apiSource,/Referencia eBay · 1 anuncio exacto/);
 assert.match(apiSource,/signed:Boolean\(item\.signed\),signedBy:item\.signedBy\|\|''/);
 assert.match(apiSource,/if\(item\.signed===true\)/);
+assert.match(apiSource,/if\(item\.type==='comic'\|\|item\.type==='manga'\)/);
+const comicRouteStart=apiSource.indexOf("if(item.type==='comic'||item.type==='manga')");
+const comicRouteEnd=apiSource.indexOf("\n let general:ResearchResult|null=null;",comicRouteStart);
+const comicRoute=apiSource.slice(comicRouteStart,comicRouteEnd);
+assert.doesNotMatch(comicRoute,/tryPriceCharting/);
 assert.match(apiSource,/No se encontró una valoración firmada verificable/);
 assert.doesNotMatch(apiSource,/api\.frankfurter\.app\/latest\?from=USD/);
 assert.match(apiSource,/Promedio eBay',value:dual\(average\)/);
@@ -474,6 +511,8 @@ assert.match(coreSource,/frankfurter\.dev\/v2\/providers\/ecb\/rate\/usd\/eur/);
 const currentCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 const currentStylesSource=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
 assert.match(currentCoreSource,/PriceCharting es la referencia principal/);
+assert.match(currentCoreSource,/CORRECCIÓN DEL PROPIETARIO/);
+assert.match(currentCoreSource,/\['comic','manga'\]\.includes\(item\.type\)/);
 
 assert.doesNotMatch(currentCoreSource,/reasoning:\{effort:'none'\}/);
 assert.match(currentCoreSource,/limitPricingSources/);

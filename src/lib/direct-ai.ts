@@ -74,7 +74,7 @@ function config() {
     }} : {})
   };
 }
-export const identifyDirect = (images: string[]) => identify(images, config());
+export const identifyDirect = (images: string[], correction = '') => identify(images, config(), correction);
 export const researchDirect = (item: Partial<InventoryDraft>) => research({confirmed: true, item}, config());
 
 export async function inspectFunkoStickersDirect(images: string[]): Promise<{performed:boolean;stickerTexts:string[];confidence:number}> {
