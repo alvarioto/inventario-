@@ -59,7 +59,7 @@ import {
   uploadItemImage,
   maxCloudPhotos
 } from './lib/inventory';
-import { forbiddenPriceChartingForItem, identifyPhoto, investigate, preserveVerifiedResearch, researchUsesPriceCharting } from './lib/api';
+import { identifyPhoto, investigate, preserveVerifiedResearch, primaryValueUsesPriceCharting, researchUsesPriceCharting, stripPriceChartingResearch } from './lib/api';
 import { DirectAiSettings } from './components/DirectAiSettings';
 import { importDemo } from './lib/demo';
 import QRCode from 'qrcode';
@@ -95,12 +95,12 @@ function money(value?: number | null, currency = 'EUR') {
   catch { return `${value.toFixed(2)} ${currency}`; }
 }
 
-function invalidPriceChartingResearch(item: Pick<InventoryItem,'type'|'title'|'character'|'franchise'|'manufacturer'|'line'|'barcode'|'isbn'|'sku'|'research'> | Pick<InventoryDraft,'type'|'title'|'character'|'franchise'|'manufacturer'|'line'|'barcode'|'isbn'|'sku'|'research'>) {
-  return forbiddenPriceChartingForItem(item);
+function legacyPriceChartingPrimary(item: Pick<InventoryItem,'research'> | Pick<InventoryDraft,'research'>) {
+  return primaryValueUsesPriceCharting(item.research);
 }
 
 function effectiveCurrentValue(item: InventoryItem) {
-  return invalidPriceChartingResearch(item) ? null : item.currentValue;
+  return legacyPriceChartingPrimary(item) ? null : item.currentValue;
 }
 
 const DISPLAY_CURRENCIES = ['USD','EUR','GBP','JPY','CAD','AUD','CHF','CNY','MXN','KRW'];
@@ -733,16 +733,15 @@ function SettingsPage({ items, user, showToast, onEdit }: { items: InventoryItem
 }
 
 function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted }: { item: InventoryItem | null; seed?: Partial<InventoryDraft>; initialPhotos?: File[]; onClose: () => void; onSaved: () => void; onDeleted: () => void }) {
-  const stalePriceCharting = Boolean(item && invalidPriceChartingResearch(item));
+  const stalePriceChartingPrimary = Boolean(item && primaryValueUsesPriceCharting(item.research));
   const itemDraft: Partial<InventoryDraft> = item ? (() => {
     const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = item;
-    if (stalePriceCharting) {
-      rest.currentValue = null;
-      delete rest.research;
-    }
+    rest.research = stripPriceChartingResearch(rest.research);
+    if (stalePriceChartingPrimary) rest.currentValue = null;
     return rest;
   })() : {};
-  const initial: InventoryDraft = { ...EMPTY_DRAFT, ...itemDraft, ...(seed || {}), tags: item?.tags || seed?.tags || [], imageUrls: item?.imageUrls || seed?.imageUrls || [], imagePaths: item?.imagePaths || seed?.imagePaths || [] };
+  const cleanSeed = seed ? {...seed,research:stripPriceChartingResearch(seed.research)} : {};
+  const initial: InventoryDraft = { ...EMPTY_DRAFT, ...itemDraft, ...cleanSeed, tags: item?.tags || seed?.tags || [], imageUrls: item?.imageUrls || seed?.imageUrls || [], imagePaths: item?.imagePaths || seed?.imagePaths || [] };
   const [draft, setDraft] = useState<InventoryDraft>(initial);
   const [pendingPhotos, setPendingPhotos] = useState<File[]>(initialPhotos);
   const [previews, setPreviews] = useState<string[]>(initial.imageUrls || []);
@@ -751,13 +750,15 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [saveErrorModal, setSaveErrorModal] = useState('');
   const initialPhotosHandled = useRef(false);
   const submitInFlightRef = useRef(false);
-  const [research, setResearch] = useState<ResearchResult | undefined>(stalePriceCharting ? undefined : (item?.research || seed?.research));
+  const [research, setResearch] = useState<ResearchResult | undefined>(stripPriceChartingResearch(item?.research || seed?.research));
   const [displayCurrency, setDisplayCurrency] = useState((item?.currency || seed?.currency || 'EUR').toUpperCase());
   useEffect(() => {
-    if (!forbiddenPriceChartingForItem({...draft,research})) return;
-    setResearch(undefined);
-    setDraft((current)=>({...current,currentValue:null,research:undefined}));
-  }, [draft.type, research]);
+    if (!researchUsesPriceCharting(research)) return;
+    const primary = primaryValueUsesPriceCharting(research);
+    const cleaned = stripPriceChartingResearch(research);
+    setResearch(cleaned);
+    setDraft((current)=>({...current,research:cleaned,...(primary?{currentValue:null}:{})}));
+  }, [research]);
   const [researchBusy, setResearchBusy] = useState(false);
   const [aiCorrection, setAiCorrection] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -844,12 +845,12 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         tags: (draft.tags || []).map((x) => x.trim()).filter(Boolean)
       };
       if (photoPreparing) throw new Error('Espera a que terminen de prepararse las fotos.');
-      const invalidStoredResearch=forbiddenPriceChartingForItem({...baseDraft,research});
-      const safeResearch=invalidStoredResearch?undefined:research;
+      const legacyPrimary=primaryValueUsesPriceCharting(research);
+      const safeResearch=stripPriceChartingResearch(research);
       let finalDraft: InventoryDraft = {
         ...baseDraft,
         research:safeResearch,
-        ...(invalidStoredResearch?{currentValue:null}:{})
+        ...(legacyPrimary?{currentValue:null}:{})
       };
       if (pendingPhotos.length) {
         setPhotoError('');
@@ -935,11 +936,10 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
       }
 
       const freshResearch = await investigate(working);
-      const stalePreviousPriceCharting = forbiddenPriceChartingForItem({...working,research});
-      // Una guía PriceCharting antigua de cómic/manga se invalida: no se rescata
-      // aunque la búsqueda nueva no encuentre precio.
-      const keepPrevious = !stalePreviousPriceCharting && !aiCorrection.trim() && !valuationIdentityChanged(draft, working);
-      const next = keepPrevious ? preserveVerifiedResearch(research, freshResearch, working.type) : freshResearch;
+      const legacyPrimary = primaryValueUsesPriceCharting(research);
+      const cleanPrevious = stripPriceChartingResearch(research);
+      const keepPrevious = !legacyPrimary && !aiCorrection.trim() && !valuationIdentityChanged(draft, working);
+      const next = keepPrevious ? preserveVerifiedResearch(cleanPrevious, freshResearch, working.type) : freshResearch;
       setResearch(next);
       setDraft((current) => ({
         ...current,
@@ -957,7 +957,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         currentValue: (() => {
           const converted = displayedResearchValue(next, current.currency || 'EUR');
           if (converted != null) return Number(converted.toFixed(2));
-          if (stalePreviousPriceCharting || forbiddenPriceChartingForItem({...current,research:current.research})) return null;
+          if (legacyPrimary || primaryValueUsesPriceCharting(current.research)) return null;
           return current.currentValue;
         })()
       }));
@@ -993,7 +993,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
 
           <div className="form-grid">
             <Field label="Nombre *" wide><input required value={draft.title} onChange={(e)=>set('title',e.target.value)} placeholder="Ej. S.H.Figuarts Son Goku"/></Field>
-            <Field label="Tipo"><select value={draft.type} onChange={(e)=>{const nextType=e.target.value as ItemType;setDraft((current)=>{const mustClear=forbiddenPriceChartingForItem({...current,type:nextType,research});if(mustClear)setResearch(undefined);return {...current,type:nextType,...(mustClear?{currentValue:null,research:undefined}:{})};});}}> {Object.entries(ITEM_TYPE_LABELS).map(([k,v])=><option key={k} value={k}>{TYPE_ICONS[k as ItemType]} {v}</option>)}</select></Field>
+            <Field label="Tipo"><select value={draft.type} onChange={(e)=>set('type',e.target.value as ItemType)}> {Object.entries(ITEM_TYPE_LABELS).map(([k,v])=><option key={k} value={k}>{TYPE_ICONS[k as ItemType]} {v}</option>)}</select></Field>
             <Field label="Estado"><select value={draft.status} onChange={(e)=>set('status',e.target.value as ItemStatus)}>{Object.entries(STATUS_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>
             <Field label="Franquicia"><input value={draft.franchise || ''} onChange={(e)=>set('franchise',e.target.value)} placeholder="Pokémon, Marvel…"/></Field>
             <Field label="Personaje"><input value={draft.character || ''} onChange={(e)=>set('character',e.target.value)} placeholder="Pikachu, Batman…"/></Field>
@@ -1045,8 +1045,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
               {research.comparables.some((listing) => listing.sourceType === 'guide' || listing.sourceType === 'sold') && <div className="comparable-prices"><h4>{research.asking.kind === 'sold' ? 'Valor principal · ventas cerradas' : 'Referencia principal'}</h4>{research.comparables.filter((listing) => listing.sourceType === 'guide' || listing.sourceType === 'sold').slice(0,1).map((listing) => <a className="comparable-price primary-guide" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.sourceType === 'sold' ? 'Media de ventas cerradas · abrir fuente' : 'Precio público · abrir ficha'}</small></span><strong>{listing.originalPrice != null && listing.originalCurrency ? eurUsdMoney(research, listing.originalPrice, listing.originalCurrency) : eurUsdMoney(research, listing.price, listing.currency)}</strong></a>)}</div>}
               {research.comparables.some((listing) => listing.sourceType !== 'guide' && listing.sourceType !== 'sold') && <div className="comparable-prices"><h4>Otras referencias orientativas</h4>{research.comparables.filter((listing) => listing.sourceType !== 'guide' && listing.sourceType !== 'sold').slice(0,8).map((listing) => <a className="comparable-price" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.condition} · abrir enlace</small></span><strong>{eurUsdMoney(research, listing.price, listing.currency)}</strong></a>)}</div>}
               <div className="research-facts">{research.facts.slice(0, 8).map((fact) => <div key={`${fact.label}-${fact.sourceId}`}><b>{fact.label}</b><span>{fact.value}</span></div>)}</div>
-              <p className="source-routing-note"><b>Fuentes reales consultadas:</b> Para cómics y manga no se usa PriceCharting: se buscan ediciones exactas en eBay, TodoColeccion, Catawiki y otras fuentes públicas verificables. Para figuras no Funko, ActionFigure411 sigue siendo la referencia principal y LegendsVerse el respaldo especializado para Marvel Legends. Para Funko, eBay exacto es la base automática y PriceCharting queda como respaldo opcional. Una actualización fallida no sustituye una valoración verificada anterior.</p>
-              <div className="source-list">{research.links.actionFigure411 && <a href={research.links.actionFigure411} target="_blank" rel="noreferrer">ActionFigure411 · ficha exacta</a>}{research.links.legendsVerse && <a href={research.links.legendsVerse} target="_blank" rel="noreferrer">LegendsVerse · ficha exacta</a>}<a href={research.links.ebay} target="_blank" rel="noreferrer">eBay · informativo</a><a href={research.links.sold} target="_blank" rel="noreferrer">eBay vendidos · comprobar</a><a href="https://www.ebay.com/sh/research" target="_blank" rel="noreferrer">eBay Product Research · ventas reales</a>{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.filter((source) => ![research.links.actionFigure411,research.links.legendsVerse,research.links.priceCharting].filter(Boolean).includes(source.url)).slice(0,6).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div>
+              <p className="source-routing-note"><b>Fuentes reales consultadas:</b> Para cómics y manga se buscan ediciones exactas en eBay, TodoColeccion, Catawiki y otras fuentes públicas verificables. Para figuras no Funko, ActionFigure411 sigue siendo la referencia principal y LegendsVerse el respaldo especializado para Marvel Legends. Para Funko, eBay exacto es la base automática y otras fuentes públicas sirven de contraste. Una actualización fallida no sustituye una valoración verificada anterior.</p>
+              <div className="source-list">{research.links.actionFigure411 && <a href={research.links.actionFigure411} target="_blank" rel="noreferrer">ActionFigure411 · ficha exacta</a>}{research.links.legendsVerse && <a href={research.links.legendsVerse} target="_blank" rel="noreferrer">LegendsVerse · ficha exacta</a>}<a href={research.links.ebay} target="_blank" rel="noreferrer">eBay · informativo</a><a href={research.links.sold} target="_blank" rel="noreferrer">eBay vendidos · comprobar</a><a href="https://www.ebay.com/sh/research" target="_blank" rel="noreferrer">eBay Product Research · ventas reales</a>{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.filter((source) => ![research.links.actionFigure411,research.links.legendsVerse].filter(Boolean).includes(source.url)).slice(0,6).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div>
               {research.warnings.map((warning) => <small className="warning-line" key={warning}>{warning}</small>)}
             </div> : <p className="muted">Este artículo no tiene análisis unificado porque no se creó desde el escáner inteligente.</p>}
           </section>}
