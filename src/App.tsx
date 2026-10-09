@@ -741,6 +741,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
   const [research, setResearch] = useState<ResearchResult | undefined>(item?.research || seed?.research);
   const [displayCurrency, setDisplayCurrency] = useState((item?.currency || seed?.currency || 'EUR').toUpperCase());
   const [researchBusy, setResearchBusy] = useState(false);
+  const [aiCorrection, setAiCorrection] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
   useEffect(() => {
     const preferred = research?.asking.originalCurrency || research?.asking.currency;
@@ -861,7 +862,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         .slice(0, maxCloudPhotos());
 
       if (analyzableImages.length) {
-        const identified = await identifyPhoto(analyzableImages);
+        const identified = await identifyPhoto(analyzableImages, aiCorrection);
         working = {
           ...working,
           title: identified.title || working.title,
@@ -905,6 +906,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
         setDraft(working);
       } else if (!working.title.trim()) {
         throw new Error('Añade una foto para que la IA pueda identificar el artículo.');
+      } else if (aiCorrection.trim()) {
+        throw new Error('La corrección necesita al menos una foto guardada del artículo para volver a comprobar la identidad.');
       }
 
       const freshResearch = await investigate(working);
@@ -1002,7 +1005,8 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
           <Field label="Notas" wide><textarea rows={4} value={draft.notes || ''} onChange={(e)=>set('notes',e.target.value)} placeholder="Detalles, defectos, procedencia, firma…"/></Field>
 
           {draft.title.trim() && <section className="research-panel">
-            <div className="research-head"><div><h3 className="form-section-title"><Sparkles/> Análisis del artículo</h3><p className="muted">Identificación, referencias y valoración obtenidas en la misma captura inteligente.</p></div><button type="button" className="ai-button" onClick={refreshResearch} disabled={researchBusy || busy}><WandSparkles size={17}/>{researchBusy ? 'Mejorando…' : 'Mejorar con IA'}</button></div>
+            <div className="research-head"><div><h3 className="form-section-title"><Sparkles/> Análisis del artículo</h3><p className="muted">Identificación, referencias y valoración obtenidas en la misma captura inteligente.</p></div><button type="button" className="ai-button" onClick={refreshResearch} disabled={researchBusy || busy}><WandSparkles size={17}/>{researchBusy ? 'Mejorando…' : aiCorrection.trim() ? 'Corregir y reanalizar' : 'Mejorar con IA'}</button></div>
+            <Field label="Corregir identificación" wide><textarea rows={2} value={aiCorrection} onChange={(e)=>setAiCorrection(e.target.value)} placeholder="Ej. Esto no es la edición normal; es la Edición Limitada 001 Variant Cover de Málaga Comic Con."/><small className="muted">Si la IA se equivoca, escríbele qué ha identificado mal. Volverá a leer las fotos teniendo en cuenta tu corrección.</small></Field>
             {research ? <div className="research-result">
               {research.searchIdentity && <p className="muted"><b>Producto buscado:</b> {research.searchIdentity}</p>}
               {research.resolvedIdentity?.title && <p className="muted"><b>Producto resuelto:</b> {research.resolvedIdentity.title}</p>}
@@ -1012,7 +1016,7 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
               {research.comparables.some((listing) => listing.sourceType === 'guide' || listing.sourceType === 'sold') && <div className="comparable-prices"><h4>{research.asking.kind === 'sold' ? 'Valor principal · ventas cerradas' : 'Referencia principal'}</h4>{research.comparables.filter((listing) => listing.sourceType === 'guide' || listing.sourceType === 'sold').slice(0,1).map((listing) => <a className="comparable-price primary-guide" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.sourceType === 'sold' ? 'Media de ventas cerradas · abrir fuente' : 'Precio público · abrir ficha'}</small></span><strong>{listing.originalPrice != null && listing.originalCurrency ? eurUsdMoney(research, listing.originalPrice, listing.originalCurrency) : eurUsdMoney(research, listing.price, listing.currency)}</strong></a>)}</div>}
               {research.comparables.some((listing) => listing.sourceType !== 'guide' && listing.sourceType !== 'sold') && <div className="comparable-prices"><h4>Otras referencias orientativas</h4>{research.comparables.filter((listing) => listing.sourceType !== 'guide' && listing.sourceType !== 'sold').slice(0,8).map((listing) => <a className="comparable-price" key={listing.id} href={listing.url} target="_blank" rel="noreferrer"><span><b>{listing.title}</b><small>{listing.condition} · abrir enlace</small></span><strong>{eurUsdMoney(research, listing.price, listing.currency)}</strong></a>)}</div>}
               <div className="research-facts">{research.facts.slice(0, 8).map((fact) => <div key={`${fact.label}-${fact.sourceId}`}><b>{fact.label}</b><span>{fact.value}</span></div>)}</div>
-              <p className="source-routing-note"><b>Fuentes reales consultadas:</b> Para figuras no Funko, ActionFigure411 sigue siendo la referencia principal y LegendsVerse el respaldo especializado para Marvel Legends. Para Funko, eBay exacto es la base automática; PriceCharting queda como respaldo opcional cuando responde. Una actualización fallida no sustituye una valoración verificada anterior.</p>
+              <p className="source-routing-note"><b>Fuentes reales consultadas:</b> Para cómics y manga no se usa PriceCharting: se buscan ediciones exactas en eBay, TodoColeccion, Catawiki y otras fuentes públicas verificables. Para figuras no Funko, ActionFigure411 sigue siendo la referencia principal y LegendsVerse el respaldo especializado para Marvel Legends. Para Funko, eBay exacto es la base automática y PriceCharting queda como respaldo opcional. Una actualización fallida no sustituye una valoración verificada anterior.</p>
               <div className="source-list">{research.links.actionFigure411 && <a href={research.links.actionFigure411} target="_blank" rel="noreferrer">ActionFigure411 · ficha exacta</a>}{research.links.legendsVerse && <a href={research.links.legendsVerse} target="_blank" rel="noreferrer">LegendsVerse · ficha exacta</a>}<a href={research.links.ebay} target="_blank" rel="noreferrer">eBay · informativo</a><a href={research.links.sold} target="_blank" rel="noreferrer">eBay vendidos · comprobar</a><a href="https://www.ebay.com/sh/research" target="_blank" rel="noreferrer">eBay Product Research · ventas reales</a>{research.links.priceCharting && <a href={research.links.priceCharting} target="_blank" rel="noreferrer">PriceCharting</a>}{research.links.stockx && <a href={research.links.stockx} target="_blank" rel="noreferrer">StockX</a>}{research.sources.filter((source) => ![research.links.actionFigure411,research.links.legendsVerse,research.links.priceCharting].filter(Boolean).includes(source.url)).slice(0,6).map((source) => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</div>
               {research.warnings.map((warning) => <small className="warning-line" key={warning}>{warning}</small>)}
             </div> : <p className="muted">Este artículo no tiene análisis unificado porque no se creó desde el escáner inteligente.</p>}
