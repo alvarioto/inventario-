@@ -294,10 +294,10 @@ function applyLegendsVerseValue(research:ResearchResult,item:Partial<InventoryDr
   sold:{available:true,reason:guide.methodology,median:guide.amount},
   links:{...research.links,legendsVerse:guide.url}
  };
-}export async function identifyPhoto(images:string[]):Promise<AiIdentification>{
+}export async function identifyPhoto(images:string[],correction=''):Promise<AiIdentification>{
  await keyReady.catch(()=>{});
  const direct=Boolean(getPersonalKey());
- const result=direct?await identifyDirect(images):await post<AiIdentification>('identify',{images});
+ const result=direct?await identifyDirect(images,correction):await post<AiIdentification>('identify',{images,correction});
  let audit:{performed:boolean;stickerTexts:string[];confidence:number}|undefined;
  if(result.type==='funko'&&direct) audit=await inspectFunkoStickersDirect(images);
  const cleaned=cleanFunkoIdentification(result,audit);
@@ -319,7 +319,7 @@ function freeResearchShell(item:Partial<InventoryDraft>):ResearchResult{
   links:{
    ebay:'https://www.ebay.es/sch/i.html?_nkw='+encodeURIComponent(identity),
    sold:'https://www.ebay.es/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw='+encodeURIComponent(identity),
-   priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity),
+   ...(!['comic','manga'].includes(item.type||'')?{priceCharting:'https://www.pricecharting.com/search-products?type=prices&q='+encodeURIComponent(identity)}:{}),
    web:'',
    ...(item.type==='figure'?{actionFigure411:'https://www.actionfigure411.com/'}:{}),
    ...(item.type==='figure'&&isMarvelLegendsFigure(item)?{legendsVerse:'https://legendsverse.com/price-guide'}:{}),
@@ -494,6 +494,19 @@ export async function investigate(item:Partial<InventoryDraft>):Promise<Research
    return applyEbayMarketValue(withRates,ebayMarket);
   }
   if(hasVerifiedValue(general))return general!;
+  return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
+ }
+
+ if(item.type==='comic'||item.type==='manga'){
+  let general:ResearchResult|null=null;
+  try{
+   general=mergeResearchWarnings(await runGeneralResearch(item),warnings);
+   if(hasVerifiedValue(general))return general;
+  }catch(error){
+   warnings.push(`Fuentes de cómic: ${error instanceof Error?error.message:'no se pudo completar la búsqueda pública.'}`);
+  }
+  const ebay=await tryEbayExact(general);
+  if(ebay)return ebay;
   return general?mergeResearchWarnings(general,warnings):{...baseResearch,warnings};
  }
 
