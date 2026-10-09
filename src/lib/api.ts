@@ -348,8 +348,11 @@ export function researchUsesPriceCharting(research:ResearchResult|null|undefined
  if((research.comparables||[]).some(row=>String(row.url||'').toLowerCase().includes('pricecharting.com')))return true;
  return (research.facts||[]).some(fact=>`${fact.label||''} ${fact.value||''}`.toLowerCase().includes('pricecharting'));
 }
+export function forbiddenPriceChartingForItem(item:{type?:string;research?:ResearchResult|null}){
+ return (item.type==='comic'||item.type==='manga')&&researchUsesPriceCharting(item.research);
+}
 export function preserveVerifiedResearch(previous:ResearchResult|undefined,next:ResearchResult,itemType?:string):ResearchResult{
- if((itemType==='comic'||itemType==='manga')&&researchUsesPriceCharting(previous))return next;
+ if(forbiddenPriceChartingForItem({type:itemType,research:previous}))return next;
  if(hasVerifiedValue(next)||!hasVerifiedValue(previous))return next;
  const checked=previous?.checkedAt?new Date(previous.checkedAt):null;
  const when=checked&&!Number.isNaN(checked.getTime())?checked.toLocaleString('es-ES'):'anteriormente';
