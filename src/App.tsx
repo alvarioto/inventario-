@@ -95,6 +95,28 @@ function money(value?: number | null, currency = 'EUR') {
   catch { return `${value.toFixed(2)} ${currency}`; }
 }
 
+async function withSaveTimeout<T>(promise: Promise<T>, timeoutMs = 20000): Promise<T> {
+  let timer = 0;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = window.setTimeout(() => reject(new Error('Firestore no ha respondido al guardado en 20 segundos. Recarga FrikiVault antes de volver a intentarlo.')), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) window.clearTimeout(timer);
+  }
+}
+
+function friendlySaveError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/QuotaExceededError|firestore_mutations_|INTERNAL ASSERTION FAILED|\bb815\b/i.test(message)) {
+    return 'El almacenamiento local interno de Firestore se ha quedado bloqueado. Recarga FrikiVault para limpiarlo y vuelve a guardar. Tus datos ya guardados en la nube no se borran.';
+  }
+  return message || 'No se pudo guardar el artículo.';
+}
+
 function legacyPriceChartingPrimary(item: Pick<InventoryItem,'research'> | Pick<InventoryDraft,'research'>) {
   return primaryValueUsesPriceCharting(item.research);
 }
@@ -862,11 +884,11 @@ function ItemForm({ item, seed, initialPhotos = [], onClose, onSaved, onDeleted 
           imagePaths: [...(baseDraft.imagePaths || []), ...uploaded.map((x) => x.path).filter(Boolean)]
         };
       }
-      await saveItem(finalDraft, item?.id);
+      await withSaveTimeout(saveItem(finalDraft, item?.id));
       setPendingPhotos([]);
       onSaved();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se pudo guardar el artículo.';
+      const message = friendlySaveError(error);
       setPhotoError(message);
       setSaveErrorModal(message);
     } finally {
