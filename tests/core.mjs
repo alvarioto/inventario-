@@ -347,6 +347,9 @@ assert.ok(funkoResearch.comparables.some(row=>row.url.includes('ebay.es')));
 // Regresión: las fotos se convierten a datos persistentes antes de pulsar Guardar.
 const appSource=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
 const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta.url),'utf8');
+const firebaseSource=readFileSync(new URL('../src/lib/firebase.ts',import.meta.url),'utf8');
+assert.match(firebaseSource,/memoryLocalCache\(\)/);
+assert.doesNotMatch(firebaseSource,/persistentLocalCache|persistentMultipleTabManager/);
 assert.match(inventorySource,/deleteField/);
 assert.match(inventorySource,/research:deleteField\(\)/);
 const aiCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
