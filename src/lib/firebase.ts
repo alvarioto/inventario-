@@ -14,6 +14,22 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+function purgeLegacyFirestoreWebStorage(projectId: string | undefined) {
+  if (!projectId || typeof window === 'undefined') return;
+  try {
+    const marker = `/[DEFAULT]/${projectId}/`;
+    for (let i = window.localStorage.length - 1; i >= 0; i--) {
+      const key = window.localStorage.key(i);
+      if (!key) continue;
+      if (key.startsWith('firestore_') && key.includes(marker)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Si Storage está bloqueado/lleno, Firestore arrancará igualmente con caché de memoria.
+  }
+}
+
 export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId && firebaseConfig.appId
 );
@@ -25,6 +41,9 @@ let auth: Auth | null = null;
 let db: Firestore | null = null;
 
 if (isFirebaseConfigured) {
+  // Limpia restos de la antigua persistencia multi-pestaña antes de crear Firestore.
+  // Solo afecta a claves internas de Firestore de ESTE proyecto en este origen.
+  purgeLegacyFirestoreWebStorage(firebaseConfig.projectId);
   app = initializeApp(firebaseConfig);
 
   auth = getAuth(app);
