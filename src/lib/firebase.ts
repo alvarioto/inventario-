@@ -2,8 +2,7 @@ import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import {
   initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
+  memoryLocalCache,
   type Firestore
 } from 'firebase/firestore';
 
@@ -29,14 +28,14 @@ if (isFirebaseConfigured) {
   app = initializeApp(firebaseConfig);
 
   auth = getAuth(app);
-  try {
-    db = initializeFirestore(app, {
-      ignoreUndefinedProperties: true,
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-    });
-  } catch {
-    db = initializeFirestore(app, { ignoreUndefinedProperties: true });
-  }
+  // Las fotos se guardan comprimidas dentro del documento Firestore. Una caché
+  // persistente del SDK intenta duplicar también esas mutaciones en el navegador
+  // y puede agotar su cuota de Storage. La fuente de verdad sigue siendo Firestore
+  // en la nube; usamos caché de memoria para no almacenar esas colas grandes.
+  db = initializeFirestore(app, {
+    ignoreUndefinedProperties: true,
+    localCache: memoryLocalCache()
+  });
 }
 
 export { app, auth, db };
