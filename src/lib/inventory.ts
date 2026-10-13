@@ -34,17 +34,9 @@ export function subscribeItems(callback: (items: InventoryItem[]) => void, onErr
         const research=stripPriceChartingResearch(item.research);
         return {...item,research,currentValue:primary?null:item.currentValue};
       });
+      // Importante: nunca escribimos en Firestore desde este listener.
+      // Las limpiezas persistentes se hacen únicamente en guardados explícitos.
       callback(cleaned);
-      for(const original of rows){
-        if(!researchUsesPriceCharting(original.research))continue;
-        const primary=primaryValueUsesPriceCharting(original.research);
-        const research=stripPriceChartingResearch(original.research);
-        void setDoc(doc(firestore,'users',uid,'items',original.id),{
-          ...(research?{research}:{research:deleteField()}),
-          ...(primary?{currentValue:null}:{}),
-          updatedAt:serverTimestamp()
-        },{merge:true}).catch(()=>{});
-      }
     },
     (error) => onError?.(error)
   );
