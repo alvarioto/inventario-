@@ -350,8 +350,15 @@ const inventorySource=readFileSync(new URL('../src/lib/inventory.ts',import.meta
 const firebaseSource=readFileSync(new URL('../src/lib/firebase.ts',import.meta.url),'utf8');
 assert.match(firebaseSource,/memoryLocalCache\(\)/);
 assert.doesNotMatch(firebaseSource,/persistentLocalCache|persistentMultipleTabManager/);
+assert.match(firebaseSource,/purgeLegacyFirestoreWebStorage/);
+assert.match(firebaseSource,/key\.startsWith\('firestore_'\)/);
+assert.match(firebaseSource,/localStorage\.removeItem\(key\)/);
 assert.match(inventorySource,/deleteField/);
 assert.match(inventorySource,/research:deleteField\(\)/);
+const subscribeStart=inventorySource.indexOf('export function subscribeItems');
+const subscribeEnd=inventorySource.indexOf('export async function saveItem',subscribeStart);
+const subscribeSource=inventorySource.slice(subscribeStart,subscribeEnd);
+assert.doesNotMatch(subscribeSource,/setDoc\(/);
 const aiCoreSource=readFileSync(new URL('../src/lib/ai-core.mjs',import.meta.url),'utf8');
 assert.doesNotMatch(appSource,/>PriceCharting<\/a>/);
 assert.doesNotMatch(aiCoreSource,/pricecharting/i);
@@ -404,6 +411,10 @@ assert.match(appSource,/funkoCategory: next\.resolvedIdentity\.funkoCategory \|\
 assert.match(appSource,/function valuationIdentityChanged/);
 assert.match(appSource,/await saveItem\(draft, id \|\| undefined\)/);
 assert.match(appSource,/submitInFlightRef\.current/);
+assert.match(appSource,/function withSaveTimeout/);
+assert.match(appSource,/20000/);
+assert.match(appSource,/friendlySaveError/);
+assert.match(appSource,/withSaveTimeout\(saveItem\(finalDraft, item\?\.id\)\)/);
 assert.match(appSource,/function duplicateIdentityKey/);
 assert.match(appSource,/function duplicateGroups/);
 assert.match(appSource,/Auditoría de duplicados/);
